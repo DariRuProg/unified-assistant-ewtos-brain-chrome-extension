@@ -46,27 +46,48 @@ header h1 {
 
 main {
   flex: 1;
-  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  overflow-y: auto;
+  background: #fafafa;
 }
 
-.group h2 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
   color: #6b7280;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tab:hover { color: #1a1a1a; }
+
+.tab.active {
+  color: #1a1a1a;
+  border-bottom-color: #1a1a1a;
 }
 
 .tools {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .tool {
@@ -91,6 +112,10 @@ main {
   opacity: 0.55;
 }
 
+.tool-label {
+  font-weight: 500;
+}
+
 .hint {
   font-size: 11px;
   color: #6b7280;
@@ -103,49 +128,54 @@ main {
   color: #6b7280;
   padding: 2px 6px;
   border-radius: 3px;
-  margin-left: 6px;
 }
 
-.panel {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
+.tool-view {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  background: #fff;
 }
 
-.panel.hidden { display: none; }
-
-.panel-header {
+.tool-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 5;
 }
 
-.panel-header h3 {
+.tool-header h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
-.panel-header button {
+.back {
   background: none;
   border: none;
   font-size: 18px;
   cursor: pointer;
   color: #6b7280;
+  padding: 0 4px;
+  line-height: 1;
 }
 
-#panel-body {
+.back:hover { color: #1a1a1a; }
+
+.tool-body {
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
 }
 
-#panel-body input,
-#panel-body textarea {
+.tool-body input,
+.tool-body textarea {
   width: 100%;
   padding: 8px;
   border: 1px solid #d1d5db;
@@ -154,18 +184,34 @@ main {
   font-size: 12px;
 }
 
-#panel-body textarea {
+.tool-body textarea {
   min-height: 200px;
   font-family: ui-monospace, "Consolas", monospace;
   white-space: pre;
   resize: vertical;
 }
 
-#panel-body textarea.scratchpad {
+.tool-body textarea.scratchpad {
   min-height: 360px;
   white-space: pre-wrap;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
+}
+
+.tool-body button {
+  align-self: flex-start;
+  padding: 8px 14px;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tool-body button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .export-row {
@@ -184,7 +230,7 @@ main {
   gap: 6px;
 }
 
-#panel-body button.secondary {
+.tool-body button.secondary {
   background: #fff;
   color: #1a1a1a;
   border: 1px solid #d1d5db;
@@ -213,7 +259,7 @@ main {
   border-radius: 4px;
 }
 
-#panel-body .todo-item input[type="checkbox"] {
+.tool-body .todo-item input[type="checkbox"] {
   width: auto;
   margin: 0;
   padding: 0;
@@ -231,6 +277,34 @@ main {
 .todo-item.done .todo-text {
   text-decoration: line-through;
   color: #9ca3af;
+}
+
+.todo-due {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.todo-due.normal {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.todo-due.soon {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.todo-due.overdue {
+  background: #fecaca;
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.todo-item.done .todo-due {
+  opacity: 0.5;
 }
 
 .todo-del {
@@ -270,22 +344,6 @@ main {
 }
 
 .hidden { display: none !important; }
-
-#panel-body button {
-  align-self: flex-start;
-  padding: 8px 14px;
-  background: #1a1a1a;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-#panel-body button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 .tool-status {
   font-size: 11px;

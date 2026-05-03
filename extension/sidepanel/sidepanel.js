@@ -1,11 +1,9 @@
-// Sidepanel: shows connection status and tool launcher.
+// Sidepanel: connection status, tab navigation, tool runner.
 
 const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
-const panel = document.getElementById("tool-panel");
-const panelTitle = document.getElementById("panel-title");
-const panelBody = document.getElementById("panel-body");
-const panelClose = document.getElementById("panel-close");
+const tabsNav = document.getElementById("tabs");
+const content = document.getElementById("content");
 const openOptions = document.getElementById("open-options");
 const reconnectBtn = document.getElementById("reconnect");
 
@@ -18,6 +16,44 @@ const TOOL_RENDERERS = {
   todos: renderTodos,
 };
 
+const GROUPS = [
+  {
+    id: "vault",
+    label: "Vault",
+    tools: [
+      { id: "chat", label: "Chat mit Vault", hint: "kommt in Sprint 2", soon: true },
+      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad" },
+      { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates" },
+    ],
+  },
+  {
+    id: "web",
+    label: "Web",
+    tools: [
+      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab" },
+      { id: "page_scrape", label: "Page-Scrape", hint: "Sprint 3", soon: true },
+      { id: "seo_check", label: "SEO-Check", hint: "Sprint 3", soon: true },
+      { id: "image_analyse", label: "Image-Analyse", hint: "Sprint 3", soon: true },
+      { id: "color_picker", label: "Color-Picker", hint: "Sprint 3", soon: true },
+      { id: "screenshot", label: "Screenshot + Annotation", hint: "Sprint 3", soon: true },
+    ],
+  },
+  {
+    id: "code",
+    label: "Code",
+    tools: [
+      { id: "tbd", label: "noch undefiniert", hint: "Sprint 3", soon: true },
+    ],
+  },
+];
+
+let activeTab = GROUPS[0].id;
+let activeTool = null;
+
+// Re-bound on each openTool call so renderers can target current tool view.
+let panelTitle = null;
+let panelBody = null;
+
 async function getHttpBase() {
   const { serverUrl } = await chrome.storage.local.get("serverUrl");
   return (serverUrl || "ws://localhost:9988/ws")
@@ -27,6 +63,8 @@ async function getHttpBase() {
 }
 
 setStatus(false, "verbinde...");
+renderTabs();
+renderToolList();
 
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
   if (chrome.runtime.lastError) return;
@@ -36,15 +74,6 @@ chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "connection_status") setStatus(!!msg.connected);
 });
-
-document.querySelectorAll(".tool[data-tool]").forEach((el) => {
-  el.addEventListener("click", () => {
-    const tool = el.getAttribute("data-tool");
-    openPanel(tool);
-  });
-});
-
-panelClose.addEventListener("click", () => panel.classList.add("hidden"));
 
 openOptions.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
@@ -59,12 +88,67 @@ function setStatus(connected, customText) {
   statusText.textContent = customText ?? (connected ? "verbunden" : "offline");
 }
 
-function openPanel(tool) {
-  const renderer = TOOL_RENDERERS[tool];
+function renderTabs() {
+  tabsNav.replaceChildren();
+  for (const g of GROUPS) {
+    const b = el("button", {
+      type: "button",
+      className: "tab" + (g.id === activeTab ? " active" : ""),
+      textContent: g.label,
+    });
+    b.addEventListener("click", () => {
+      activeTab = g.id;
+      activeTool = null;
+      renderTabs();
+      renderToolList();
+    });
+    tabsNav.append(b);
+  }
+}
+
+function renderToolList() {
+  content.replaceChildren();
+  const group = GROUPS.find((g) => g.id === activeTab);
+  if (!group) return;
+  const list = el("ul", { className: "tools" });
+  for (const t of group.tools) {
+    const li = el("li", { className: "tool" + (t.soon ? " soon" : "") });
+    li.append(el("span", { className: "tool-label", textContent: t.label }));
+    if (t.hint) li.append(el("span", { className: "hint", textContent: t.hint }));
+    if (t.soon) {
+      li.append(el("span", { className: "badge", textContent: "bald" }));
+    } else {
+      li.addEventListener("click", () => openTool(t.id));
+    }
+    list.append(li);
+  }
+  content.append(list);
+}
+
+function openTool(toolId) {
+  const renderer = TOOL_RENDERERS[toolId];
   if (!renderer) return;
-  panel.classList.remove("hidden");
-  panelBody.replaceChildren();
+  activeTool = toolId;
+
+  content.replaceChildren();
+  const view = el("section", { className: "tool-view" });
+  const header = el("div", { className: "tool-header" });
+  const back = el("button", { type: "button", className: "back", textContent: "←" });
+  back.addEventListener("click", closeTool);
+  panelTitle = el("h3");
+  header.append(back, panelTitle);
+  panelBody = el("div", { className: "tool-body" });
+  view.append(header, panelBody);
+  content.append(view);
+
   renderer();
+}
+
+function closeTool() {
+  activeTool = null;
+  panelTitle = null;
+  panelBody = null;
+  renderToolList();
 }
 
 function renderYoutubeTranscript() {
@@ -275,14 +359,63 @@ async function renderNotesFile(kind, opts) {
 }
 
 const TODO_LINE_RE = /^(\s*)- \[( |x|X)\] (.*)$/;
+const DUE_RE = /@(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/;
 
 function parseTodoLines(content) {
   return content.split("\n").map((line, i) => {
     const m = line.match(TODO_LINE_RE);
-    return m
-      ? { i, isTodo: true, indent: m[1], checked: m[2].toLowerCase() === "x", text: m[3] }
-      : { i, isTodo: false, raw: line };
+    if (!m) return { i, isTodo: false, raw: line };
+    const rawText = m[3];
+    const due = parseDue(rawText);
+    return {
+      i,
+      isTodo: true,
+      indent: m[1],
+      checked: m[2].toLowerCase() === "x",
+      text: due ? rawText.replace(DUE_RE, "").replace(/\s+/g, " ").trim() : rawText,
+      due,
+    };
   });
+}
+
+function parseDue(text) {
+  const m = text.match(DUE_RE);
+  if (!m) return null;
+  const date = m[1];
+  const time = m[2] || null;
+  const iso = `${date}T${time || "23:59"}:00`;
+  const ts = new Date(iso);
+  if (isNaN(ts.getTime())) return null;
+  return { date, time, ts };
+}
+
+function formatDue(due) {
+  const now = new Date();
+  const diffMs = due.ts - now;
+  const min = Math.round(Math.abs(diffMs) / 60000);
+  const h = Math.round(Math.abs(diffMs) / 3600000);
+  const d = Math.round(Math.abs(diffMs) / 86400000);
+  const t = due.time ? ` ${due.time}` : "";
+
+  if (diffMs < 0) {
+    if (min < 60) return `überfällig ${min}min`;
+    if (h < 24) return `überfällig ${h}h`;
+    return `überfällig ${d}d`;
+  }
+  if (min < 60) return `in ${min}min`;
+  if (h < 24) return due.time ? `heute ${due.time}` : "heute";
+  if (d === 1) return due.time ? `morgen ${due.time}` : "morgen";
+  if (d < 7) return `in ${d}d${t}`;
+  const dd = new Date(due.date);
+  return dd.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + t;
+}
+
+function dueLevel(due) {
+  if (!due) return "";
+  const diffMs = due.ts - new Date();
+  if (diffMs < 0) return "overdue";
+  if (diffMs < 24 * 3600 * 1000) return "soon";
+  return "normal";
 }
 
 function setLine(content, index, newLine) {
@@ -310,7 +443,11 @@ async function renderTodos() {
   const list = el("div", { className: "todo-list" });
 
   const addForm = el("form", { className: "todo-add" });
-  const addInput = el("input", { type: "text", placeholder: "neues Todo, Enter zum Hinzufügen" });
+  const addInput = el("input", {
+    type: "text",
+    placeholder: "neues Todo... optional @2026-05-04 14:00",
+    title: "Format für Termin: @YYYY-MM-DD oder @YYYY-MM-DD HH:MM",
+  });
   const addBtn = el("button", { type: "submit", textContent: "+" });
   addForm.append(addInput, addBtn);
 
@@ -369,13 +506,23 @@ async function renderTodos() {
         render();
       });
       const text = el("span", { className: "todo-text", textContent: item.text });
+      let dueBadge = null;
+      if (item.due) {
+        dueBadge = el("span", {
+          className: "todo-due " + dueLevel(item.due),
+          textContent: formatDue(item.due),
+          title: item.due.date + (item.due.time ? " " + item.due.time : ""),
+        });
+      }
       const del = el("button", { type: "button", className: "todo-del", textContent: "×", title: "Löschen" });
       del.addEventListener("click", () => {
         content = deleteLine(content, item.i);
         scheduleSave();
         render();
       });
-      row.append(cb, text, del);
+      row.append(cb, text);
+      if (dueBadge) row.append(dueBadge);
+      row.append(del);
       list.append(row);
     }
   }
