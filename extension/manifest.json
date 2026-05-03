@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "EwtosBrain",
+  "version": "0.1.0",
+  "description": "Produktivitäts-Assistent mit Vault-Wissen, Browser-Tools und Claude-Code-Integration.",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "scripting",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "EwtosBrain"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "options_page": "options/options.html"
+}

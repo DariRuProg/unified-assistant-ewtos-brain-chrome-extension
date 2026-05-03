@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>EwtosBrain — Einstellungen</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 560px;
+      margin: 32px auto;
+      padding: 0 16px;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 20px; margin-bottom: 24px; }
+    .field { margin-bottom: 18px; }
+    label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+    .hint { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    button {
+      padding: 8px 16px;
+      background: #1a1a1a;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .saved { color: #22c55e; font-size: 12px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <h1>EwtosBrain — Einstellungen</h1>
+
+  <div class="field">
+    <label for="serverUrl">Server WebSocket URL</label>
+    <div class="hint">Standard: <code>ws://localhost:9988/ws</code></div>
+    <input id="serverUrl" type="text" placeholder="ws://localhost:9988/ws" />
+  </div>
+
+  <div class="field">
+    <label for="vaultPath">Vault-Pfad (Obsidian / Karpathy-Wiki)</label>
+    <div class="hint">Lokaler Pfad zu deinem Vault. Wird vom Server für Chat verwendet (Sprint 2).</div>
+    <input id="vaultPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\..." />
+  </div>
+
+  <div class="field">
+    <label for="notesPath">Notizen-Pfad (Scratchpad)</label>
+    <div class="hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung — wird beim Speichern an den Server geschickt.</div>
+    <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
+  </div>
+
+  <div class="field">
+    <label for="llmProvider">LLM-Provider</label>
+    <div class="hint">Server entscheidet — UI kann hier override setzen (für Sprint 2).</div>
+    <select id="llmProvider">
+      <option value="">Server-Default</option>
+      <option value="claude">Claude</option>
+      <option value="gemini">Gemini</option>
+      <option value="openrouter">OpenRouter</option>
+    </select>
+  </div>
+
+  <button id="save" type="button">Speichern</button>
+  <span id="saved" class="saved" hidden>gespeichert</span>
+
+  <script src="options.js"></script>
+</body>
+</html>
