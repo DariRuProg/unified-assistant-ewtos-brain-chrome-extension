@@ -982,20 +982,22 @@ function escapeHtml(s) {
 }
 
 function renderMarkdown(text) {
-  // Split into blocks by blank lines, preserve fenced code blocks atomically.
+  // Preserve fenced code blocks before any other processing.
   const codeBlocks = [];
-  let src = text.replace(/```([\s\S]*?)```/g, (_, code) => {
+  let src = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     const i = codeBlocks.length;
-    codeBlocks.push(`<pre><code>${escapeHtml(code.replace(/^\n/, ""))}</code></pre>`);
-    return ` CODEBLOCK${i} `;
+    const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+    codeBlocks.push(`<pre><code${langAttr}>${escapeHtml(code.replace(/\n$/, ""))}</code></pre>`);
+    return `\x00CODEBLOCK${i}\x00`;
   });
 
   const blocks = src.split(/\n{2,}/);
   const html = blocks.map((block) => {
-    if (/^ CODEBLOCK\d+ $/.test(block.trim())) {
-      return block.trim();
-    }
-    const lines = block.split("\n");
+    const trimmed = block.trim();
+    if (/^\x00CODEBLOCK\d+\x00$/.test(trimmed)) return trimmed;
+
+    const lines = block.split("\n").filter((l) => l !== "");
+    if (!lines.length) return "";
 
     // Heading
     const h = lines[0].match(/^(#{1,6})\s+(.+)$/);
@@ -1004,7 +1006,39 @@ function renderMarkdown(text) {
       return `<h${level}>${inlineMd(h[2])}</h${level}>`;
     }
 
-    // List (lines all start with - or *)
+    // Horizontal rule
+    if (lines.length === 1 && /^[-*_]{3,}$/.test(lines[0].trim())) {
+      return "<hr>";
+    }
+
+    // Table: first line has |, second line is the separator (|---|)
+    if (lines.length >= 2 && lines[0].includes("|") && /^\|[\s\-:|]+\|/.test(lines[1])) {
+      const parseRow = (l) => l.split("|").slice(1, -1).map((c) => c.trim());
+      const headers = parseRow(lines[0]).map((c) => `<th>${inlineMd(c)}</th>`).join("");
+      const rows = lines.slice(2)
+        .filter((l) => l.includes("|"))
+        .map((l) => parseRow(l).map((c) => `<td>${inlineMd(c)}</td>`).join(""))
+        .map((cells) => `<tr>${cells}</tr>`)
+        .join("");
+      return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    // Blockquote
+    if (lines.every((l) => /^>\s?/.test(l))) {
+      const inner = lines.map((l) => l.replace(/^>\s?/, "")).join("\n");
+      return `<blockquote>${renderMarkdown(inner)}</blockquote>`;
+    }
+
+    // Ordered list
+    if (lines.every((l) => /^\d+\.\s+/.test(l))) {
+      const items = lines.map((l) => {
+        const m = l.match(/^\d+\.\s+(.+)$/);
+        return m ? `<li>${inlineMd(m[1])}</li>` : "";
+      }).join("");
+      return `<ol>${items}</ol>`;
+    }
+
+    // Unordered list
     if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
       const items = lines.map((l) => {
         const m = l.match(/^\s*[-*]\s+(\[[ xX]\]\s+)?(.+)$/);
@@ -1017,27 +1051,29 @@ function renderMarkdown(text) {
     return `<p>${lines.map(inlineMd).join("<br>")}</p>`;
   }).join("");
 
-  return html.replace(/ CODEBLOCK(\d+) /g, (_, i) => codeBlocks[Number(i)]);
+  return html.replace(/\x00CODEBLOCK(\d+)\x00/g, (_, i) => codeBlocks[Number(i)]);
 }
 
 function inlineMd(s) {
   s = escapeHtml(s);
-  // Inline code first to protect content from other replacements
+  // Inline code first — protect content from other replacements
   const codes = [];
   s = s.replace(/`([^`]+)`/g, (_, c) => {
     const i = codes.length;
     codes.push(`<code>${c}</code>`);
-    return `CODE${i}`;
+    return `\x01CODE${i}\x01`;
   });
-  // Bold then italic
+  // Bold+italic, bold, italic, strikethrough
+  s = s.replace(/\*\*\*([^*\n]+)\*\*\*/g, "<strong><em>$1</em></strong>");
   s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
+  s = s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
   // Links [text](url) — only allow http(s) for safety
   s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-  // Auto-link bare URLs (very basic)
+  // Auto-link bare URLs
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)(?=[\s.,)!?]|$)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
   // Restore code spans
-  s = s.replace(/CODE(\d+)/g, (_, i) => codes[Number(i)]);
+  s = s.replace(/\x01CODE(\d+)\x01/g, (_, i) => codes[Number(i)]);
   return s;
 }
 
