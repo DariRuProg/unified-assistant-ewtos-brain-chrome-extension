@@ -14,6 +14,7 @@ const TOOL_RENDERERS = {
     placeholder: "Notizen, Gedanken, Skizzen... wird automatisch gespeichert.",
   }),
   todos: renderTodos,
+  chat: renderChat,
 };
 
 const GROUPS = [
@@ -21,7 +22,7 @@ const GROUPS = [
     id: "vault",
     label: "Vault",
     tools: [
-      { id: "chat", label: "Chat mit Vault", hint: "kommt in Sprint 2", soon: true },
+      { id: "chat", label: "Chat mit Vault", hint: "Karpathy-Navigation, Claude API" },
       { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad" },
       { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates" },
     ],
@@ -82,10 +83,17 @@ reconnectBtn.addEventListener("click", () => {
   chrome.runtime.sendMessage({ type: "reconnect" });
 });
 
+document.getElementById("retry-connect")?.addEventListener("click", () => {
+  setStatus(false, "verbinde...");
+  chrome.runtime.sendMessage({ type: "reconnect" });
+});
+
 function setStatus(connected, customText) {
   statusDot.classList.toggle("online", connected);
   statusDot.classList.toggle("offline", !connected);
   statusText.textContent = customText ?? (connected ? "verbunden" : "offline");
+  const banner = document.getElementById("offline-banner");
+  if (banner) banner.classList.toggle("hidden", connected);
 }
 
 function renderTabs() {
@@ -663,6 +671,326 @@ async function renderTodos() {
   } catch (err) {
     setStatus("Laden fehlgeschlagen: " + (err.message || err), "error");
   }
+}
+
+async function renderChat() {
+  panelTitle.textContent = "Chat mit Vault";
+
+  const httpBase = await getHttpBase();
+
+  // Header: vault picker + meta line
+  const header = el("div", { className: "chat-header" });
+  const vaultSelect = el("select", { className: "vault-picker" });
+  header.append(vaultSelect);
+  const meta = el("div", { className: "tool-status", textContent: "lade Vaults..." });
+
+  const log = el("div", { className: "chat-log" });
+  const inputWrap = el("form", { className: "chat-input" });
+  const inputArea = el("textarea", { placeholder: "Frage an den Vault... (Enter = senden, Shift+Enter = Zeilenumbruch)", rows: 2 });
+  const sendBtn = el("button", { type: "submit", textContent: "→" });
+  inputWrap.append(inputArea, sendBtn);
+
+  const toolbar = el("div", { className: "chat-toolbar" });
+  const clearBtn = el("button", { type: "button", textContent: "Verlauf löschen" });
+  clearBtn.classList.add("secondary");
+  toolbar.append(clearBtn);
+
+  const status = el("div", { className: "tool-status" });
+
+  panelBody.append(header, meta, log, status, inputWrap, toolbar);
+
+  let busy = false;
+  let currentVaultId = null;
+
+  function renderLog(messages) {
+    log.replaceChildren();
+    const visible = messages.filter((m) => typeof m.content === "string");
+    if (!visible.length) {
+      log.append(el("div", { className: "chat-empty", textContent: "Noch keine Nachrichten. Frag den Vault was!" }));
+      return;
+    }
+    for (const m of visible) {
+      const bubble = el("div", { className: "chat-msg " + m.role });
+      if (m.role === "assistant") {
+        bubble.innerHTML = renderMarkdown(m.content);
+      } else {
+        bubble.textContent = m.content;
+      }
+      log.append(bubble);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function setStatus(text, level = "") {
+    status.textContent = text;
+    status.className = "tool-status" + (level ? " " + level : "");
+  }
+
+  function showEmptyState(message, withOptionsLink = true) {
+    panelBody.replaceChildren();
+    const wrap = el("div", { className: "chat-empty-state" });
+    wrap.append(el("p", { textContent: message }));
+    if (withOptionsLink) {
+      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+      wrap.append(btn);
+    }
+    panelBody.append(wrap);
+  }
+
+  async function loadVaultChat(vaultId) {
+    currentVaultId = vaultId;
+    await chrome.storage.local.set({ selectedVaultId: vaultId });
+    setStatus("lade...");
+    try {
+      const res = await fetch(`${httpBase}/tools/chat/${vaultId}`);
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      const sourceLabel = {
+        claude_md: "CLAUDE.md aktiv",
+        override: "Override aktiv",
+        default: "Default-Prompt (keine CLAUDE.md)",
+      }[data.prompt_source] || data.prompt_source || "?";
+      meta.textContent = `${data.vault?.name || vaultId} · Modell: ${data.model} · max ${data.max_user_turns} Paare · ${sourceLabel}`;
+      renderLog(data.messages || []);
+      setStatus("");
+      inputArea.focus();
+    } catch (err) {
+      setStatus("Laden fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  function appendBubble(role, text = "") {
+    // Remove "noch keine nachrichten" placeholder if present
+    const empty = log.querySelector(".chat-empty");
+    if (empty) empty.remove();
+    const bubble = el("div", { className: "chat-msg " + role });
+    if (text) bubble.textContent = text;
+    log.append(bubble);
+    log.scrollTop = log.scrollHeight;
+    return bubble;
+  }
+
+  async function send(message) {
+    if (busy || !currentVaultId) return;
+    busy = true;
+    sendBtn.disabled = true;
+    inputArea.disabled = true;
+    vaultSelect.disabled = true;
+
+    // Echo user message immediately
+    appendBubble("user", message);
+    const assistantBubble = appendBubble("assistant");
+    assistantBubble.classList.add("streaming");
+    let assistantText = "";
+
+    setStatus("denkt...");
+    try {
+      const res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let pendingEvent = null;
+
+      function dispatch(event, data) {
+        if (event === "text_delta") {
+          assistantText += data.text;
+          assistantBubble.textContent = assistantText;
+          log.scrollTop = log.scrollHeight;
+        } else if (event === "tool_start") {
+          const path = data.input?.path ? ` ${data.input.path}` : "";
+          setStatus(`${data.tool}${path}...`);
+        } else if (event === "tool_end") {
+          // optional: subtle ack — keep status as "denkt..." until next event
+          if (!data.ok) setStatus(`${data.tool} fehlgeschlagen`, "error");
+        } else if (event === "done") {
+          assistantBubble.classList.remove("streaming");
+          if (assistantText.trim()) {
+            assistantBubble.innerHTML = renderMarkdown(assistantText);
+          } else {
+            assistantBubble.textContent = "(keine Textantwort)";
+          }
+          const u = data.usage || {};
+          const consulted = data.consulted?.length ? ` · gelesen: ${data.consulted.join(", ")}` : "";
+          const cached = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
+          setStatus(`fertig (${u.input_tokens || 0} in / ${u.output_tokens || 0} out${cached})${consulted}`, "success");
+        } else if (event === "error") {
+          assistantBubble.classList.remove("streaming");
+          assistantBubble.textContent = "Fehler: " + (data.message || "unbekannt");
+          assistantBubble.classList.add("error");
+          setStatus("Fehler: " + (data.message || "unbekannt"), "error");
+        }
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE events are separated by blank lines
+        const events = buffer.split(/\n\n/);
+        buffer = events.pop(); // keep incomplete trailing
+        for (const block of events) {
+          let eventName = "message";
+          const dataLines = [];
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          }
+          if (!dataLines.length) continue;
+          let parsed = null;
+          try { parsed = JSON.parse(dataLines.join("\n")); } catch { continue; }
+          dispatch(eventName, parsed);
+        }
+      }
+    } catch (err) {
+      assistantBubble.classList.remove("streaming");
+      assistantBubble.classList.add("error");
+      assistantBubble.textContent = "Fehler: " + (err.message || err);
+      setStatus("Fehler: " + (err.message || err), "error");
+    } finally {
+      busy = false;
+      sendBtn.disabled = false;
+      inputArea.disabled = false;
+      vaultSelect.disabled = false;
+      inputArea.focus();
+    }
+  }
+
+  vaultSelect.addEventListener("change", () => {
+    if (vaultSelect.value && vaultSelect.value !== currentVaultId) {
+      loadVaultChat(vaultSelect.value);
+    }
+  });
+
+  inputWrap.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const msg = inputArea.value.trim();
+    if (!msg) return;
+    inputArea.value = "";
+    send(msg);
+  });
+
+  inputArea.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      inputWrap.requestSubmit();
+    }
+  });
+
+  clearBtn.addEventListener("click", async () => {
+    if (!currentVaultId) return;
+    if (!confirm("Verlauf für diesen Vault löschen?")) return;
+    try {
+      const res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/clear`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      renderLog([]);
+      setStatus("Verlauf geleert", "success");
+    } catch (err) {
+      setStatus("Fehler: " + (err.message || err), "error");
+    }
+  });
+
+  // Initial load: get vault list, populate dropdown, restore last selection
+  try {
+    const res = await fetch(`${httpBase}/vaults`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const vaults = data.vaults || [];
+    if (!vaults.length) {
+      showEmptyState("Noch kein Vault verbunden. Lege in den Einstellungen einen an, dann kannst du chatten.");
+      return;
+    }
+    vaultSelect.replaceChildren();
+    for (const v of vaults) {
+      vaultSelect.append(el("option", { value: v.id, textContent: v.name }));
+    }
+    const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+    const startId = vaults.some((v) => v.id === selectedVaultId) ? selectedVaultId : vaults[0].id;
+    vaultSelect.value = startId;
+    await loadVaultChat(startId);
+  } catch (err) {
+    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+  }
+}
+
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderMarkdown(text) {
+  // Split into blocks by blank lines, preserve fenced code blocks atomically.
+  const codeBlocks = [];
+  let src = text.replace(/```([\s\S]*?)```/g, (_, code) => {
+    const i = codeBlocks.length;
+    codeBlocks.push(`<pre><code>${escapeHtml(code.replace(/^\n/, ""))}</code></pre>`);
+    return ` CODEBLOCK${i} `;
+  });
+
+  const blocks = src.split(/\n{2,}/);
+  const html = blocks.map((block) => {
+    if (/^ CODEBLOCK\d+ $/.test(block.trim())) {
+      return block.trim();
+    }
+    const lines = block.split("\n");
+
+    // Heading
+    const h = lines[0].match(/^(#{1,6})\s+(.+)$/);
+    if (lines.length === 1 && h) {
+      const level = Math.min(h[1].length + 1, 6);
+      return `<h${level}>${inlineMd(h[2])}</h${level}>`;
+    }
+
+    // List (lines all start with - or *)
+    if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
+      const items = lines.map((l) => {
+        const m = l.match(/^\s*[-*]\s+(\[[ xX]\]\s+)?(.+)$/);
+        return m ? `<li>${inlineMd(m[2])}</li>` : "";
+      }).join("");
+      return `<ul>${items}</ul>`;
+    }
+
+    // Paragraph (single newlines → <br>)
+    return `<p>${lines.map(inlineMd).join("<br>")}</p>`;
+  }).join("");
+
+  return html.replace(/ CODEBLOCK(\d+) /g, (_, i) => codeBlocks[Number(i)]);
+}
+
+function inlineMd(s) {
+  s = escapeHtml(s);
+  // Inline code first to protect content from other replacements
+  const codes = [];
+  s = s.replace(/`([^`]+)`/g, (_, c) => {
+    const i = codes.length;
+    codes.push(`<code>${c}</code>`);
+    return `CODE${i}`;
+  });
+  // Bold then italic
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
+  // Links [text](url) — only allow http(s) for safety
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Auto-link bare URLs (very basic)
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)(?=[\s.,)!?]|$)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+  // Restore code spans
+  s = s.replace(/CODE(\d+)/g, (_, i) => codes[Number(i)]);
+  return s;
 }
 
 function el(tag, props = {}) {

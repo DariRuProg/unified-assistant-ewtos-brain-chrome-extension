@@ -8,11 +8,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import chat
 import config
 import settings
-from tools import notes_file
+from tools import notes_file, wiki_reader
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -80,7 +82,9 @@ bridge = ExtensionBridge()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Server starting on %s:%s", config.HOST, config.PORT)
-    log.info("Vault path: %s", config.VAULT_PATH)
+    legacy = settings.migrate_legacy_vault_path(chat.CHAT_DIR / "chat.json")
+    if legacy:
+        log.info("Migration: legacy vault_path -> vault id=%s name=%r", legacy["id"], legacy["name"])
     yield
     log.info("Server shutting down")
 
@@ -171,18 +175,167 @@ def notes_export(kind: str, req: NotesExportRequest) -> dict[str, Any]:
 
 class SettingsUpdate(BaseModel):
     notes_path: str | None = None
+    anthropic_api_key: str | None = None
+    chat_model: str | None = None
+    max_user_turns: int | None = None
+
+
+def _public_settings() -> dict[str, Any]:
+    s = settings.all()
+    return {
+        "notes_path": s.get("notes_path") or config.NOTES_PATH,
+        "chat_model": s.get("chat_model") or chat.DEFAULT_MODEL,
+        "max_user_turns": s.get("max_user_turns") or chat.DEFAULT_MAX_TURNS,
+        "anthropic_api_key_set": bool(s.get("anthropic_api_key")),
+    }
 
 
 @app.get("/settings")
 def settings_get() -> dict[str, Any]:
-    s = settings.all()
-    return {"notes_path": s.get("notes_path") or config.NOTES_PATH}
+    return _public_settings()
 
 
 @app.post("/settings")
 def settings_post(req: SettingsUpdate) -> dict[str, Any]:
-    updated = settings.update(req.model_dump(exclude_none=True))
-    return {"notes_path": updated.get("notes_path") or config.NOTES_PATH}
+    settings.update(req.model_dump(exclude_none=True))
+    return _public_settings()
+
+
+# --- Vaults ---------------------------------------------------------------
+
+class VaultCreate(BaseModel):
+    name: str
+    path: str
+    system_prompt: str | None = ""
+
+
+class VaultUpdate(BaseModel):
+    name: str | None = None
+    path: str | None = None
+    system_prompt: str | None = None
+
+
+class GeneratePromptRequest(BaseModel):
+    path: str
+
+
+def _enrich_vault(v: dict[str, Any]) -> dict[str, Any]:
+    return {**v, "has_claude_md": wiki_reader.find_claude_md(v["path"]) is not None}
+
+
+@app.get("/vaults")
+def vaults_list() -> dict[str, Any]:
+    return {"vaults": [_enrich_vault(v) for v in settings.get_vaults()]}
+
+
+@app.post("/vaults")
+def vaults_create(req: VaultCreate) -> dict[str, Any]:
+    if not req.name.strip():
+        raise HTTPException(400, "Name darf nicht leer sein")
+    if not req.path.strip():
+        raise HTTPException(400, "Pfad darf nicht leer sein")
+    return settings.add_vault(req.name, req.path, req.system_prompt or "")
+
+
+# Static POST routes BEFORE /vaults/{vault_id} to avoid path-param matching.
+@app.post("/vaults/preview-claude-md")
+def vaults_preview_claude_md(req: GeneratePromptRequest) -> dict[str, Any]:
+    """Read CLAUDE.md from a path (no LLM call). Returns the content + the
+    canned generator instruction so the user can copy & use externally."""
+    content = chat.preview_claude_md(req.path)
+    if not content:
+        raise HTTPException(404, "Keine CLAUDE.md im Pfad oder dessen Parent gefunden")
+    return {
+        "claude_md": content,
+        "generator_instruction": chat.generator_instruction(content),
+    }
+
+
+@app.post("/vaults/generate-prompt")
+def vaults_generate_prompt(req: GeneratePromptRequest) -> dict[str, Any]:
+    """Read CLAUDE.md and call Claude to generate a system prompt."""
+    try:
+        return chat.generate_system_prompt(req.path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        log.exception("Prompt generation error")
+        raise HTTPException(500, str(e))
+
+
+@app.get("/vaults/{vault_id}")
+def vaults_get(vault_id: str) -> dict[str, Any]:
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault nicht gefunden")
+    return _enrich_vault(v)
+
+
+@app.post("/vaults/{vault_id}")
+def vaults_update(vault_id: str, req: VaultUpdate) -> dict[str, Any]:
+    updated = settings.update_vault(vault_id, **req.model_dump(exclude_none=True))
+    if not updated:
+        raise HTTPException(404, "Vault nicht gefunden")
+    return updated
+
+
+@app.delete("/vaults/{vault_id}")
+def vaults_delete(vault_id: str) -> dict[str, Any]:
+    if not settings.remove_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    chat_file = chat.CHAT_DIR / f"chat-{vault_id}.json"
+    if chat_file.exists():
+        chat_file.unlink()
+    return {"removed": True, "vault_id": vault_id}
+
+
+# --- Chat -----------------------------------------------------------------
+
+class ChatSendRequest(BaseModel):
+    message: str
+
+
+# Per-vault routes — static segments (clear, stream) declared first to avoid
+# being matched as vault_id="clear" or vault_id="stream".
+@app.post("/tools/chat/{vault_id}/clear")
+def chat_clear(vault_id: str) -> dict[str, Any]:
+    try:
+        return chat.clear(vault_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/tools/chat/{vault_id}/stream")
+def chat_stream(vault_id: str, req: ChatSendRequest) -> StreamingResponse:
+    """SSE stream of chat events: tool_start, tool_end, text_delta, done, error."""
+    return StreamingResponse(
+        chat.send_stream(vault_id, req.message),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/tools/chat/{vault_id}")
+def chat_load(vault_id: str) -> dict[str, Any]:
+    try:
+        return chat.load(vault_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/tools/chat/{vault_id}")
+def chat_send(vault_id: str, req: ChatSendRequest) -> dict[str, Any]:
+    try:
+        return chat.send(vault_id, req.message)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        log.exception("Chat error")
+        raise HTTPException(500, str(e))
 
 
 if __name__ == "__main__":

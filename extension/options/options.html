@@ -4,23 +4,46 @@
   <meta charset="UTF-8" />
   <title>EwtosBrain — Einstellungen</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      max-width: 560px;
+      max-width: 680px;
       margin: 32px auto;
-      padding: 0 16px;
+      padding: 0 16px 64px;
       color: #1a1a1a;
     }
     h1 { font-size: 20px; margin-bottom: 24px; }
+    h2 {
+      font-size: 14px;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e7eb;
+    }
     .field { margin-bottom: 18px; }
     label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
     .hint { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
-    input, select {
+    .hint code {
+      background: #f3f4f6;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11px;
+    }
+    input, select, textarea {
       width: 100%;
       padding: 8px;
       border: 1px solid #d1d5db;
       border-radius: 4px;
       font-size: 13px;
+      font-family: inherit;
+    }
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.4;
     }
     button {
       padding: 8px 16px;
@@ -30,12 +53,98 @@
       border-radius: 4px;
       cursor: pointer;
       font-size: 13px;
+      font-family: inherit;
     }
-    .saved { color: #22c55e; font-size: 12px; margin-left: 8px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: #fff;
+      color: #1a1a1a;
+      border: 1px solid #d1d5db;
+    }
+    button.danger {
+      background: #fff;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+    button.danger:hover { background: #fef2f2; }
+    .saved { font-size: 12px; margin-left: 8px; }
+
+    .vault-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .vault-card.editing { border-color: #1a1a1a; }
+    .vault-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .vault-header:hover { background: #f9fafb; }
+    .vault-card.editing .vault-header { background: #f9fafb; cursor: default; }
+    .vault-title { flex: 1; min-width: 0; }
+    .vault-title strong { font-size: 14px; display: block; }
+    .vault-path-summary {
+      font-size: 11px;
+      color: #6b7280;
+      font-family: ui-monospace, "Consolas", monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .vault-toggle {
+      background: none;
+      border: none;
+      padding: 4px 8px;
+      font-size: 14px;
+      color: #6b7280;
+      cursor: pointer;
+    }
+    .vault-body {
+      display: none;
+      padding: 0 14px 14px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .vault-card.editing .vault-body { display: block; }
+    .vault-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .vault-status {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 8px;
+      min-height: 14px;
+    }
+    .vault-status.error { color: #b91c1c; }
+    .vault-status.success { color: #15803d; }
+
+    #add-vault-form {
+      border: 1px dashed #d1d5db;
+      border-radius: 6px;
+      padding: 14px;
+      margin-top: 12px;
+      background: #fafafa;
+    }
+    #add-vault-form.hidden { display: none; }
+    .empty-vaults {
+      color: #6b7280;
+      font-size: 12px;
+      font-style: italic;
+      padding: 12px 0;
+    }
   </style>
 </head>
 <body>
   <h1>EwtosBrain — Einstellungen</h1>
+
+  <h2>Verbindung</h2>
 
   <div class="field">
     <label for="serverUrl">Server WebSocket URL</label>
@@ -43,31 +152,76 @@
     <input id="serverUrl" type="text" placeholder="ws://localhost:9988/ws" />
   </div>
 
-  <div class="field">
-    <label for="vaultPath">Vault-Pfad (Obsidian / Karpathy-Wiki)</label>
-    <div class="hint">Lokaler Pfad zu deinem Vault. Wird vom Server für Chat verwendet (Sprint 2).</div>
-    <input id="vaultPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\..." />
-  </div>
+  <h2>Note-Taker</h2>
 
   <div class="field">
     <label for="notesPath">Notizen-Pfad (Scratchpad)</label>
-    <div class="hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung — wird beim Speichern an den Server geschickt.</div>
+    <div class="hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung.</div>
     <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
   </div>
 
+  <h2>Chat — Modell &amp; API</h2>
+
   <div class="field">
-    <label for="llmProvider">LLM-Provider</label>
-    <div class="hint">Server entscheidet — UI kann hier override setzen (für Sprint 2).</div>
-    <select id="llmProvider">
-      <option value="">Server-Default</option>
-      <option value="claude">Claude</option>
-      <option value="gemini">Gemini</option>
-      <option value="openrouter">OpenRouter</option>
+    <label for="anthropicApiKey">Anthropic API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert (nicht in der Extension). <span id="apiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="anthropicApiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+  </div>
+
+  <div class="field">
+    <label for="chatModel">Chat-Modell</label>
+    <div class="hint">Default: claude-opus-4-7 (am stärksten für Tool-Use).</div>
+    <select id="chatModel">
+      <option value="claude-opus-4-7">claude-opus-4-7 (Default)</option>
+      <option value="claude-opus-4-6">claude-opus-4-6</option>
+      <option value="claude-sonnet-4-6">claude-sonnet-4-6 (günstiger)</option>
+      <option value="claude-haiku-4-5">claude-haiku-4-5 (schnell, günstig)</option>
     </select>
   </div>
 
-  <button id="save" type="button">Speichern</button>
-  <span id="saved" class="saved" hidden>gespeichert</span>
+  <div class="field">
+    <label for="maxUserTurns">Max Verlauf (Nachrichten-Paare)</label>
+    <div class="hint">Wieviele User-Assistant-Paare im Verlauf bleiben. Default: 20.</div>
+    <input id="maxUserTurns" type="number" min="1" max="100" placeholder="20" />
+  </div>
+
+  <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
+  <span id="saved" class="saved" hidden></span>
+
+  <h2>Verbundene Vaults</h2>
+  <div class="hint" style="margin-bottom: 12px;">
+    Jeder Vault ist ein Ordner mit <code>.md</code>-Dateien (Karpathy-Style). Pro Vault eigener System-Prompt + eigener Chat-Verlauf. Im Side-Panel wechselst du zwischen den Vaults.
+  </div>
+
+  <div id="vaults-container"></div>
+
+  <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault verbinden</button>
+
+  <div id="add-vault-form" class="hidden">
+    <div class="field">
+      <label for="newVaultName">Name</label>
+      <input id="newVaultName" type="text" placeholder="z.B. Karpathy-Wiki" />
+    </div>
+    <div class="field">
+      <label for="newVaultPath">Pfad</label>
+      <div class="hint">Ordner mit den <code>.md</code>-Dateien (oder Vault-Root — Server findet auch <code>&lt;pfad&gt;/wiki/</code>).</div>
+      <input id="newVaultPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\Self-Feeding-Wiki-...\wiki" />
+    </div>
+    <div class="vault-actions">
+      <button id="newVaultGenerate" type="button">System-Prompt aus CLAUDE.md generieren</button>
+      <button id="newVaultCopyInstr" type="button" class="secondary">Anweisung kopieren</button>
+    </div>
+    <div class="field" style="margin-top: 14px;">
+      <label for="newVaultPrompt">System-Prompt (optional Override)</label>
+      <div class="hint">Leer lassen ist meist die beste Wahl — der Bot nutzt dann automatisch die <code>CLAUDE.md</code> deines Vaults als Anleitung. Nur ausfüllen wenn du die CLAUDE.md überschreiben willst.</div>
+      <textarea id="newVaultPrompt" placeholder=""></textarea>
+    </div>
+    <div class="vault-actions">
+      <button id="newVaultSave" type="button">Vault speichern</button>
+      <button id="newVaultCancel" type="button" class="secondary">Abbrechen</button>
+    </div>
+    <div id="newVaultStatus" class="vault-status"></div>
+  </div>
 
   <script src="options.js"></script>
 </body>

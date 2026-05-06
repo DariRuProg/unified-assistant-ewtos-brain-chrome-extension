@@ -64,22 +64,32 @@ async function connect() {
   clearTimeout(reconnectTimer);
 
   const url = await getServerUrl();
+  let ws;
   try {
-    socket = new WebSocket(url);
+    ws = new WebSocket(url);
   } catch (err) {
     connecting = false;
     scheduleReconnect();
     return;
   }
+  socket = ws;
 
-  socket.onopen = () => {
+  // All handlers check `socket === ws` so a superseded socket's late events
+  // (e.g. an old socket's onclose firing after forceReconnect created a new
+  // one) don't clobber the active connection's state.
+
+  ws.onopen = () => {
+    if (socket !== ws) return;
     connecting = false;
-    socket.send(JSON.stringify({ type: "hello", client: "extension", version: "0.1.0" }));
+    try {
+      ws.send(JSON.stringify({ type: "hello", client: "extension", version: "0.1.0" }));
+    } catch {}
     broadcastStatus(true);
     startPing();
   };
 
-  socket.onmessage = (event) => {
+  ws.onmessage = (event) => {
+    if (socket !== ws) return;
     let msg;
     try {
       msg = JSON.parse(event.data);
@@ -93,9 +103,10 @@ async function connect() {
     }
   };
 
-  socket.onerror = () => {};
+  ws.onerror = () => {};
 
-  socket.onclose = () => {
+  ws.onclose = () => {
+    if (socket !== ws) return;
     connecting = false;
     socket = null;
     stopPing();
@@ -126,10 +137,19 @@ function stopPing() {
 }
 
 function forceReconnect() {
-  try {
-    socket?.close();
-  } catch {}
+  const old = socket;
   socket = null;
+  connecting = false;
+  if (old) {
+    // Detach handlers so the close event doesn't trigger a side-effect on
+    // the new connection we're about to open.
+    old.onopen = null;
+    old.onmessage = null;
+    old.onerror = null;
+    old.onclose = null;
+    try { old.close(); } catch {}
+  }
+  stopPing();
   connect();
 }
 
