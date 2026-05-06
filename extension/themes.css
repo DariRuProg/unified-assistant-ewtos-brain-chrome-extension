@@ -1,0 +1,133 @@
+/* ewtos.com — EwtosBrain theme variables */
+
+:root {
+  --bg: #fafafa;
+  --bg-card: #ffffff;
+  --bg-subtle: #f3f4f6;
+  --bg-hover: #f9fafb;
+  --border: #e5e7eb;
+  --border-input: #d1d5db;
+  --text: #1a1a1a;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  --accent: #1a1a1a;
+  --accent-hover: #333333;
+  --accent-text: #ffffff;
+  --header-bg: #1a1a1a;
+  --header-text: #ffffff;
+
+  --status-online: #22c55e;
+  --status-offline: #ef4444;
+
+  --badge-normal-bg: #e5e7eb;
+  --badge-normal-text: #374151;
+  --badge-soon-bg: #fed7aa;
+  --badge-soon-text: #9a3412;
+  --badge-overdue-bg: #fecaca;
+  --badge-overdue-text: #991b1b;
+
+  --warning-bg: #fef3c7;
+  --warning-text: #92400e;
+  --warning-border: #fcd34d;
+  --warning-code-bg: #fde68a;
+}
+
+/* ── Dark mode ─────────────────────────────────── */
+[data-mode="dark"] {
+  --bg: #111827;
+  --bg-card: #1f2937;
+  --bg-subtle: #374151;
+  --bg-hover: #2d3748;
+  --border: #374151;
+  --border-input: #4b5563;
+  --text: #f9fafb;
+  --text-muted: #9ca3af;
+  --text-faint: #6b7280;
+
+  --accent: #e5e7eb;
+  --accent-hover: #d1d5db;
+  --accent-text: #111827;
+  --header-bg: #0f172a;
+  --header-text: #f9fafb;
+
+  --badge-normal-bg: #374151;
+  --badge-normal-text: #d1d5db;
+  --badge-soon-bg: #78350f;
+  --badge-soon-text: #fed7aa;
+  --badge-overdue-bg: #7f1d1d;
+  --badge-overdue-text: #fecaca;
+
+  --warning-bg: #292524;
+  --warning-text: #fed7aa;
+  --warning-border: #78350f;
+  --warning-code-bg: #451a03;
+}
+
+/* ── Theme: Ocean ──────────────────────────────── */
+[data-theme="ocean"] {
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-text: #ffffff;
+  --header-bg: #1e3a5f;
+  --header-text: #bfdbfe;
+}
+
+[data-mode="dark"][data-theme="ocean"] {
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+  --accent-text: #1e3a5f;
+  --header-bg: #0f172a;
+  --header-text: #bfdbfe;
+}
+
+/* ── Theme: Forest ─────────────────────────────── */
+[data-theme="forest"] {
+  --accent: #15803d;
+  --accent-hover: #166534;
+  --accent-text: #ffffff;
+  --header-bg: #14532d;
+  --header-text: #bbf7d0;
+}
+
+[data-mode="dark"][data-theme="forest"] {
+  --accent: #4ade80;
+  --accent-hover: #86efac;
+  --accent-text: #14532d;
+  --header-bg: #052e16;
+  --header-text: #bbf7d0;
+}
+
+/* ── Theme: Sunset ─────────────────────────────── */
+[data-theme="sunset"] {
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-text: #ffffff;
+  --header-bg: #3b0764;
+  --header-text: #ede9fe;
+}
+
+[data-mode="dark"][data-theme="sunset"] {
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --accent-text: #2e1065;
+  --header-bg: #1a0533;
+  --header-text: #ddd6fe;
+}
+
+/* ── Theme: Ember ──────────────────────────────── */
+[data-theme="ember"] {
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-text: #ffffff;
+  --header-bg: #451a03;
+  --header-text: #fef3c7;
+}
+
+[data-mode="dark"][data-theme="ember"] {
+  --accent: #fbbf24;
+  --accent-hover: #fcd34d;
+  --accent-text: #451a03;
+  --header-bg: #1c0a03;
+  --header-text: #fde68a;
+}

@@ -1,4 +1,44 @@
-// Sidepanel: connection status, tab navigation, tool runner.
+// Sidepanel: connection status, tab navigation, tool runner. ewtos.com
+
+// ── Theme & Dark Mode ────────────────────────────────────────────────────────
+
+const html = document.documentElement;
+
+function applyTheme(theme, darkMode) {
+  if (theme && theme !== "neutral") {
+    html.dataset.theme = theme;
+  } else {
+    delete html.dataset.theme;
+  }
+  if (darkMode) {
+    html.dataset.mode = "dark";
+  } else {
+    delete html.dataset.mode;
+  }
+}
+
+function updateDarkToggleIcon(darkMode) {
+  const btn = document.getElementById("dark-toggle");
+  if (btn) btn.textContent = darkMode ? "☽" : "☀";
+}
+
+(async () => {
+  const { theme = "neutral", darkMode = false } =
+    await chrome.storage.local.get(["theme", "darkMode"]);
+  applyTheme(theme, darkMode);
+  updateDarkToggleIcon(darkMode);
+})();
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.theme !== undefined || changes.darkMode !== undefined) {
+    chrome.storage.local.get(["theme", "darkMode"], ({ theme = "neutral", darkMode = false }) => {
+      applyTheme(theme, darkMode);
+      updateDarkToggleIcon(darkMode);
+    });
+  }
+});
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
 
 const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
@@ -86,6 +126,14 @@ reconnectBtn.addEventListener("click", () => {
 document.getElementById("retry-connect")?.addEventListener("click", () => {
   setStatus(false, "verbinde...");
   chrome.runtime.sendMessage({ type: "reconnect" });
+});
+
+document.getElementById("dark-toggle").addEventListener("click", async () => {
+  const isDark = html.dataset.mode === "dark";
+  const { theme = "neutral" } = await chrome.storage.local.get("theme");
+  applyTheme(theme, !isDark);
+  updateDarkToggleIcon(!isDark);
+  chrome.storage.local.set({ darkMode: !isDark });
 });
 
 function setStatus(connected, customText) {

@@ -1,4 +1,40 @@
+// ewtos.com
 const CLIENT_FIELDS = ["serverUrl"];
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+function applyThemeToPage(theme, darkMode) {
+  const html = document.documentElement;
+  if (theme && theme !== "neutral") {
+    html.dataset.theme = theme;
+  } else {
+    delete html.dataset.theme;
+  }
+  if (darkMode) {
+    html.dataset.mode = "dark";
+  } else {
+    delete html.dataset.mode;
+  }
+}
+
+function setActiveSwatch(theme) {
+  document.querySelectorAll(".theme-swatch").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.theme === theme);
+  });
+  const hidden = document.getElementById("theme");
+  if (hidden) hidden.value = theme;
+}
+
+document.querySelectorAll(".theme-swatch").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const theme = btn.dataset.theme;
+    setActiveSwatch(theme);
+    chrome.storage.local.get("darkMode", ({ darkMode = false }) => {
+      applyThemeToPage(theme, darkMode);
+      chrome.storage.local.set({ theme });
+    });
+  });
+});
 const SERVER_FIELDS = ["notesPath", "chatModel", "maxUserTurns"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
@@ -322,11 +358,15 @@ newSaveBtn.addEventListener("click", async () => {
 // ----- Initial load -----
 
 (async () => {
-  const stored = await chrome.storage.local.get(CLIENT_FIELDS);
+  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode"]);
   for (const key of CLIENT_FIELDS) {
     const e = document.getElementById(key);
     if (e && stored[key] !== undefined) e.value = stored[key];
   }
+
+  const theme = stored.theme || "neutral";
+  setActiveSwatch(theme);
+  applyThemeToPage(theme, stored.darkMode || false);
 
   const server = await loadServerSettings();
   if (server) {
