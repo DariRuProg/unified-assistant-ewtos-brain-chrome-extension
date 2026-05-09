@@ -8,7 +8,9 @@
     "storage",
     "scripting",
     "tabs",
-    "alarms"
+    "alarms",
+    "contextMenus",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"

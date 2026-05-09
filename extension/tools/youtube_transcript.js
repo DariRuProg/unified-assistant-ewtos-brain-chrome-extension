@@ -8,14 +8,27 @@ const TRANSCRIPT_RENDER_DELAY_MS = 2000;
 
 export async function runYoutubeTranscript(params) {
   const url = params?.url;
+  const withTimestamps = !!params?.with_timestamps;
   if (!url) throw new Error("url required");
 
   const win = await createHiddenWindow();
   try {
-    return await fetchTranscript(url, win.id);
+    const result = await fetchTranscript(url, win.id);
+    if (!withTimestamps && result?.transcript) {
+      result.transcript = stripTimestamps(result.transcript);
+    }
+    return result;
   } finally {
     chrome.windows.remove(win.id).catch(() => {});
   }
+}
+
+function stripTimestamps(text) {
+  // Lines look like "[HH:MM:SS] content" — drop the bracket-prefix
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^\[[^\]]*\]\s*/, ""))
+    .join("\n");
 }
 
 function createHiddenWindow() {

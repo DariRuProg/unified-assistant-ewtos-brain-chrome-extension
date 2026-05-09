@@ -14,6 +14,7 @@ Schema:
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from typing import Any
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 EDITABLE_KEYS = {"anthropic_api_key", "chat_model", "max_user_turns"}
 SECRET_KEYS = {"anthropic_api_key"}
+SECRET_ENV_MAP = {"anthropic_api_key": "ANTHROPIC_API_KEY"}
 
 _cache: dict[str, Any] | None = None
 
@@ -51,6 +53,11 @@ def all() -> dict[str, Any]:
 
 
 def get(key: str, default: Any = None) -> Any:
+    env_var = SECRET_ENV_MAP.get(key)
+    if env_var:
+        env_val = os.getenv(env_var)
+        if env_val:
+            return env_val
     return all().get(key, default)
 
 
@@ -81,6 +88,9 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+DEFAULT_VAULT_PERMISSIONS = {"write_raw": False, "write_playlists": False}
+
+
 def add_vault(name: str, path: str, system_prompt: str = "") -> dict[str, Any]:
     global _cache
     current = all()
@@ -90,6 +100,7 @@ def add_vault(name: str, path: str, system_prompt: str = "") -> dict[str, Any]:
         "name": name.strip(),
         "path": path.strip(),
         "system_prompt": system_prompt or "",
+        "permissions": dict(DEFAULT_VAULT_PERMISSIONS),
     }
     vaults.append(vault)
     current["vaults"] = vaults
@@ -108,12 +119,25 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
             for k in ("name", "path", "system_prompt"):
                 if k in fields and fields[k] is not None:
                     updated[k] = fields[k]
+            if "permissions" in fields and fields["permissions"] is not None:
+                merged = dict(DEFAULT_VAULT_PERMISSIONS)
+                merged.update(updated.get("permissions") or {})
+                merged.update(fields["permissions"])
+                updated["permissions"] = merged
             vaults[i] = updated
             current["vaults"] = vaults
             _cache = current
             _flush()
             return dict(updated)
     return None
+
+
+def vault_permission(vault_id: str, key: str) -> bool:
+    v = get_vault(vault_id)
+    if not v:
+        return False
+    perms = v.get("permissions") or {}
+    return bool(perms.get(key, DEFAULT_VAULT_PERMISSIONS.get(key, False)))
 
 
 def remove_vault(vault_id: str) -> bool:

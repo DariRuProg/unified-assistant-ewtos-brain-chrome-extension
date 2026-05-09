@@ -35,10 +35,17 @@ extension/         Chrome Extension (MV3)
   tools/           Browser-seitige Tool-Implementierungen
 
 server/            Python FastAPI
-  main.py          App + WS-Endpoint + Tool-HTTP-Endpoints
-  config.py        Settings (Vault-Pfad, LLM-Keys)
+  main.py          App + WS-Endpoint + Tool-HTTP-Endpoints (lädt .env)
+  config.py        Statische Settings (Host, Port, Vault-Default, Tool-Timeout)
+  settings.py      Runtime-Settings (vaults, chat_model, max_user_turns) — .env hat Vorrang für SECRET_KEYS
+  settings.json    persistierte Runtime-Settings (NICHT versioniert, .gitignore)
+  .env             Anthropic-API-Key + Geheimnisse (NICHT versioniert)
+  .env.example     Vorlage für .env
   tools/           Server-seitige Tool-Implementierungen
   requirements.txt
+
+.venv/             Python-venv (Projekt-Root, NICHT versioniert)
+start-server.bat   Setup + Start (legt venv an wenn nötig, lädt .env)
 ```
 
 ## WebSocket-Protokoll (Server ↔ Extension)
@@ -90,6 +97,10 @@ Tool-Result (Extension → Server):
 3. **Sprint 3:** Restliche Browser-Tools (Page-Scrape, SEO, Image-Analyse, Color-Picker, Screenshot+Annotation)
 4. **Sprint 4:** REST-API-Auth, Cloud-Deployment (Railway/Render), Stripe-Integration
 
+## Backlog (geplant, ungeplant)
+
+- **Briefing-Tool / „Guten Morgen"** *(geplant 2026-05-06)* — eigenständiger Tagesbriefing-Trigger in der Extension. Inhalte: Datum, Wetter (Multi-City Default Paderborn + Kavala), pending Workshops, Vertrags-Fristen ≤60 Tage, Anniversaries ≤30 Tage, letzte Daily Note, Tages-Fokus. **Dies wird die erste externe Web-Verbindung** der App (Wetter-API). Daraus folgt: Settings-UI braucht eine „External Services"-Sektion mit Provider-Konfiguration, API-Keys, Standort-Liste — von Anfang an konsistent strukturieren, damit spätere Integrationen (Kalender, Mail, weitere APIs) dort sauber landen. Pendant ist `/guten-morgen` in Claude Code, der dieselbe Logik via Glob/Grep + WebFetch macht.
+
 ## Wichtige Entscheidungen (mit Begründung)
 
 - **Karpathy-Methode statt RAG** — *Why:* Vault ist bereits durch LLM-kuratierte Wiki-Seiten organisiert. Vector-DB wäre nur Aufwand ohne Mehrwert. *Apply:* Chat-Tool liest `wiki/index.md` als Einstieg, navigiert zu relevanten Pages und liest direkt — wie ein Mensch im Wiki.
@@ -98,6 +109,11 @@ Tool-Result (Extension → Server):
 - **API-Keys von Anfang an** — *Why:* Endziel ist Verkauf der API an externe Devs. *Apply:* Auth-Middleware-Stub in `server/` einplanen, auch wenn jetzt noch alle Calls offen sind.
 - **Server entscheidet LLM, UI kann switchen** — *Why:* Default-Verhalten kommt vom Server, Power-User können in Extension umstellen.
 - **Vault-Pfad konfigurierbar** — Default für Owner: `E:\Coding_Kurse\Obsidian\Self-Feeding-Wiki-nach-Karpathy-Brad-Bonanno`, aber per Settings änderbar (für Firmen-Einsatz).
+- **Anthropic-API-Key in `server/.env` (python-dotenv)** *seit 2026-05-06* — *Why:* Zuvor lag der Key im Klartext in `server/settings.json`. Risiko bei Backup/Sync/Screenshots, auch wenn die Datei in `.gitignore` steht. *Apply:* `main.py` lädt `.env` ganz oben via `load_dotenv(Path(__file__).parent / ".env")`. `settings.get("anthropic_api_key")` priorisiert Env-Variable über `SECRET_ENV_MAP`. UI darf weiterhin in `settings.json` schreiben (Convenience), aber `.env` gewinnt. Vorlage: `server/.env.example`.
+- **venv liegt im Projekt-Root, nicht in `server/`** *seit 2026-05-06* — *Why:* Python-Standard, ein venv für das ganze Projekt (server/ + spätere Test- und Tool-Skripte). *Apply:* `start-server.bat` erstellt + nutzt `.venv\` im Projekt-Root, ruft `.venv\Scripts\python.exe server\main.py`. Wer manuell startet: `cd unified-assistant && .venv\Scripts\activate && python server\main.py`.
+- **Notes-Tools für Chat-Agent: granular statt generisch** *seit 2026-05-06* — *Why:* Der Chat-Agent hatte vorher nur `list_folder` + `read_file` (read-only auf Vault) und halluzinierte Erfolg, wenn Nutzer „hak Todo X ab" sagten. Eine generische `save_notes(content)`-API wäre einfach gewesen, aber jede Halluzination des Agenten hätte die ganze Datei wegputzen können. *Apply:* In `chat.py` registriert: `list_todos`, `add_todo`, `update_todo` (action: complete/uncomplete/delete, mit Substring-Match + Mehrdeutigkeits-Fehler), `read_scratchpad`, `append_scratchpad` (mit Datums-Header), `replace_scratchpad` (nur auf explizite User-Anfrage). Implementierung in `tools/notes_file.py`. System-Prompt zwingt den Agenten, vor `update_todo` erst `list_todos` zu rufen, und Fehler explizit zu melden statt Erfolg zu behaupten. Tools sind in JEDEM Vault-Chat verfügbar (Notes sind global, nicht vault-spezifisch).
+- **Promote-to-raw mit Vault-Permission-Modell** *seit 2026-05-06* — *Why:* Karpathy-Loop schließen (Inbox → Quelle → Wiki). Mini-Inputs aus `notes/scratchpad.md` oder `notes/todos.md` sollen sich gezielt in `vault/raw/<subfolder>/` „graduieren" lassen. Ingest in `wiki/` bleibt bewusst getrennt — das ist Claude-Code-Operation (`/ingeste`-Workflow), nicht EwtosBrain-Aufgabe. *Apply:* Tool `promote_to_raw` in `chat.py` + `tools/raw_promoter.py`. Datum wird automatisch gesetzt, optional: `title`, `description`, `filename_slug`. Source-side wird der Ursprungsblock markiert (`[PROMOTED → ...]`), nicht gelöscht — Historie bleibt im Scratchpad. Permission-Modell: `vault.permissions.write_raw` (Default `False`) wird vor jedem Schreibzugriff geprüft; Tool wirft `PermissionError` wenn nicht aktiv. Permission ist **per-Vault** (jeder Vault einzeln freischalten), wird in der Vault-Edit-UI in `extension/options/options.js` als Checkbox angezeigt. Erlaubte `target_subfolder`-Prefixe sind aktuell hartcodiert: `artikel`, `eigene-notizen`, `kunden-input/<kunde>`, `chat-archive`. Erweiterung der Liste = explizite Code-Änderung.
+- **Vault-Permission-Modell als Architektur-Pattern** *seit 2026-05-06* — *Why:* Schreib-Operationen außerhalb von `notes/` (App-eigener Bereich) brauchen explizite Erlaubnis vom User pro Vault, damit EwtosBrain nicht versehentlich in fremde Vault-Bereiche schreibt. Setzt den Standard für künftige Tools (z.B. „Wiki-Page anlegen", „Daily Note schreiben"). *Apply:* `settings.DEFAULT_VAULT_PERMISSIONS` als Schema-Quelle, `settings.vault_permission(vault_id, key)` als Lookup-Helper. Jedes neue Schreib-Tool registriert seinen Permission-Key in `DEFAULT_VAULT_PERMISSIONS` (Default `False`) und checkt vor Schreibzugriff. UI in `options.js` listet alle Permissions pro Vault als Checkbox.
 
 ## Bestehende Code-Quellen (zum Referenzieren)
 

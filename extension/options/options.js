@@ -183,6 +183,24 @@ function renderVaultCard(vault) {
   const promptArea = el("textarea", { value: vault.system_prompt || "" });
   promptField.append(promptHint, promptArea);
 
+  const permsField = el("div", { className: "field" });
+  permsField.append(el("label", { textContent: "Berechtigungen für EwtosBrain in diesem Vault" }));
+  const permsHint = el("div", { className: "hint" });
+  permsHint.innerHTML = "Standard: nur Lese-Zugriff auf <code>wiki/</code> + <code>raw/</code> sowie Schreiben in der globalen Notiz-Inbox <code>notes/</code>. Hier zusätzlich Schreibrechte freischalten.";
+  const writeRawLabel = el("label", { className: "checkbox-row" });
+  const writeRawCheckbox = el("input", { type: "checkbox" });
+  writeRawCheckbox.checked = !!(vault.permissions && vault.permissions.write_raw);
+  const writeRawText = el("span", { textContent: "EwtosBrain darf in raw/ schreiben (Promote-to-raw-Tool)" });
+  writeRawLabel.append(writeRawCheckbox, writeRawText);
+
+  const writePlaylistsLabel = el("label", { className: "checkbox-row" });
+  const writePlaylistsCheckbox = el("input", { type: "checkbox" });
+  writePlaylistsCheckbox.checked = !!(vault.permissions && vault.permissions.write_playlists);
+  const writePlaylistsText = el("span", { textContent: "EwtosBrain darf Playlists in wiki/ki/playlists/ verwalten" });
+  writePlaylistsLabel.append(writePlaylistsCheckbox, writePlaylistsText);
+
+  permsField.append(permsHint, writeRawLabel, writePlaylistsLabel);
+
   const actions = el("div", { className: "vault-actions" });
   const genBtn = el("button", { type: "button", textContent: "Neu generieren" });
   const copyBtn = el("button", { type: "button", className: "secondary", textContent: "Anweisung kopieren" });
@@ -192,7 +210,7 @@ function renderVaultCard(vault) {
 
   const status = el("div", { className: "vault-status" });
 
-  body.append(nameField, pathField, promptField, actions, status);
+  body.append(nameField, pathField, promptField, permsField, actions, status);
   card.append(header, body);
 
   function setStatus(msg, level = "") {
@@ -246,6 +264,10 @@ function renderVaultCard(vault) {
         name: nameInput.value.trim(),
         path: pathInput.value.trim(),
         system_prompt: promptArea.value,
+        permissions: {
+          write_raw: writeRawCheckbox.checked,
+          write_playlists: writePlaylistsCheckbox.checked,
+        },
       });
       titleStrong.textContent = updated.name;
       pathSummary.textContent = updated.path;

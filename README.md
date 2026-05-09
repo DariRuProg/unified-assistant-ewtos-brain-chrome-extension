@@ -8,9 +8,19 @@ Unified Chrome Extension + Python Server. Produktivitäts-Assistent mit Vault-Wi
 
 **Doppelklick auf `start-server.bat`** im Projekt-Ordner.
 
-Beim ersten Mal legt das Skript automatisch ein Python-venv an und installiert die Dependencies. Danach startet der Server auf `http://127.0.0.1:9988`.
+Beim ersten Mal legt das Skript automatisch ein Python-venv im Projekt-Root an (`.venv\`) und installiert die Dependencies. Danach startet der Server auf `http://127.0.0.1:9988`.
 
 > Voraussetzung: Python 3.11+ ist installiert (von [python.org/downloads](https://python.org/downloads)).
+
+**Anthropic-API-Key:** wird aus `server/.env` geladen. Vor dem ersten Start anlegen:
+
+```
+copy server\.env.example server\.env
+```
+
+Dann in `server/.env` den Key eintragen: `ANTHROPIC_API_KEY=sk-ant-...`
+
+Wenn die Datei fehlt, warnt `start-server.bat` beim Start; der Server läuft trotzdem, aber Chat-Funktionen funktionieren nicht.
 
 **Server beenden:** Konsole-Fenster schließen.
 
@@ -31,7 +41,7 @@ Deaktivieren: `disable-autostart.bat`.
 
 - Klick aufs Extension-Icon → Side-Panel öffnet sich
 - Status-Punkt sollte grün sein (Server verbunden). Falls rot: Banner zeigt was zu tun ist
-- Für **Chat mit Vault**: Einstellungen öffnen (Footer → "Einstellungen") → Anthropic API-Key eintragen → Speichern
+- Für **Chat mit Vault**: API-Key liegt bereits in `server/.env` (siehe Schritt 1). Die Einstellungen-UI in der Extension setzt nur Fallback-Werte in `server/settings.json` — `.env` hat immer Vorrang.
 
 ## Features
 

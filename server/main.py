@@ -5,7 +5,12 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -14,7 +19,10 @@ from pydantic import BaseModel
 import chat
 import config
 import settings
+from tools import bookmarks as bookmarks_tool
 from tools import notes_file, wiki_reader
+from tools import playlists as playlists_tool
+from tools import summary_writer, transcript_writer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -173,6 +181,141 @@ def notes_export(kind: str, req: NotesExportRequest) -> dict[str, Any]:
         raise HTTPException(400, str(e))
 
 
+class NotesAppendRequest(BaseModel):
+    text: str
+
+
+@app.post("/tools/notes/scratchpad/append")
+def notes_scratchpad_append(req: NotesAppendRequest) -> dict[str, Any]:
+    try:
+        return notes_file.append_scratchpad(req.text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# --- Bookmarks ------------------------------------------------------------
+
+class BookmarkAddRequest(BaseModel):
+    url: str
+    title: str | None = None
+    note: str | None = None
+    source: str | None = "manual"
+
+
+class BookmarkDeleteRequest(BaseModel):
+    match: str
+
+
+@app.get("/tools/bookmarks")
+def bookmarks_list() -> dict[str, Any]:
+    return {"items": bookmarks_tool.list_bookmarks()}
+
+
+@app.post("/tools/bookmarks")
+def bookmarks_add(req: BookmarkAddRequest) -> dict[str, Any]:
+    try:
+        return bookmarks_tool.add_bookmark(req.url, req.title, req.note, req.source or "manual")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/bookmarks/delete")
+def bookmarks_delete(req: BookmarkDeleteRequest) -> dict[str, Any]:
+    try:
+        return bookmarks_tool.delete_bookmark(req.match)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# --- Playlists ------------------------------------------------------------
+
+class PlaylistCreateRequest(BaseModel):
+    name: str
+    thema: str | None = None
+
+
+class PlaylistAddItemRequest(BaseModel):
+    url: str
+    title: str | None = None
+    dauer: str | None = None
+    youtuber: str | None = None
+    views: str | None = None
+    published: str | None = None
+    likes: str | None = None
+    description: str | None = None
+
+
+class PlaylistRemoveItemRequest(BaseModel):
+    match: str
+
+
+def _wrap_playlist_errors(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/tools/playlists/{vault_id}")
+def playlists_list(vault_id: str) -> dict[str, Any]:
+    return {"items": _wrap_playlist_errors(playlists_tool.list_playlists, vault_id)}
+
+
+@app.post("/tools/playlists/{vault_id}")
+def playlists_create(vault_id: str, req: PlaylistCreateRequest) -> dict[str, Any]:
+    return _wrap_playlist_errors(playlists_tool.create_playlist, vault_id, req.name, req.thema)
+
+
+@app.get("/tools/playlists/{vault_id}/{name}")
+def playlists_get(vault_id: str, name: str) -> dict[str, Any]:
+    return _wrap_playlist_errors(playlists_tool.get_playlist, vault_id, name)
+
+
+@app.post("/tools/playlists/{vault_id}/{name}/items")
+def playlists_add_item(vault_id: str, name: str, req: PlaylistAddItemRequest) -> dict[str, Any]:
+    return _wrap_playlist_errors(
+        playlists_tool.add_to_playlist,
+        vault_id, name, req.url, req.title, req.dauer, req.youtuber,
+        req.views, req.published, req.likes, req.description,
+    )
+
+
+@app.post("/tools/playlists/{vault_id}/{name}/items/delete")
+def playlists_remove_item(vault_id: str, name: str, req: PlaylistRemoveItemRequest) -> dict[str, Any]:
+    return _wrap_playlist_errors(
+        playlists_tool.remove_from_playlist, vault_id, name, req.match,
+    )
+
+
+# --- Videos: Transcript + Summary ---------------------------------------
+
+class TranscriptSaveRequest(BaseModel):
+    transcript: str
+    with_timestamps: bool = False
+
+
+@app.post("/tools/videos/{vault_id}/{slug}/transcript")
+def videos_save_transcript(vault_id: str, slug: str, req: TranscriptSaveRequest) -> dict[str, Any]:
+    try:
+        return transcript_writer.save_transcript(vault_id, slug, req.transcript, req.with_timestamps)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/videos/{vault_id}/{slug}/summary")
+def videos_generate_summary(vault_id: str, slug: str) -> dict[str, Any]:
+    try:
+        return summary_writer.generate_summary(vault_id, slug)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class SettingsUpdate(BaseModel):
     notes_path: str | None = None
     anthropic_api_key: str | None = None
@@ -213,6 +356,7 @@ class VaultUpdate(BaseModel):
     name: str | None = None
     path: str | None = None
     system_prompt: str | None = None
+    permissions: dict[str, bool] | None = None
 
 
 class GeneratePromptRequest(BaseModel):
@@ -220,7 +364,13 @@ class GeneratePromptRequest(BaseModel):
 
 
 def _enrich_vault(v: dict[str, Any]) -> dict[str, Any]:
-    return {**v, "has_claude_md": wiki_reader.find_claude_md(v["path"]) is not None}
+    perms = dict(settings.DEFAULT_VAULT_PERMISSIONS)
+    perms.update(v.get("permissions") or {})
+    return {
+        **v,
+        "permissions": perms,
+        "has_claude_md": wiki_reader.find_claude_md(v["path"]) is not None,
+    }
 
 
 @app.get("/vaults")

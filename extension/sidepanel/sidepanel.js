@@ -36,6 +36,9 @@ chrome.storage.onChanged.addListener((changes) => {
       updateDarkToggleIcon(darkMode);
     });
   }
+  if (changes.playlistPick && changes.playlistPick.newValue) {
+    checkPendingPlaylistPick();
+  }
 });
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -106,6 +109,7 @@ async function getHttpBase() {
 setStatus(false, "verbinde...");
 renderTabs();
 renderToolList();
+checkPendingPlaylistPick();
 
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
   if (chrome.runtime.lastError) return;
@@ -142,6 +146,188 @@ function setStatus(connected, customText) {
   statusText.textContent = customText ?? (connected ? "verbunden" : "offline");
   const banner = document.getElementById("offline-banner");
   if (banner) banner.classList.toggle("hidden", connected);
+}
+
+async function checkPendingPlaylistPick() {
+  const { playlistPick } = await chrome.storage.local.get("playlistPick");
+  if (!playlistPick || !playlistPick.url) return;
+  // ignore stale picks (older than 5 min)
+  if (playlistPick.ts && Date.now() - playlistPick.ts > 5 * 60 * 1000) {
+    chrome.storage.local.remove("playlistPick");
+    return;
+  }
+  await showPlaylistPicker(playlistPick);
+}
+
+async function showPlaylistPicker({ url, title, channel, duration, views, published, likes, description }) {
+  const httpBase = await getHttpBase();
+  const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+  let vaultId = selectedVaultId;
+  if (!vaultId) {
+    try {
+      const res = await fetch(`${httpBase}/vaults`);
+      const data = await res.json();
+      vaultId = data.vaults?.[0]?.id;
+    } catch {}
+  }
+  if (!vaultId) return;
+
+  let playlists = [];
+  try {
+    const res = await fetch(`${httpBase}/tools/playlists/${vaultId}`);
+    const data = await res.json();
+    playlists = data.items || [];
+  } catch (err) {
+    if (err?.message?.includes("403") || String(err).includes("403")) {
+      alert("Playlists-Permission ist im Vault nicht aktiviert. In den Optionen freischalten.");
+    }
+    chrome.storage.local.remove("playlistPick");
+    return;
+  }
+
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker" });
+  const titleEl = el("h3", { textContent: "Zu Playlist hinzufügen" });
+  const meta = el("div", { className: "playlist-picker-meta" });
+  const metaParts = [title || url];
+  if (channel) metaParts.push(`· ${channel}`);
+  if (duration) metaParts.push(`· ${duration}`);
+  if (views) metaParts.push(`· ${views}`);
+  meta.textContent = metaParts.join(" ");
+  meta.title = url;
+
+  // Auto-Pull-Optionen
+  const optsRow = el("div", { className: "playlist-picker-opts" });
+  const pullLabel = el("label", { className: "checkbox-row" });
+  const pullCheckbox = el("input", { type: "checkbox" });
+  pullCheckbox.checked = true;  // default on — User wollte das ja explizit
+  const pullText = el("span", { textContent: "Transcript ziehen + Summary erstellen" });
+  pullLabel.append(pullCheckbox, pullText);
+  const tsLabel = el("label", { className: "checkbox-row" });
+  const tsCheckbox = el("input", { type: "checkbox" });
+  tsCheckbox.checked = false;  // default: Transcript ohne Zeitstempel
+  const tsText = el("span", { textContent: "mit Zeitstempeln" });
+  tsLabel.append(tsCheckbox, tsText);
+  optsRow.append(pullLabel, tsLabel);
+
+  const list = el("div", { className: "playlist-picker-list" });
+
+  if (!playlists.length) {
+    const empty = el("div", { className: "playlist-picker-empty" });
+    empty.textContent = "Noch keine Playlists. Lege eine an:";
+    const newName = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
+    const createBtn = el("button", { textContent: "Anlegen + hinzufügen" });
+    createBtn.addEventListener("click", async () => {
+      const name = newName.value.trim();
+      if (!name) return;
+      try {
+        await fetch(`${httpBase}/tools/playlists/${vaultId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }).then((r) => { if (!r.ok) throw new Error("create failed"); });
+        const meta = { url, title, channel, duration, views, published, likes, description };
+        const opts = { autoPull: pullCheckbox.checked, withTimestamps: tsCheckbox.checked };
+        await addAndMaybePull(httpBase, vaultId, name, meta, opts);
+        cleanup(true);
+      } catch (err) {
+        alert("Fehler: " + err.message);
+      }
+    });
+    empty.append(newName, createBtn);
+    list.append(empty);
+  } else {
+    for (const p of playlists) {
+      const btn = el("button", { type: "button", className: "playlist-pick-btn" });
+      btn.textContent = `${p.name} (${p.item_count})`;
+      btn.addEventListener("click", async () => {
+        try {
+          const meta = { url, title, channel, duration, views, published, likes, description };
+          const opts = { autoPull: pullCheckbox.checked, withTimestamps: tsCheckbox.checked };
+          await addAndMaybePull(httpBase, vaultId, p.name, meta, opts);
+          cleanup(true);
+        } catch (err) {
+          alert("Fehler: " + err.message);
+        }
+      });
+      list.append(btn);
+    }
+    // Plus: neue Playlist gleich anlegen
+    const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neu:" });
+    const newName = el("input", { type: "text", placeholder: "neuer Playlist-Name" });
+    const createBtn = el("button", { textContent: "Anlegen + hinzufügen" });
+    createBtn.addEventListener("click", async () => {
+      const name = newName.value.trim();
+      if (!name) return;
+      try {
+        await fetch(`${httpBase}/tools/playlists/${vaultId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }).then((r) => { if (!r.ok) throw new Error("create failed"); });
+        const meta = { url, title, channel, duration, views, published, likes, description };
+        const opts = { autoPull: pullCheckbox.checked, withTimestamps: tsCheckbox.checked };
+        await addAndMaybePull(httpBase, vaultId, name, meta, opts);
+        cleanup(true);
+      } catch (err) {
+        alert("Fehler: " + err.message);
+      }
+    });
+    list.append(sep, newName, createBtn);
+  }
+
+  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: "Abbrechen" });
+  cancelBtn.addEventListener("click", () => cleanup(false));
+
+  dialog.append(titleEl, meta, optsRow, list, cancelBtn);
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  function cleanup(success) {
+    chrome.storage.local.remove("playlistPick");
+    overlay.remove();
+  }
+}
+
+async function addAndMaybePull(httpBase, vaultId, name, meta, opts) {
+  const { url, title, channel, duration, views, published, likes, description } = meta;
+  const { autoPull, withTimestamps } = opts;
+
+  // 1) Add to playlist (creates video page with all metadata)
+  const addRes = await fetch(
+    `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(name)}/items`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        title,
+        youtuber: channel,
+        dauer: duration,
+        views,
+        published,
+        likes,
+        description,
+      }),
+    },
+  );
+  if (!addRes.ok) {
+    const text = await addRes.text().catch(() => "");
+    throw new Error(`Add failed (${addRes.status}): ${text}`);
+  }
+  const addData = await addRes.json();
+  const videoSlug = (addData.video_page || "").split("/").pop();
+  if (!autoPull || !videoSlug) return addData;
+
+  // 2) Auto-Pull: Transcript + Summary as background flow.
+  // Hand off to background worker via runtime message — keeps the picker
+  // closing instantly while the heavy work runs.
+  chrome.runtime.sendMessage({
+    type: "auto_pull_video",
+    payload: { httpBase, vaultId, slug: videoSlug, url, withTimestamps },
+  }).catch(() => {});
+
+  return addData;
 }
 
 function renderTabs() {

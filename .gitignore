@@ -24,3 +24,7 @@ Thumbs.db
 config.local.py
 server/settings.json
 server/chat.json
+server/chat-*.json
+
+# Claude Code local state
+.claude/
