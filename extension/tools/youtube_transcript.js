@@ -101,9 +101,20 @@ function scrapeYouTubeTranscript() {
 
     return new Promise((resolve) => {
       setTimeout(() => {
-        let fullText = "";
+        const panel =
+          document.querySelector(
+            'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]',
+          ) ||
+          document.querySelector("ytd-transcript-renderer") ||
+          document.querySelector("ytd-transcript-segment-list-renderer");
 
-        const oldEls = document.querySelectorAll("ytd-transcript-segment-renderer");
+        if (!panel) {
+          resolve({ error: "Kein Transcript-Panel gefunden." });
+          return;
+        }
+
+        let fullText = "";
+        const oldEls = panel.querySelectorAll("ytd-transcript-segment-renderer");
         if (oldEls.length > 0) {
           oldEls.forEach((el) => {
             const time = el.querySelector(".segment-timestamp")?.textContent?.trim() || "";
@@ -111,7 +122,7 @@ function scrapeYouTubeTranscript() {
             if (text) fullText += `[${time}] ${text}\n`;
           });
         } else {
-          const newEls = document.querySelectorAll("transcript-segment-view-model");
+          const newEls = panel.querySelectorAll("transcript-segment-view-model");
           newEls.forEach((el) => {
             const timeEl = el.querySelector('[class*="Timestamp"]');
             const textEl = el.querySelector('span[role="text"]');
@@ -122,7 +133,7 @@ function scrapeYouTubeTranscript() {
         }
 
         if (fullText.length > 0) resolve({ text: fullText });
-        else resolve({ error: "Kein Transkript-Panel gefunden oder leer." });
+        else resolve({ error: "Transcript-Panel gefunden, aber leer." });
       }, 2000);
     });
   } catch (err) {
