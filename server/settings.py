@@ -40,9 +40,11 @@ def _flush() -> None:
     global _cache
     if _cache is None:
         return
-    SETTINGS_FILE.write_text(
+    tmp = SETTINGS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps(_cache, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    tmp.replace(SETTINGS_FILE)
 
 
 def all() -> dict[str, Any]:
