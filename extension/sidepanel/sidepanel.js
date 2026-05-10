@@ -1452,19 +1452,18 @@ async function renderPlaylistDetail(name, saeule) {
   const backBtn = el("button", { type: "button", textContent: "← zurück" });
   backBtn.addEventListener("click", () => renderPlaylistsTool());
   const pullBtn = el("button", { type: "button", textContent: "⏬ Alle Pending ziehen", title: "Alle Videos ohne Transcript automatisch abrufen" });
-  toolbar.append(backBtn, pullBtn);
+  const infoBtn = el("button", {
+    type: "button",
+    textContent: "ⓘ",
+    className: "info-btn",
+    title: "Summary-Workflow erklären",
+  });
+  infoBtn.addEventListener("click", () => showSummaryWorkflowInfo(name));
+  toolbar.append(backBtn, pullBtn, infoBtn);
   const status = el("div", { className: "tool-status" });
-  const summaryHint = el("div", { className: "summary-hint" });
-  summaryHint.innerHTML = `
-    <strong>Summary-Workflow:</strong>
-    <ul>
-      <li><strong>Subscription</strong> (kein API-Token): in Claude Code tippen <code>/wiki-summaries ${name}</code> oder ohne Argument für alle pending</li>
-      <li><strong>API-Key</strong> (Anthropic-Key aus EwtosBrain-Settings): unten "Alle Pending ziehen" → Häkchen "+ Summary"</li>
-    </ul>
-  `;
   const orchestrationStatus = el("div", { className: "orchestration-status hidden" });
   const itemsWrap = el("div", { className: "playlist-items-detail" });
-  panelBody.append(toolbar, summaryHint, status, orchestrationStatus, itemsWrap);
+  panelBody.append(toolbar, status, orchestrationStatus, itemsWrap);
 
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
@@ -1695,6 +1694,28 @@ async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusE
     statusEl.classList.add("error");
     button.disabled = false;
   }
+}
+
+function showSummaryWorkflowInfo(playlistName) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker" });
+  dialog.append(el("h3", { textContent: "Summary-Workflow" }));
+  const body = el("div", { className: "summary-hint" });
+  body.innerHTML = `
+    <p style="margin:0 0 6px;">Zwei Pfade, beide schreiben Insights + Zusammenfassung in die Master-Pages.</p>
+    <ul>
+      <li><strong>Subscription</strong> (kein API-Token): in Claude Code tippen<br><code>/wiki-summaries ${playlistName}</code><br>oder ohne Argument für alle pending im Vault.</li>
+      <li><strong>API-Key</strong> (EwtosBrain-Anthropic-Key): unten <strong>⏬ Alle Pending ziehen</strong> → Häkchen <em>"+ Summary"</em>. Kostet Anthropic-Tokens.</li>
+    </ul>
+  `;
+  dialog.append(body);
+  const actions = el("div", { className: "playlist-picker-actions" });
+  const ok = el("button", { type: "button", textContent: "Verstanden", className: "primary" });
+  ok.addEventListener("click", () => overlay.remove());
+  actions.append(ok);
+  dialog.append(actions);
+  overlay.append(dialog);
+  document.body.append(overlay);
 }
 
 function showPullPendingDialog(playlistName) {

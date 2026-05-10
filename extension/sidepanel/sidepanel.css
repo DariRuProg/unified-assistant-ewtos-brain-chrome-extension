@@ -710,19 +710,25 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   border-left: 3px solid var(--accent); border-radius: 3px;
 }
 
-/* Summary-Workflow-Hinweis im Playlist-Detail */
-.summary-hint {
-  margin: 4px 0 8px; padding: 8px 10px; font-size: 11px; line-height: 1.5;
-  background: var(--bg-subtle); color: var(--text);
-  border-left: 3px solid var(--accent); border-radius: 3px;
-}
+/* Summary-Workflow-Hinweis (im ⓘ-Modal) */
+.summary-hint { font-size: 12px; line-height: 1.5; color: var(--text); }
 .summary-hint ul { margin: 4px 0 0; padding-left: 18px; }
-.summary-hint li { margin: 2px 0; }
+.summary-hint li { margin: 4px 0; }
 .summary-hint code {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 10px; padding: 1px 4px;
-  background: var(--bg-card); border: 1px solid var(--border-input); border-radius: 3px;
+  font-size: 11px; padding: 1px 4px;
+  background: var(--bg-subtle); border: 1px solid var(--border-input); border-radius: 3px;
+  color: var(--text);
 }
+/* Info-Button (ⓘ) — kompakt neben Hauptbutton */
+.info-btn {
+  width: 24px; height: 24px; padding: 0;
+  border-radius: 50%; font-size: 13px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-input); background: var(--bg-card);
+  color: var(--text-muted); cursor: pointer;
+}
+.info-btn:hover { color: var(--text); border-color: var(--text-muted); }
 .summary-hint-inline {
   font-size: 10px; color: var(--text-muted); margin: 4px 0 0;
 }
