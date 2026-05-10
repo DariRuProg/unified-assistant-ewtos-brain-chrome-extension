@@ -99,42 +99,88 @@ function scrapeYouTubeTranscript() {
       }
     }
 
+    // Polling statt fixem Delay: längere Videos und langsame Verbindungen
+    // brauchen länger, bis YouTube die Segments lazy-loaded ins Panel hängt.
+    // Wir checken alle 400ms, ob Segments da sind — max 12s warten.
     return new Promise((resolve) => {
-      setTimeout(() => {
-        const panel =
+      const POLL_MS = 400;
+      const MAX_WAIT_MS = 12000;
+      const start = Date.now();
+
+      function findPanel() {
+        return (
           document.querySelector(
             'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]',
           ) ||
           document.querySelector("ytd-transcript-renderer") ||
-          document.querySelector("ytd-transcript-segment-list-renderer");
+          document.querySelector("ytd-transcript-segment-list-renderer") ||
+          document.querySelector("ytd-transcript-search-panel-renderer")
+        );
+      }
 
-        if (!panel) {
-          resolve({ error: "Kein Transcript-Panel gefunden." });
-          return;
-        }
-
-        let fullText = "";
+      function collectSegments(panel) {
+        let text = "";
+        // Alte Renderer
         const oldEls = panel.querySelectorAll("ytd-transcript-segment-renderer");
         if (oldEls.length > 0) {
           oldEls.forEach((el) => {
             const time = el.querySelector(".segment-timestamp")?.textContent?.trim() || "";
-            const text = el.querySelector(".segment-text")?.textContent?.trim() || "";
-            if (text) fullText += `[${time}] ${text}\n`;
+            const tx = el.querySelector(".segment-text")?.textContent?.trim() || "";
+            if (tx) text += `[${time}] ${tx}\n`;
           });
-        } else {
-          const newEls = panel.querySelectorAll("transcript-segment-view-model");
+          return { count: oldEls.length, text };
+        }
+        // Neue View-Model-Renderer
+        const newEls = panel.querySelectorAll("transcript-segment-view-model");
+        if (newEls.length > 0) {
           newEls.forEach((el) => {
             const timeEl = el.querySelector('[class*="Timestamp"]');
             const textEl = el.querySelector('span[role="text"]');
             const time = timeEl ? timeEl.textContent.trim() : "";
-            const text = textEl ? textEl.textContent.trim() : "";
-            if (text) fullText += `[${time}] ${text}\n`;
+            const tx = textEl ? textEl.textContent.trim() : "";
+            if (tx) text += `[${time}] ${tx}\n`;
           });
+          return { count: newEls.length, text };
         }
+        // Fallback: generisch nach Listenelementen mit Timestamp + Text
+        const generic = panel.querySelectorAll('[role="listitem"], div[class*="segment"]');
+        if (generic.length > 0) {
+          generic.forEach((el) => {
+            const time = el.querySelector('[class*="timestamp" i], [class*="Timestamp"]')?.textContent?.trim() || "";
+            const tx = el.querySelector('[class*="text" i] yt-formatted-string, span[role="text"]')?.textContent?.trim() || "";
+            if (tx) text += `[${time}] ${tx}\n`;
+          });
+          return { count: generic.length, text };
+        }
+        return { count: 0, text: "" };
+      }
 
-        if (fullText.length > 0) resolve({ text: fullText });
-        else resolve({ error: "Transcript-Panel gefunden, aber leer." });
-      }, 2000);
+      function tick() {
+        const panel = findPanel();
+        if (!panel) {
+          if (Date.now() - start >= MAX_WAIT_MS) {
+            resolve({ error: "Kein Transcript-Panel gefunden (12s gewartet)." });
+            return;
+          }
+          setTimeout(tick, POLL_MS);
+          return;
+        }
+        const { count, text } = collectSegments(panel);
+        if (count > 0 && text.trim().length > 0) {
+          resolve({ text });
+          return;
+        }
+        if (Date.now() - start >= MAX_WAIT_MS) {
+          resolve({
+            error: `Transcript-Panel gefunden, aber leer (12s gewartet, ${count} Elemente, ${text.length} Zeichen).`,
+          });
+          return;
+        }
+        setTimeout(tick, POLL_MS);
+      }
+
+      // Erstes Polling nach 800ms — Panel braucht meist 1-3s nach Click
+      setTimeout(tick, 800);
     });
   } catch (err) {
     return { error: err.toString() };
