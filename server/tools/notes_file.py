@@ -2,11 +2,34 @@
 from __future__ import annotations
 
 import re
+import threading
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
+from typing import Callable
 
 import config
 import settings
+
+# Defensiver Lock gegen TOCTOU bei parallelen Write-Adds (z.B. Multi-Tab-Bulk).
+# FastAPI führt sync-def-Endpunkte im Threadpool aus → ohne Lock kann ein Save
+# einen anderen überschreiben (Lost Update). RLock erlaubt verschachtelte Reentrant-
+# Aufrufe innerhalb desselben Threads.
+_file_lock = threading.RLock()
+
+
+@contextmanager
+def locked():
+    """Public Context-Manager: hält den File-Lock über mehrere load+save-Calls
+    in einer Read-Modify-Write-Sequenz. Beispiel:
+
+        with notes_file.locked():
+            data = notes_file.load("bookmarks")
+            ... mutate ...
+            notes_file.save("bookmarks", new_content)
+    """
+    with _file_lock:
+        yield
 
 TODO_RE = re.compile(r"^- \[([ xX])\] (.+?)(?: @(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?))?\s*$")
 
@@ -62,11 +85,12 @@ def _strip_frontmatter(text: str) -> str:
 def load(kind: str) -> dict:
     cfg = _config_for(kind)
     path = _file_path(kind)
-    if not path.exists():
-        today = date.today().isoformat()
-        path.write_text(_empty(cfg["tag"], today), encoding="utf-8")
-        return {"started": today, "content": "", "path": str(path)}
-    raw = path.read_text(encoding="utf-8")
+    with _file_lock:
+        if not path.exists():
+            today = date.today().isoformat()
+            path.write_text(_empty(cfg["tag"], today), encoding="utf-8")
+            return {"started": today, "content": "", "path": str(path)}
+        raw = path.read_text(encoding="utf-8")
     return {
         "started": _parse_started(raw),
         "content": _strip_frontmatter(raw),
@@ -77,14 +101,32 @@ def load(kind: str) -> dict:
 def save(kind: str, content: str) -> dict:
     cfg = _config_for(kind)
     path = _file_path(kind)
-    started = None
-    if path.exists():
-        started = _parse_started(path.read_text(encoding="utf-8"))
-    if not started:
-        started = date.today().isoformat()
-    body = f"---\nstarted: {started}\ntags: [{cfg['tag']}]\n---\n\n{content}"
-    path.write_text(body, encoding="utf-8")
+    with _file_lock:
+        started = None
+        if path.exists():
+            started = _parse_started(path.read_text(encoding="utf-8"))
+        if not started:
+            started = date.today().isoformat()
+        body = f"---\nstarted: {started}\ntags: [{cfg['tag']}]\n---\n\n{content}"
+        # Atomarer Write: tmp + replace, damit parallele Reader nie eine halb
+        # geschriebene Datei sehen.
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(body, encoding="utf-8")
+        tmp.replace(path)
     return {"started": started, "saved": True, "path": str(path)}
+
+
+def atomic_update(kind: str, mutator: Callable[[dict], str]) -> dict:
+    """Read-Modify-Write atomar — `mutator` bekommt die geladenen Daten und
+    returnt den neuen Content-String. Lock wird über die ganze Operation gehalten.
+
+    Empfohlen für Bookmark/Todo-Mutationen, wenn mehrere parallele Adds möglich
+    sind (z.B. Multi-Tab-Capture)."""
+    with _file_lock:
+        data = load(kind)
+        new_content = mutator(data)
+        save(kind, new_content)
+    return {"updated": True, "kind": kind}
 
 
 # --- Granular operations for the chat agent --------------------------------

@@ -334,7 +334,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // Clipboard: alle URLs als Liste
       const list = tabs.map((t) => t.url).join("\n");
       await writeToClipboard(list);
-      notify("Multi-Tab", `${tabs.length} URLs gespeichert + Clipboard`);
+      console.log(`[EwtosBrain] Multi-Tab erfasst: ${tabs.length} Tabs`);
+      if (tabs.length === 1) {
+        notify(
+          "Multi-Tab — nur 1 Tab",
+          "Tipp: Strg+Klick im Tab-Strip, DANN Rechtsklick auf den Page-Body (nicht den Tab-Reiter).",
+        );
+      } else {
+        notify("Multi-Tab", `${tabs.length} URLs gespeichert + in Clipboard`);
+      }
     } else if (info.menuItemId === CONTEXT_MENU_IDS.youtube) {
       // MV3: chrome.sidePanel.open MUSS synchron im User-Gesture-Frame
       // aufgerufen werden — sonst schlägt es ohne sichtbaren Fehler fehl.
