@@ -32,10 +32,28 @@ function stripTimestamps(text) {
 }
 
 function createHiddenWindow() {
+  // Wichtig: state:"minimized" pausiert in Chrome JS/IntersectionObserver, das
+  // verhindert das Lazy-Loading der Transcript-Items — Panel-Skelett rendert,
+  // aber Items kommen nie nach. Stattdessen: off-screen positionieren mit
+  // ausreichender Größe für volles YouTube-Layout. Chrome clampt teilweise
+  // negative Coords zurück, daher als Fallback eine kleine sichtbare Ecke.
   return new Promise((resolve) => {
-    chrome.windows.create({ type: "normal", focused: false, width: 400, height: 400 }, (win) => {
-      chrome.windows.update(win.id, { state: "minimized" }, () => resolve(win));
-    });
+    chrome.windows.create(
+      {
+        type: "normal",
+        focused: false,
+        width: 1280,
+        height: 800,
+        top: -2000,
+        left: -2000,
+      },
+      (win) => {
+        // Falls Chrome das Window doch sichtbar gemacht hat (Coord-Clamping):
+        // unaufdringlich in die rechte untere Ecke schieben.
+        chrome.windows.update(win.id, { focused: false }).catch(() => {});
+        resolve(win);
+      },
+    );
   });
 }
 
