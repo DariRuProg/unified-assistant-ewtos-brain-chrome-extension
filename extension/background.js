@@ -54,7 +54,10 @@ function setupContextMenus() {
     chrome.contextMenus.create({
       id: CONTEXT_MENU_IDS.multitab,
       title: "EwtosBrain: markierte Tabs erfassen",
-      contexts: ["page"],
+      // contexts: "tab" → Rechtsklick auf den Tab-Reiter (Multi-Markierung
+      // bleibt erhalten). "page" → Rechtsklick im Body (Chrome-Quirk: verliert
+      // oft die Markierung). Beide aktiv, aber tab ist der zuverlässige Weg.
+      contexts: ["page", "tab"],
     });
   });
 }
