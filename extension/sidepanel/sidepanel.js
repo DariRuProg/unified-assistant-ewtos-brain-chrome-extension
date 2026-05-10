@@ -1776,7 +1776,12 @@ async function renderBookmarksTool() {
 
   const toolbar = el("div", { className: "playlist-toolbar" });
   const addBtn = el("button", { type: "button", textContent: "+ Bookmark hinzufügen" });
-  toolbar.append(addBtn);
+  const captureTabsBtn = el("button", {
+    type: "button",
+    textContent: "📑 Markierte Tabs",
+    title: "Alle im aktuellen Fenster mit Strg+Klick markierten Tabs als Bookmarks erfassen",
+  });
+  toolbar.append(addBtn, captureTabsBtn);
   const status = el("div", { className: "tool-status" });
   const searchWrap = el("div", { className: "bookmark-search" });
   const searchInput = el("input", { type: "search", placeholder: "Suche Titel, URL, #tag…", value: bookmarksState.search });
@@ -1787,6 +1792,7 @@ async function renderBookmarksTool() {
 
   const httpBase = await getHttpBase();
   addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, () => renderBookmarksTool()));
+  captureTabsBtn.addEventListener("click", () => captureHighlightedTabs(httpBase, captureTabsBtn, () => renderBookmarksTool()));
 
   status.textContent = "lade...";
   try {
@@ -1995,6 +2001,58 @@ function showEditBookmarkDialog(httpBase, bookmark, onSaved) {
     }
   });
   titleInput.focus();
+}
+
+async function captureHighlightedTabs(httpBase, button, onDone) {
+  // Sidepanel-Klick triggert keinen Body-Click → Multi-Tab-Markierung bleibt
+  // erhalten (im Gegensatz zum Page-Body-Rechtsklick, wo Chrome oft alle
+  // außer dem aktiven Tab deselektiert).
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
+  } catch (err) {
+    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    return;
+  }
+  const httpTabs = tabs.filter((t) => t.url && /^https?:/.test(t.url));
+  if (!httpTabs.length) {
+    alert("Keine markierten Tabs mit http(s)-URL. Tipp: Strg+Klick im Tab-Strip mehrere Tabs markieren, dann hier klicken.");
+    return;
+  }
+  if (httpTabs.length === 1) {
+    if (!confirm(
+      "Nur 1 Tab markiert. Trotzdem als Bookmark speichern?\n\n" +
+      "Tipp: Strg+Klick im Tab-Strip auf weitere Tabs markieren, dann hier klicken."
+    )) return;
+  }
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "läuft…";
+  let saved = 0;
+  const failed = [];
+  for (const t of httpTabs) {
+    try {
+      const r = await fetch(`${httpBase}/tools/bookmarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: t.url,
+          title: t.title || t.url,
+          source: "sidepanel-multi-tab",
+        }),
+      });
+      if (r.ok) saved++;
+      else failed.push(t.title || t.url);
+    } catch (err) {
+      failed.push(t.title || t.url);
+    }
+  }
+  button.disabled = false;
+  button.textContent = original;
+  let msg = `${saved} Tab${saved === 1 ? "" : "s"} als Bookmark gespeichert.`;
+  if (failed.length) msg += `\n${failed.length} fehlgeschlagen:\n  ${failed.slice(0, 5).join("\n  ")}`;
+  alert(msg);
+  onDone && onDone();
 }
 
 function showAddBookmarkDialog(httpBase, onAdded) {
