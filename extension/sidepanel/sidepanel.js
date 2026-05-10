@@ -1333,7 +1333,13 @@ async function renderPlaylistsTool() {
   const status = el("div", { className: "tool-status" });
   const toolbar = el("div", { className: "playlist-toolbar" });
   const newBtn = el("button", { textContent: "+ Neue Playlist", type: "button" });
-  toolbar.append(newBtn);
+  const captureYtBtn = el("button", {
+    textContent: "📑 Markierte YT-Tabs",
+    type: "button",
+    title: "Alle markierten YouTube-Tabs zu einer Playlist hinzufügen",
+  });
+  captureYtBtn.addEventListener("click", () => captureHighlightedYoutubeTabs());
+  toolbar.append(newBtn, captureYtBtn);
   const listWrap = el("div", { className: "playlist-list" });
   panelBody.append(toolbar, status, listWrap);
 
@@ -2001,6 +2007,196 @@ function showEditBookmarkDialog(httpBase, bookmark, onSaved) {
     }
   });
   titleInput.focus();
+}
+
+// Scraped YouTube-Metadaten aus einem konkreten Tab. Inline-Variante von
+// extension/tools/youtube_meta.js — Sidepanel-Module-Imports sind Setup-
+// Aufwand, deshalb hier dupliziert.
+async function scrapeYoutubeMetaForTab(tabId) {
+  const [result] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const titleEl = document.querySelector("h1.ytd-watch-metadata yt-formatted-string")
+        || document.querySelector("ytd-video-primary-info-renderer h1");
+      const docTitle = (document.title || "").replace(/\s*-\s*YouTube\s*$/, "").trim();
+      const title = (titleEl?.textContent || docTitle).trim();
+      const channelEl = document.querySelector("ytd-channel-name #text-container yt-formatted-string a")
+        || document.querySelector("ytd-channel-name a");
+      const channel = (channelEl?.textContent || "").trim();
+      let duration = document.querySelector(".ytp-time-duration")?.textContent?.trim() || "";
+      if (!duration) {
+        const m = document.querySelector("meta[itemprop='duration']")?.content?.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (m) {
+          const h = +m[1] || 0, mi = +m[2] || 0, s = +m[3] || 0;
+          const pad = (n) => String(n).padStart(2, "0");
+          duration = h > 0 ? `${h}:${pad(mi)}:${pad(s)}` : `${mi}:${pad(s)}`;
+        }
+      }
+      return { title, channel, duration };
+    },
+  });
+  return result?.result || { title: "", channel: "", duration: "" };
+}
+
+async function captureHighlightedYoutubeTabs() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
+  } catch (err) {
+    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    return;
+  }
+  const ytTabs = tabs.filter((t) => t.url && /^https?:\/\/(www\.)?youtube\.com\/watch/.test(t.url));
+  if (!ytTabs.length) {
+    alert("Keine markierten YouTube-Tabs. Tipp: Strg+Klick im Tab-Strip auf YouTube-Watch-Tabs, dann hier klicken.");
+    return;
+  }
+  const httpBase = await getHttpBase();
+  const vault = await getActiveVault(httpBase);
+  if (!vault) { alert("Kein Vault konfiguriert."); return; }
+  // Meta parallel scrapen (Channel/Title/Duration), POSTs danach seriell.
+  const items = await Promise.all(ytTabs.map(async (t) => {
+    let meta = { title: t.title || t.url, channel: "", duration: "" };
+    try {
+      const scraped = await scrapeYoutubeMetaForTab(t.id);
+      meta = { title: scraped.title || meta.title, channel: scraped.channel, duration: scraped.duration };
+    } catch (err) {
+      console.warn("scrape failed for tab", t.id, err);
+    }
+    return { url: t.url, title: meta.title, channel: meta.channel, duration: meta.duration };
+  }));
+  showMultiYoutubePicker(httpBase, vault, items);
+}
+
+function showMultiYoutubePicker(httpBase, vault, items) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker multi-yt-picker" });
+  dialog.append(el("h3", { textContent: `${items.length} markierte YouTube-Tabs` }));
+
+  const itemList = el("ul", { className: "multi-yt-items" });
+  for (const it of items) {
+    const li = el("li");
+    const titleSpan = el("span", { className: "multi-yt-title", textContent: it.title });
+    li.append(titleSpan);
+    if (it.channel) li.append(el("span", { className: "multi-yt-channel", textContent: ` · ${it.channel}` }));
+    itemList.append(li);
+  }
+  dialog.append(itemList);
+
+  // Smart-Vorschlag: alle vom selben Kanal? Dann Auto-Playlist-Name vorschlagen
+  const channels = [...new Set(items.map((i) => i.channel).filter(Boolean))];
+  let autoPlaylistName = "";
+  if (channels.length === 1 && channels[0]) {
+    autoPlaylistName = channels[0];
+    const hint = el("div", { className: "multi-yt-hint" });
+    hint.textContent = `Alle vom Kanal: ${channels[0]} — Playlist mit diesem Namen anlegen?`;
+    dialog.append(hint);
+  }
+
+  const status = el("div", { className: "tool-status" });
+  const playlistList = el("div", { className: "playlist-picker-list" });
+  dialog.append(el("div", { className: "playlist-picker-sep", textContent: "Bestehende Playlist:" }));
+  dialog.append(playlistList, status);
+
+  // Neue Playlist Section
+  const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neue Playlist anlegen:" });
+  const newName = el("input", { type: "text", placeholder: "Name (z.B. Karpathy-Videos)", value: autoPlaylistName });
+  const newSaeule = el("input", { type: "text", placeholder: "Säule (default: ki)", value: "ki" });
+  const createBtn = el("button", { type: "button", textContent: "Anlegen + alle hinzufügen", className: "primary" });
+  dialog.append(sep, newName, newSaeule, createBtn);
+
+  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: "Abbrechen" });
+  dialog.append(cancelBtn);
+  cancelBtn.addEventListener("click", () => overlay.remove());
+
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  // Bestehende Playlists laden
+  (async () => {
+    try {
+      const r = await fetch(`${httpBase}/tools/playlists/${vault.id}`);
+      const data = await r.json();
+      const playlists = data.items || [];
+      if (!playlists.length) {
+        playlistList.append(el("div", { className: "empty", textContent: "(keine bestehenden Playlists)" }));
+        return;
+      }
+      for (const p of playlists) {
+        const btn = el("button", { type: "button", className: "playlist-pick-btn" });
+        btn.textContent = `[${p.saeule}] ${p.name} (${p.item_count})`;
+        btn.addEventListener("click", () => bulkAddToPlaylist(httpBase, vault.id, p.name, p.saeule, items, status, () => overlay.remove()));
+        playlistList.append(btn);
+      }
+    } catch (err) {
+      playlistList.append(el("div", { className: "empty", textContent: `Fehler: ${err.message || err}` }));
+    }
+  })();
+
+  createBtn.addEventListener("click", async () => {
+    const name = newName.value.trim();
+    const saeule = newSaeule.value.trim() || "ki";
+    if (!name) { status.textContent = "Name fehlt"; status.className = "tool-status error"; return; }
+    createBtn.disabled = true;
+    status.textContent = "lege Playlist an…";
+    try {
+      const r = await fetch(`${httpBase}/tools/playlists/${vault.id}?saeule=${encodeURIComponent(saeule)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        status.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+        status.className = "tool-status error";
+        createBtn.disabled = false;
+        return;
+      }
+    } catch (err) {
+      status.textContent = `Fehler: ${err.message || err}`;
+      status.className = "tool-status error";
+      createBtn.disabled = false;
+      return;
+    }
+    await bulkAddToPlaylist(httpBase, vault.id, name, saeule, items, status, () => overlay.remove());
+  });
+}
+
+async function bulkAddToPlaylist(httpBase, vaultId, playlistName, saeule, items, statusEl, onDone) {
+  statusEl.textContent = `füge 0/${items.length} hinzu…`;
+  statusEl.className = "tool-status";
+  let added = 0, duplicate = 0;
+  const failed = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    try {
+      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items?saeule=${encodeURIComponent(saeule)}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: it.url, title: it.title, youtuber: it.channel, dauer: it.duration,
+        }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.added) added++;
+        else duplicate++;
+      } else {
+        failed.push(it.title);
+      }
+    } catch (err) {
+      failed.push(it.title);
+    }
+    statusEl.textContent = `füge ${i + 1}/${items.length} hinzu…`;
+  }
+  let msg = `✓ ${added} hinzugefügt`;
+  if (duplicate) msg += ` · ${duplicate} schon drin`;
+  if (failed.length) msg += ` · ${failed.length} fehlgeschlagen`;
+  alert(msg);
+  onDone && onDone();
+  // Liste refreshen falls in der Detail-View
+  if (typeof renderPlaylistsTool === "function") renderPlaylistsTool();
 }
 
 async function captureHighlightedTabs(httpBase, button, onDone) {

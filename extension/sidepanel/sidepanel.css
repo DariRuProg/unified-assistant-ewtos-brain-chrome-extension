@@ -689,6 +689,27 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   background: var(--bg-card);
 }
 
+/* Multi-YouTube-Picker */
+.multi-yt-picker { max-width: 360px; }
+.multi-yt-items {
+  list-style: none; padding: 0; margin: 4px 0 8px;
+  max-height: 140px; overflow-y: auto;
+  border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card);
+}
+.multi-yt-items li {
+  padding: 4px 8px; font-size: 11px; line-height: 1.3;
+  border-bottom: 1px solid var(--border);
+}
+.multi-yt-items li:last-child { border-bottom: none; }
+.multi-yt-title { color: var(--text); }
+.multi-yt-channel { color: var(--text-muted); font-size: 10px; }
+.multi-yt-hint {
+  font-size: 11px; padding: 6px 8px; margin: 2px 0;
+  background: var(--bg-subtle); color: var(--text);
+  border-left: 3px solid var(--accent); border-radius: 3px;
+}
+
 /* Orchestration-Status-Box (Pull-Pending-Run) */
 .orchestration-status {
   margin: 6px 0 4px; padding: 8px 10px; font-size: 12px;
