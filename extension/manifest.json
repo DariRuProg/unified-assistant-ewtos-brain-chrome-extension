@@ -25,5 +25,10 @@
   "side_panel": {
     "default_path": "sidepanel/sidepanel.html"
   },
-  "options_page": "options/options.html"
+  "options_page": "options/options.html",
+  "commands": {
+    "capture-highlighted-tabs": {
+      "description": "Markierte Tabs als Bookmarks erfassen (Multi-Tab)"
+    }
+  }
 }

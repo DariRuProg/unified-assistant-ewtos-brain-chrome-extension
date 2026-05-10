@@ -54,10 +54,11 @@ function setupContextMenus() {
     chrome.contextMenus.create({
       id: CONTEXT_MENU_IDS.multitab,
       title: "EwtosBrain: markierte Tabs erfassen",
-      // contexts: "tab" → Rechtsklick auf den Tab-Reiter (Multi-Markierung
-      // bleibt erhalten). "page" → Rechtsklick im Body (Chrome-Quirk: verliert
-      // oft die Markierung). Beide aktiv, aber tab ist der zuverlässige Weg.
-      contexts: ["page", "tab"],
+      // Chrome hat keinen "tab"-Context für contextMenus.create — nur die
+      // hier gelisteten Werte. Multi-Tab via Body-Rechtsklick ist
+      // unzuverlässig (Chrome verliert die Markierung). Sauberer Pfad:
+      // Tastenkürzel (siehe manifest.json:commands + chrome.commands).
+      contexts: ["page"],
     });
   });
 }
@@ -309,6 +310,33 @@ function notifyError(message) {
 }
 
 // --- Context-menu click dispatch ---
+
+// Tastenkürzel-Listener: triggert KEINEN Body-Click → Multi-Tab-Markierung
+// bleibt erhalten. Tastenkürzel ist nicht voreingestellt — User muss selbst
+// eines setzen via chrome://extensions/shortcuts.
+chrome.commands.onCommand.addListener(async (command) => {
+  try {
+    if (command === "capture-highlighted-tabs") {
+      const tabs = await runTabCapture({ mode: "highlighted" });
+      if (!tabs.length) throw new Error("Keine markierten Tabs");
+      for (const t of tabs) {
+        await httpPost("/tools/bookmarks", {
+          url: t.url, title: t.title, source: "shortcut-multi-tab",
+        });
+      }
+      const list = tabs.map((t) => t.url).join("\n");
+      await writeToClipboard(list);
+      console.log(`[EwtosBrain] Shortcut Multi-Tab: ${tabs.length} Tabs`);
+      notify("Multi-Tab", `${tabs.length} URLs gespeichert + in Clipboard`);
+    }
+    // 'add-highlighted-youtube-to-playlist' ist im Manifest registriert,
+    // aber noch nicht implementiert — der Sidepanel-Picker erwartet aktuell
+    // das Single-URL-Schema. Multi-YouTube-Pfad kommt als eigene Iteration
+    // (siehe backlog_multi_tab_capture.md).
+  } catch (err) {
+    notifyError(err?.message || String(err));
+  }
+});
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
