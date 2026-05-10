@@ -1454,9 +1454,17 @@ async function renderPlaylistDetail(name, saeule) {
   const pullBtn = el("button", { type: "button", textContent: "⏬ Alle Pending ziehen", title: "Alle Videos ohne Transcript automatisch abrufen" });
   toolbar.append(backBtn, pullBtn);
   const status = el("div", { className: "tool-status" });
+  const summaryHint = el("div", { className: "summary-hint" });
+  summaryHint.innerHTML = `
+    <strong>Summary-Workflow:</strong>
+    <ul>
+      <li><strong>Subscription</strong> (kein API-Token): in Claude Code tippen <code>/wiki-summaries ${name}</code> oder ohne Argument für alle pending</li>
+      <li><strong>API-Key</strong> (Anthropic-Key aus EwtosBrain-Settings): unten "Alle Pending ziehen" → Häkchen "+ Summary"</li>
+    </ul>
+  `;
   const orchestrationStatus = el("div", { className: "orchestration-status hidden" });
   const itemsWrap = el("div", { className: "playlist-items-detail" });
-  panelBody.append(toolbar, status, orchestrationStatus, itemsWrap);
+  panelBody.append(toolbar, summaryHint, status, orchestrationStatus, itemsWrap);
 
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
@@ -1654,24 +1662,22 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
 }
 
 async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusEl, button, onDone }) {
-  // Quick-Confirm wegen Long-Running-Operation
-  if (!confirm(
-    `Alle pending Transcripts in '${playlistName}' ziehen?\n\n` +
-    `Dauert pro Video ~10-15s und öffnet bei jedem Pull ein Hidden-Window in Chrome.\n` +
-    `Bei großen Playlists kann das mehrere Minuten dauern.`
-  )) return;
+  // Custom-Dialog statt nativem confirm — wegen Summary-Checkbox
+  const summarize = await showPullPendingDialog(playlistName);
+  if (summarize === null) return; // Abbrechen
 
   button.disabled = true;
   statusEl.classList.remove("hidden");
   statusEl.classList.remove("error");
-  statusEl.textContent = "Starte Orchestrierung — bitte Extension geöffnet halten und Browser nicht schließen…";
+  const summarizeNote = summarize ? " + Auto-Summary (API-Token!)" : "";
+  statusEl.textContent = `Starte Orchestrierung${summarizeNote} — bitte Extension geöffnet halten und Browser nicht schließen…`;
 
   try {
     const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/pull_pending?saeule=${encodeURIComponent(saeule)}`;
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ with_timestamps: false, summarize: false }),
+      body: JSON.stringify({ with_timestamps: false, summarize }),
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
@@ -1689,6 +1695,38 @@ async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusE
     statusEl.classList.add("error");
     button.disabled = false;
   }
+}
+
+function showPullPendingDialog(playlistName) {
+  return new Promise((resolve) => {
+    const overlay = el("div", { className: "playlist-picker-overlay" });
+    const dialog = el("div", { className: "playlist-picker" });
+    dialog.append(el("h3", { textContent: `Pending Transcripts ziehen` }));
+    dialog.append(el("div", {
+      className: "remove-dialog-info",
+      textContent: `'${playlistName}' — pro Video ~10-15s, öffnet jeweils ein Hidden-Window in Chrome.`,
+    }));
+
+    const summaryRow = el("label", { className: "summary-checkbox-row" });
+    const summaryCb = el("input", { type: "checkbox" });
+    summaryRow.append(summaryCb, document.createTextNode(" + Summary über EwtosBrain-API-Key (kostet Anthropic-Tokens)"));
+    dialog.append(summaryRow);
+
+    const hint = el("div", { className: "summary-hint-inline" });
+    hint.innerHTML = `Tipp: für Summary auf <strong>Subscription</strong> stattdessen <code>/wiki-summaries ${playlistName}</code> in Claude Code.`;
+    dialog.append(hint);
+
+    const actions = el("div", { className: "playlist-picker-actions" });
+    const cancel = el("button", { type: "button", textContent: "Abbrechen" });
+    const ok = el("button", { type: "button", textContent: "Ziehen", className: "primary" });
+    actions.append(cancel, ok);
+    dialog.append(actions);
+    overlay.append(dialog);
+    document.body.append(overlay);
+
+    cancel.addEventListener("click", () => { overlay.remove(); resolve(null); });
+    ok.addEventListener("click", () => { const v = summaryCb.checked; overlay.remove(); resolve(v); });
+  });
 }
 
 function formatOrchestrationResult(r) {
