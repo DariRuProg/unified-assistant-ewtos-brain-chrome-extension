@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import settings
-from tools import videos
+from tools import saeulen, videos
 
 
 TRANSCRIPT_DIR_REL = Path("raw") / "transcripts"
@@ -30,6 +30,7 @@ def save_transcript(
     video_slug: str,
     transcript_text: str,
     with_timestamps: bool = False,
+    saeule: str | None = None,
 ) -> dict:
     """Save raw transcript file + update video page frontmatter.
 
@@ -39,10 +40,11 @@ def save_transcript(
     if not transcript_text or not transcript_text.strip():
         raise ValueError("Transcript-Text ist leer")
 
+    s = saeulen.validate_saeule(saeule)
     v = _vault(vault_id)
-    video = videos.get_video(vault_id, video_slug)
+    video = videos.get_video(vault_id, video_slug, s)
     if not video:
-        raise ValueError(f"Video '{video_slug}' nicht gefunden")
+        raise ValueError(f"Video '{video_slug}' nicht gefunden in Säule '{s}'")
     fm = video["frontmatter"]
     title = fm.get("titel") or video_slug
     url = fm.get("quelle_url") or ""
@@ -73,17 +75,17 @@ def save_transcript(
     if dauer:
         fm_lines.append(f"dauer: {dauer}")
     fm_lines.append(f"with_timestamps: {'true' if with_timestamps else 'false'}")
-    fm_lines.append(f"video_page: wiki/ki/videos/{video_slug}")
+    fm_lines.append(f"video_page: wiki/{s}/videos/{video_slug}")
     fm_lines.append(f"abgerufen: {today}")
     fm_lines.append("---")
     raw_content = "\n".join(fm_lines) + "\n\n" + transcript_text.rstrip() + "\n"
     raw_file.write_text(raw_content, encoding="utf-8")
 
     raw_rel = f"raw/transcripts/{raw_file.name}"
-    videos.set_transcript_path(vault_id, video_slug, raw_rel)
+    videos.set_transcript_path(vault_id, video_slug, raw_rel, s)
 
     # Also update the "## Transcript" body section to show the wikilink
-    page_path = videos.video_path(vault_id, video_slug)
+    page_path = videos.video_path(vault_id, video_slug, s)
     page_text = page_path.read_text(encoding="utf-8")
     transcript_link = f"[[{raw_rel.removesuffix('.md')}]]"
     import re as _re
@@ -109,5 +111,6 @@ def save_transcript(
         "saved": True,
         "transcript_path": raw_rel,
         "video_slug": video_slug,
+        "saeule": s,
         "char_count": len(transcript_text),
     }

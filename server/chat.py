@@ -49,10 +49,12 @@ BASE_SYSTEM_PROMPT = """Du bist ein Assistent für einen Markdown-Vault. Du hilf
 - `delete_bookmark(match)` — Substring-Match auf Titel oder URL. Bei Mehrdeutigkeit Fehler — dann Nutzer fragen.
 
 **Playlists** (`wiki/ki/playlists/<slug>.md` im aktiven Vault) — themen-kuratierte Sammlungen (z.B. „KI", „Fitness", „Gesundheit"). Erfordert `write_playlists`-Recht auf dem aktiven Vault. Bei Permission-Fehler den Fehler 1:1 weitergeben:
-- `list_playlists()` — alle Playlists des Vaults zeigen.
-- `create_playlist(name, thema?)` — neue Playlist anlegen. `thema` ist ein freier String für Filter/Gruppierung.
-- `add_to_playlist(name, url, title?, dauer?)` — neuen Eintrag (URL + Titel) hinzufügen. Duplikat-Check via URL.
-- `remove_from_playlist(name, match)` — Eintrag per Substring-Match löschen.
+- `list_playlists(saeule?)` — Playlists eines Vaults zeigen. Ohne `saeule` über alle erlaubten Säulen, mit z.B. `saeule="ki"` nur eine. Jeder Eintrag enthält ein `saeule`-Feld.
+- `create_playlist(name, thema?, saeule?)` — neue Playlist anlegen unter `wiki/<saeule>/playlists/<slug>.md`. `saeule` defaultet auf `ki`. `thema` ist ein freier Frontmatter-String.
+- `add_to_playlist(name, url, title?, dauer?, saeule?)` — Eintrag hinzufügen. Master-Video-Page wird in derselben Säule angelegt. `saeule` defaultet auf `ki` und MUSS zur Playlist passen.
+- `remove_from_playlist(name, match, saeule?)` — Eintrag per Substring-Match löschen. `saeule` defaultet auf `ki`.
+
+**Säulen-Hinweis:** Wenn der Nutzer ein Thema klar nicht-KI nennt (Gesundheit, Fitness, Tech, ...), frage gezielt nach der Säule oder schlage eine vor. Erlaubte Säulen sind in `tools/saeulen.py` whitelisted; neue Säulen erfordern erst eine Schema-Erweiterung in der Vault-CLAUDE.md.
 
 Nutze die Tools wenn der Nutzer sagt: „leg playlist X an", „füg [URL] zu meiner [name]-Playlist hinzu", „zeig meine playlists", „nimm das aus der playlist raus".
 
@@ -242,24 +244,30 @@ TOOL_DEFS = [
     },
     {
         "name": "list_playlists",
-        "description": "Listet alle Playlists des aktiven Vaults (wiki/ki/playlists/). Erfordert write_playlists-Recht (auch zum Lesen, weil das Verzeichnis sonst nicht angesprochen wird).",
-        "input_schema": {"type": "object", "properties": {}},
+        "description": "Listet Playlists des aktiven Vaults pro Säule. Ohne saeule-Parameter werden Playlists aus ALLEN erlaubten Säulen aufgelistet — der Eintrag enthält ein `saeule`-Feld zur Identifikation. Mit saeule (z.B. 'ki') wird gefiltert. Erfordert write_playlists-Recht.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule (z.B. 'ki', 'tech/wordpress'). Ohne Param: alle Säulen."},
+            },
+        },
     },
     {
         "name": "create_playlist",
-        "description": "Legt eine neue Playlist an unter wiki/ki/playlists/<slug>.md mit Frontmatter (typ:ki, status:aktiv, optional thema). Bei doppeltem Namen Fehler.",
+        "description": "Legt eine neue Playlist an unter wiki/<saeule>/playlists/<slug>.md mit Frontmatter (typ:ki, status:aktiv, optional thema). Bei doppeltem Namen in derselben Säule Fehler.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Lesbarer Name, z.B. 'KI Tutorials'"},
-                "thema": {"type": "string", "description": "Optional. Frei wählbar (ki, fitness, gesundheit, ...)"},
+                "thema": {"type": "string", "description": "Optional. Frontmatter-Property (frei, z.B. 'ki', 'gesundheit')."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
             },
             "required": ["name"],
         },
     },
     {
         "name": "add_to_playlist",
-        "description": "Fügt ein Video zu einer Playlist hinzu. Erzeugt SOFORT die Master-Video-Page in wiki/ki/videos/<slug>.md (Frontmatter mit URL, Channel, Dauer; Body als Skeleton mit pending Summary/Transcript), und schreibt einen Referenz-Block in die Playlist. WICHTIG: Wenn der Nutzer sagt 'füg X zur playlist Y hinzu' — RUFE DIESES TOOL. Bestätige NIEMALS Erfolg ohne den Tool-Aufruf. Bei Erfolg melde den Inhalt der Tool-Antwort. Duplikat-Check per URL.",
+        "description": "Fügt ein Video zu einer Playlist hinzu. Erzeugt SOFORT die Master-Video-Page in wiki/<saeule>/videos/<slug>.md (Frontmatter mit URL, Channel, Dauer; Body als Skeleton mit pending Summary/Transcript), und schreibt einen Referenz-Block in die Playlist. WICHTIG: Wenn der Nutzer sagt 'füg X zur playlist Y hinzu' — RUFE DIESES TOOL. Bestätige NIEMALS Erfolg ohne den Tool-Aufruf. Bei Erfolg melde den Inhalt der Tool-Antwort. Duplikat-Check per URL. saeule muss zur Playlist passen.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -268,6 +276,7 @@ TOOL_DEFS = [
                 "title": {"type": "string", "description": "Sichtbarer Titel des Videos"},
                 "youtuber": {"type": "string", "description": "Optional. Channel-Name / YouTuber."},
                 "dauer": {"type": "string", "description": "Optional. Format HH:MM oder MM:SS."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
             },
             "required": ["name", "url", "title"],
         },
@@ -280,6 +289,7 @@ TOOL_DEFS = [
             "properties": {
                 "name": {"type": "string", "description": "Playlist-Name"},
                 "match": {"type": "string", "description": "Substring von Titel oder URL"},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
             },
             "required": ["name", "match"],
         },
@@ -443,38 +453,41 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -
             res = bookmarks.delete_bookmark(tool_input.get("match", ""))
             return f"Bookmark gelöscht: {res['deleted']}", False
         if name == "list_playlists":
-            pls = playlists.list_playlists(vault_id)
+            pls = playlists.list_playlists(vault_id, saeule=tool_input.get("saeule"))
             if not pls:
                 return "(keine Playlists im aktiven Vault)", False
-            lines = [f"- {p['name']} ({p['item_count']} Items) → {p['path']}" for p in pls]
+            lines = [f"- [{p['saeule']}] {p['name']} ({p['item_count']} Items) → {p['path']}" for p in pls]
             return "\n".join(lines), False
         if name == "create_playlist":
             res = playlists.create_playlist(
                 vault_id,
                 tool_input.get("name", ""),
                 tool_input.get("thema"),
+                saeule=tool_input.get("saeule"),
             )
-            return f"Playlist '{res['name']}' angelegt → {res['path']}", False
+            return f"Playlist '{res['name']}' angelegt in Säule '{res['saeule']}' → {res['path']}", False
         if name == "add_to_playlist":
             res = playlists.add_to_playlist(
                 vault_id,
                 tool_input.get("name", ""),
                 tool_input.get("url", ""),
-                tool_input.get("title"),
-                tool_input.get("dauer"),
-                tool_input.get("youtuber"),
+                title=tool_input.get("title"),
+                dauer=tool_input.get("dauer"),
+                youtuber=tool_input.get("youtuber"),
+                saeule=tool_input.get("saeule"),
             )
             if not res.get("added"):
                 return f"Bereits in Playlist (Duplikat): {res.get('title') or res.get('url')}", False
             note = " — Video-Page neu angelegt" if res.get("video_created") else " — Video-Page existierte schon, Playlist-Liste erweitert"
-            return f"Hinzugefügt zu '{res['name']}': {res['title']} → {res['video_page']}{note}", False
+            return f"Hinzugefügt zu '{res['name']}' (Säule {res['saeule']}): {res['title']} → {res['video_page']}{note}", False
         if name == "remove_from_playlist":
             res = playlists.remove_from_playlist(
                 vault_id,
                 tool_input.get("name", ""),
                 tool_input.get("match", ""),
+                saeule=tool_input.get("saeule"),
             )
-            return f"Entfernt: {res['title']}", False
+            return f"Entfernt: {res['title']} (Säule {res['saeule']})", False
         if name == "promote_to_raw":
             res = raw_promoter.promote_to_raw(
                 vault_id=vault_id,

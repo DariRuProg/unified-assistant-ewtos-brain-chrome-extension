@@ -259,33 +259,52 @@ def _wrap_playlist_errors(fn, *args, **kwargs):
 
 
 @app.get("/tools/playlists/{vault_id}")
-def playlists_list(vault_id: str) -> dict[str, Any]:
-    return {"items": _wrap_playlist_errors(playlists_tool.list_playlists, vault_id)}
+def playlists_list(vault_id: str, saeule: str | None = None) -> dict[str, Any]:
+    """Listet Playlists. Ohne `saeule` query → über alle erlaubten Säulen."""
+    return {"items": _wrap_playlist_errors(playlists_tool.list_playlists, vault_id, saeule=saeule)}
 
 
 @app.post("/tools/playlists/{vault_id}")
-def playlists_create(vault_id: str, req: PlaylistCreateRequest) -> dict[str, Any]:
-    return _wrap_playlist_errors(playlists_tool.create_playlist, vault_id, req.name, req.thema)
+def playlists_create(
+    vault_id: str,
+    req: PlaylistCreateRequest,
+    saeule: str | None = None,
+) -> dict[str, Any]:
+    return _wrap_playlist_errors(
+        playlists_tool.create_playlist, vault_id, req.name, req.thema, saeule=saeule,
+    )
 
 
 @app.get("/tools/playlists/{vault_id}/{name}")
-def playlists_get(vault_id: str, name: str) -> dict[str, Any]:
-    return _wrap_playlist_errors(playlists_tool.get_playlist, vault_id, name)
+def playlists_get(vault_id: str, name: str, saeule: str | None = None) -> dict[str, Any]:
+    return _wrap_playlist_errors(playlists_tool.get_playlist, vault_id, name, saeule=saeule)
 
 
 @app.post("/tools/playlists/{vault_id}/{name}/items")
-def playlists_add_item(vault_id: str, name: str, req: PlaylistAddItemRequest) -> dict[str, Any]:
+def playlists_add_item(
+    vault_id: str,
+    name: str,
+    req: PlaylistAddItemRequest,
+    saeule: str | None = None,
+) -> dict[str, Any]:
     return _wrap_playlist_errors(
         playlists_tool.add_to_playlist,
-        vault_id, name, req.url, req.title, req.dauer, req.youtuber,
-        req.views, req.published, req.likes, req.description,
+        vault_id, name, req.url,
+        title=req.title, dauer=req.dauer, youtuber=req.youtuber,
+        views=req.views, published=req.published, likes=req.likes, description=req.description,
+        saeule=saeule,
     )
 
 
 @app.post("/tools/playlists/{vault_id}/{name}/items/delete")
-def playlists_remove_item(vault_id: str, name: str, req: PlaylistRemoveItemRequest) -> dict[str, Any]:
+def playlists_remove_item(
+    vault_id: str,
+    name: str,
+    req: PlaylistRemoveItemRequest,
+    saeule: str | None = None,
+) -> dict[str, Any]:
     return _wrap_playlist_errors(
-        playlists_tool.remove_from_playlist, vault_id, name, req.match,
+        playlists_tool.remove_from_playlist, vault_id, name, req.match, saeule=saeule,
     )
 
 
@@ -297,9 +316,16 @@ class TranscriptSaveRequest(BaseModel):
 
 
 @app.post("/tools/videos/{vault_id}/{slug}/transcript")
-def videos_save_transcript(vault_id: str, slug: str, req: TranscriptSaveRequest) -> dict[str, Any]:
+def videos_save_transcript(
+    vault_id: str,
+    slug: str,
+    req: TranscriptSaveRequest,
+    saeule: str | None = None,
+) -> dict[str, Any]:
     try:
-        return transcript_writer.save_transcript(vault_id, slug, req.transcript, req.with_timestamps)
+        return transcript_writer.save_transcript(
+            vault_id, slug, req.transcript, req.with_timestamps, saeule=saeule,
+        )
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:
@@ -307,9 +333,9 @@ def videos_save_transcript(vault_id: str, slug: str, req: TranscriptSaveRequest)
 
 
 @app.post("/tools/videos/{vault_id}/{slug}/summary")
-def videos_generate_summary(vault_id: str, slug: str) -> dict[str, Any]:
+def videos_generate_summary(vault_id: str, slug: str, saeule: str | None = None) -> dict[str, Any]:
     try:
-        return summary_writer.generate_summary(vault_id, slug)
+        return summary_writer.generate_summary(vault_id, slug, saeule=saeule)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:

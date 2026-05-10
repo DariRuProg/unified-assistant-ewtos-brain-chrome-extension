@@ -1,8 +1,11 @@
-"""Video-Pages — Master-Datei pro Video unter wiki/ki/videos/<slug>.md.
+"""Video-Pages — Master-Datei pro Video unter wiki/<saeule>/videos/<slug>.md.
 
 Eine Video-Page existiert genau einmal pro Video, kann zu mehreren Playlists
 gehören (Frontmatter `playlists: [<slug>, ...]`). Transcript + Summary werden
 hier nachträglich befüllt.
+
+Default-Säule ist `ki`. Andere Säulen über den `saeule`-Parameter, Whitelist
+in `tools/saeulen.py`.
 
 Nutzt dieselbe `write_playlists`-Permission wie playlists.py.
 """
@@ -13,9 +16,14 @@ from datetime import date
 from pathlib import Path
 
 import settings
+from tools import saeulen
 
-VIDEO_DIR_REL = Path("wiki") / "ki" / "videos"
 SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def video_dir_rel(saeule: str) -> Path:
+    """Relativer Pfad zum Videos-Ordner einer Säule (z.B. wiki/ki/videos)."""
+    return Path("wiki") / saeule / "videos"
 
 
 def _slugify(text: str) -> str:
@@ -35,15 +43,16 @@ def _vault(vault_id: str) -> dict:
     return v
 
 
-def _videos_dir(vault_id: str) -> Path:
+def _videos_dir(vault_id: str, saeule: str) -> Path:
     v = _vault(vault_id)
-    p = Path(v["path"]) / VIDEO_DIR_REL
+    p = Path(v["path"]) / video_dir_rel(saeule)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def video_path(vault_id: str, slug: str) -> Path:
-    return _videos_dir(vault_id) / f"{slug}.md"
+def video_path(vault_id: str, slug: str, saeule: str | None = None) -> Path:
+    s = saeulen.validate_saeule(saeule)
+    return _videos_dir(vault_id, s) / f"{slug}.md"
 
 
 def _split_frontmatter(text: str) -> tuple[str, str]:
@@ -77,8 +86,9 @@ def _format_list_value(items: list[str]) -> str:
     return "[" + ", ".join(items) + "]"
 
 
-def get_video(vault_id: str, slug: str) -> dict | None:
-    p = video_path(vault_id, slug)
+def get_video(vault_id: str, slug: str, saeule: str | None = None) -> dict | None:
+    s = saeulen.validate_saeule(saeule)
+    p = video_path(vault_id, slug, s)
     if not p.exists():
         return None
     text = p.read_text(encoding="utf-8")
@@ -93,7 +103,7 @@ def get_video(vault_id: str, slug: str) -> dict | None:
             meta[key] = _parse_list_value(value)
         else:
             meta[key] = value
-    return {"slug": slug, "path": str(p), "frontmatter": meta, "body": body}
+    return {"slug": slug, "saeule": s, "path": str(p), "frontmatter": meta, "body": body}
 
 
 def upsert_video(
@@ -108,6 +118,7 @@ def upsert_video(
     published: str | None = None,
     likes: str | None = None,
     description: str | None = None,
+    saeule: str | None = None,
 ) -> dict:
     """Create or update video page. Idempotent — re-call with same URL extends
     playlists-array and fills missing metadata fields if they were empty."""
@@ -115,13 +126,14 @@ def upsert_video(
         raise ValueError("url darf nicht leer sein")
     if not (title and title.strip()):
         raise ValueError("title darf nicht leer sein")
+    s = saeulen.validate_saeule(saeule)
     slug = slug or _slugify(title)
-    p = video_path(vault_id, slug)
+    p = video_path(vault_id, slug, s)
     today = date.today().isoformat()
 
     if p.exists():
         # Existing page: extend playlists, optionally fill empty meta fields
-        existing = get_video(vault_id, slug)
+        existing = get_video(vault_id, slug, s)
         fm = existing["frontmatter"] if existing else {}
         playlists = fm.get("playlists") or []
         if not isinstance(playlists, list):
@@ -134,7 +146,7 @@ def upsert_video(
             if val and not fm.get(key):
                 _rewrite_frontmatter_field(p, key, val.strip())
         _rewrite_frontmatter_field(p, "zuletzt", today)
-        return {"created": False, "slug": slug, "path": str(p)}
+        return {"created": False, "slug": slug, "saeule": s, "path": str(p)}
 
     # New page
     playlists_list = [playlist_slug] if playlist_slug else []
@@ -186,7 +198,7 @@ def upsert_video(
     ])
     body = "\n".join(body_lines)
     p.write_text(fm_block + "\n" + body, encoding="utf-8")
-    return {"created": True, "slug": slug, "path": str(p)}
+    return {"created": True, "slug": slug, "saeule": s, "path": str(p)}
 
 
 def _rewrite_frontmatter_field(p: Path, key: str, new_value: str) -> None:
@@ -216,11 +228,17 @@ def _rewrite_frontmatter_field(p: Path, key: str, new_value: str) -> None:
     p.write_text(new_fm + body, encoding="utf-8")
 
 
-def set_transcript_path(vault_id: str, slug: str, transcript_rel_path: str) -> dict:
+def set_transcript_path(
+    vault_id: str,
+    slug: str,
+    transcript_rel_path: str,
+    saeule: str | None = None,
+) -> dict:
+    s = saeulen.validate_saeule(saeule)
     _vault(vault_id)
-    p = video_path(vault_id, slug)
+    p = video_path(vault_id, slug, s)
     if not p.exists():
-        raise ValueError(f"Video '{slug}' nicht gefunden")
+        raise ValueError(f"Video '{slug}' nicht gefunden in Säule '{s}'")
     _rewrite_frontmatter_field(p, "transcript", transcript_rel_path)
     _rewrite_frontmatter_field(p, "zuletzt", date.today().isoformat())
-    return {"updated": True, "slug": slug, "transcript": transcript_rel_path}
+    return {"updated": True, "slug": slug, "saeule": s, "transcript": transcript_rel_path}

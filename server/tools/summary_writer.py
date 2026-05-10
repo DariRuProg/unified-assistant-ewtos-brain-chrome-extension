@@ -11,7 +11,7 @@ from pathlib import Path
 import anthropic
 
 import settings
-from tools import videos
+from tools import saeulen, videos
 
 
 SUMMARY_PROMPT = """Du bekommst gleich das Transcript eines Videos (typisch YouTube). Erstelle eine knappe, dichte Zusammenfassung auf Deutsch in genau diesem Format:
@@ -56,11 +56,12 @@ def _read_transcript(vault_path: str, transcript_rel: str) -> str:
     return text
 
 
-def generate_summary(vault_id: str, video_slug: str) -> dict:
+def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) -> dict:
+    s = saeulen.validate_saeule(saeule)
     v = _vault(vault_id)
-    video = videos.get_video(vault_id, video_slug)
+    video = videos.get_video(vault_id, video_slug, s)
     if not video:
-        raise ValueError(f"Video '{video_slug}' nicht gefunden")
+        raise ValueError(f"Video '{video_slug}' nicht gefunden in Säule '{s}'")
     fm = video["frontmatter"]
     transcript_path = fm.get("transcript")
     if not transcript_path or not str(transcript_path).strip():
@@ -91,7 +92,7 @@ def generate_summary(vault_id: str, video_slug: str) -> dict:
         raise RuntimeError("Anthropic-Antwort war leer")
 
     # Replace the placeholder sections in the video page
-    p = videos.video_path(vault_id, video_slug)
+    p = videos.video_path(vault_id, video_slug, s)
     page_text = p.read_text(encoding="utf-8")
 
     # Split frontmatter
@@ -126,6 +127,7 @@ def generate_summary(vault_id: str, video_slug: str) -> dict:
     return {
         "summarized": True,
         "video_slug": video_slug,
+        "saeule": s,
         "model": model,
         "summary_chars": len(summary_text),
         "input_tokens": response.usage.input_tokens,
