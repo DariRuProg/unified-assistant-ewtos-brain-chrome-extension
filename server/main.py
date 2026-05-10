@@ -22,6 +22,7 @@ import settings
 from tools import bookmarks as bookmarks_tool
 from tools import notes_file, wiki_reader
 from tools import playlists as playlists_tool
+from tools import playlist_orchestrator
 from tools import summary_writer, transcript_writer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -330,6 +331,35 @@ def playlists_remove_item(
         playlists_tool.remove_from_playlist, vault_id, name, req.match,
         saeule=saeule, also_delete_master=req.also_delete_master,
     )
+
+
+class PlaylistPullPendingRequest(BaseModel):
+    with_timestamps: bool = False
+    summarize: bool = False
+
+
+@app.post("/tools/playlists/{vault_id}/{name}/pull_pending")
+async def playlists_pull_pending(
+    vault_id: str,
+    name: str,
+    req: PlaylistPullPendingRequest,
+    saeule: str | None = None,
+) -> dict[str, Any]:
+    """Bulk-Pull aller pending Transcripts einer Playlist via Multi-Video-Orchestrator.
+
+    Long-running: kann je nach Playlist-Größe mehrere Minuten dauern (pro Item
+    ~10-15s). Der Endpoint blockt bis fertig — der Client muss entsprechend
+    Timeout setzen.
+    """
+    try:
+        return await playlist_orchestrator.pull_pending_transcripts(
+            vault_id, name, bridge,
+            saeule=saeule, with_timestamps=req.with_timestamps, summarize=req.summarize,
+        )
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # --- Videos: Transcript + Summary ---------------------------------------

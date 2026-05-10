@@ -689,6 +689,16 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   background: var(--bg-card);
 }
 
+/* Orchestration-Status-Box (Pull-Pending-Run) */
+.orchestration-status {
+  margin: 6px 0 4px; padding: 8px 10px; font-size: 12px;
+  border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text);
+  white-space: pre-line; line-height: 1.45;
+}
+.orchestration-status.hidden { display: none; }
+.orchestration-status.error { border-color: var(--status-offline); color: var(--status-offline); }
+
 /* Playlist-Item-Details (Inline-Preview Akkordeon) */
 .playlist-item-details { margin-top: 8px; padding: 10px; border-top: 1px solid var(--border-input); display: flex; flex-direction: column; gap: 6px; }
 .playlist-item-details.hidden { display: none; }

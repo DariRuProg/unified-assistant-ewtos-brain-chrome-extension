@@ -329,6 +329,52 @@ def save_transcript(
 
 
 @mcp.tool()
+def pull_pending_transcripts(
+    vault_id: str,
+    playlist_name: str,
+    saeule: str | None = None,
+    with_timestamps: bool = False,
+) -> dict:
+    """Bulk-Pull aller pending Transcripts einer Playlist (Multi-Video-Orchestrator).
+
+    Iteriert seriell über die Playlist-Items, prüft pro Video ob bereits ein
+    Transcript existiert, triggert sonst die Chrome-Extension via WS-Bridge,
+    speichert das Transcript und verlinkt es in der Master-Video-Page.
+
+    Long-running: pro Item ~10-15s, deshalb httpx-Timeout 900s (15 Min).
+
+    `saeule` defaultet auf 'ki'. `summarize` ist absichtlich NICHT exposed —
+    Claude Code soll Summaries selbst auf eigener Subscription schreiben.
+
+    Returns: Statistik {total, transcribed, skipped_already_done, failed: [...],
+    aborted, abort_reason}.
+    """
+    target = f"http://{config.HOST}:{config.PORT}/tools/playlists/{vault_id}/{playlist_name}/pull_pending"
+    params = {"saeule": saeule} if saeule else {}
+    try:
+        r = httpx.post(
+            target,
+            params=params,
+            json={"with_timestamps": with_timestamps, "summarize": False},
+            timeout=900,
+        )
+        if r.status_code == 503:
+            return {"ok": False, "error": "Extension nicht verbunden — bitte Chrome-Extension öffnen."}
+        r.raise_for_status()
+        return r.json()
+    except httpx.ConnectError:
+        return {
+            "ok": False,
+            "error": (
+                f"FastAPI-Server nicht erreichbar auf {config.HOST}:{config.PORT}. "
+                f"Bitte start-server.bat starten."
+            ),
+        }
+    except httpx.HTTPStatusError as e:
+        return {"ok": False, "error": f"HTTP {e.response.status_code}: {e.response.text[:300]}"}
+
+
+@mcp.tool()
 def pull_transcript_via_extension(url: str) -> dict:
     """Triggert das YouTube-Transcript-Tool in der Chrome-Extension via WS-Bridge.
 

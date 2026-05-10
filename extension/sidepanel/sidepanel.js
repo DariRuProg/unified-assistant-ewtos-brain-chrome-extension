@@ -124,6 +124,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "connection_status") setStatus(!!msg.connected);
 });
 
+// Wenn das Sidepanel schon offen ist und ein neuer Context-Menu-Pick reinkommt,
+// triggert checkPendingPlaylistPick — sonst würde der Picker nie auftauchen.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.playlistPick && changes.playlistPick.newValue) {
+    checkPendingPlaylistPick();
+  }
+});
+
 openOptions.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 reconnectBtn.addEventListener("click", () => {
@@ -320,6 +328,13 @@ async function addAndMaybePull(httpBase, vaultId, name, meta, opts) {
     throw new Error(`Add failed (${addRes.status}): ${text}`);
   }
   const addData = await addRes.json();
+  if (addData.added === false) {
+    const reason = addData.reason === "duplicate"
+      ? `'${title}' ist bereits in '${name}'.`
+      : `Nicht hinzugefügt: ${addData.reason || "unbekannt"}`;
+    alert(reason);
+    return addData;
+  }
   const videoSlug = (addData.video_page || "").split("/").pop();
   if (!autoPull || !videoSlug) return addData;
 
@@ -1430,16 +1445,24 @@ async function renderPlaylistDetail(name, saeule) {
   const toolbar = el("div", { className: "playlist-toolbar" });
   const backBtn = el("button", { type: "button", textContent: "← zurück" });
   backBtn.addEventListener("click", () => renderPlaylistsTool());
-  toolbar.append(backBtn);
+  const pullBtn = el("button", { type: "button", textContent: "⏬ Alle Pending ziehen", title: "Alle Videos ohne Transcript automatisch abrufen" });
+  toolbar.append(backBtn, pullBtn);
   const status = el("div", { className: "tool-status" });
+  const orchestrationStatus = el("div", { className: "orchestration-status hidden" });
   const itemsWrap = el("div", { className: "playlist-items-detail" });
-  panelBody.append(toolbar, status, itemsWrap);
+  panelBody.append(toolbar, status, orchestrationStatus, itemsWrap);
 
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
   if (!vault) { status.textContent = "Kein Vault."; return; }
   const vaultId = vault.id;
   const vaultName = vault.name;
+
+  pullBtn.addEventListener("click", () => runPullPending({
+    httpBase, vaultId, playlistName: name, saeule,
+    statusEl: orchestrationStatus, button: pullBtn,
+    onDone: () => renderPlaylistDetail(name, saeule),
+  }));
 
   status.textContent = "lade...";
   try {
@@ -1622,6 +1645,61 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
   if (!insights && !summary && !transcript) {
     target.append(el("div", { className: "empty", textContent: "(noch keine Insights/Summary/Transcript in der Master-Page)" }));
   }
+}
+
+async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusEl, button, onDone }) {
+  // Quick-Confirm wegen Long-Running-Operation
+  if (!confirm(
+    `Alle pending Transcripts in '${playlistName}' ziehen?\n\n` +
+    `Dauert pro Video ~10-15s und öffnet bei jedem Pull ein Hidden-Window in Chrome.\n` +
+    `Bei großen Playlists kann das mehrere Minuten dauern.`
+  )) return;
+
+  button.disabled = true;
+  statusEl.classList.remove("hidden");
+  statusEl.classList.remove("error");
+  statusEl.textContent = "Starte Orchestrierung — bitte Extension geöffnet halten und Browser nicht schließen…";
+
+  try {
+    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/pull_pending?saeule=${encodeURIComponent(saeule)}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ with_timestamps: false, summarize: false }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      statusEl.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+      statusEl.classList.add("error");
+      button.disabled = false;
+      return;
+    }
+    const result = await r.json();
+    statusEl.textContent = formatOrchestrationResult(result);
+    button.disabled = false;
+    onDone && onDone();
+  } catch (err) {
+    statusEl.textContent = `Fehler: ${err.message || err}`;
+    statusEl.classList.add("error");
+    button.disabled = false;
+  }
+}
+
+function formatOrchestrationResult(r) {
+  const lines = [];
+  if (r.aborted) {
+    lines.push(`⚠ Abgebrochen: ${r.abort_reason || "unbekannt"}`);
+  }
+  lines.push(`✓ Fertig: ${r.transcribed}/${r.total} transkribiert`);
+  if (r.skipped_already_done) lines.push(`  (${r.skipped_already_done} hatten schon Transcript)`);
+  if (r.failed && r.failed.length) {
+    lines.push(`✗ ${r.failed.length} fehlgeschlagen:`);
+    for (const f of r.failed.slice(0, 5)) {
+      lines.push(`   • ${f.title}: ${f.error}`);
+    }
+    if (r.failed.length > 5) lines.push(`   …+${r.failed.length - 5} weitere`);
+  }
+  return lines.join("\n");
 }
 
 function showRemoveDialog({ httpBase, vaultId, playlistName, saeule, item, onDone }) {
