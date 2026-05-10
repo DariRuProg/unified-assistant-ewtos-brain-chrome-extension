@@ -21,6 +21,7 @@ ALLOWED_SAEULEN: set[str] = {
     "kunden-deliverables",
     "projekte",
     "produkte",
+    "gesundheit",
 }
 
 ALLOWED_SUB_SAEULEN: set[str] = {

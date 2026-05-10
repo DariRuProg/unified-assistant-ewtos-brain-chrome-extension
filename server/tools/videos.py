@@ -242,3 +242,51 @@ def set_transcript_path(
     _rewrite_frontmatter_field(p, "transcript", transcript_rel_path)
     _rewrite_frontmatter_field(p, "zuletzt", date.today().isoformat())
     return {"updated": True, "slug": slug, "saeule": s, "transcript": transcript_rel_path}
+
+
+def remove_from_playlists_array(
+    vault_id: str,
+    slug: str,
+    playlist_slug: str,
+    saeule: str | None = None,
+) -> dict:
+    """Entfernt einen Playlist-Slug aus dem frontmatter `playlists`-Array
+    der Video-Master-Page. Returns {playlists: list[str], became_orphan: bool}."""
+    s = saeulen.validate_saeule(saeule)
+    _vault(vault_id)
+    p = video_path(vault_id, slug, s)
+    if not p.exists():
+        return {"playlists": [], "became_orphan": False, "exists": False}
+    existing = get_video(vault_id, slug, s)
+    fm = existing["frontmatter"] if existing else {}
+    playlists = fm.get("playlists") or []
+    if not isinstance(playlists, list):
+        playlists = []
+    if playlist_slug in playlists:
+        playlists = [x for x in playlists if x != playlist_slug]
+        _rewrite_frontmatter_field(p, "playlists", _format_list_value(playlists))
+        _rewrite_frontmatter_field(p, "zuletzt", date.today().isoformat())
+    return {"playlists": playlists, "became_orphan": len(playlists) == 0, "exists": True}
+
+
+def delete_video(vault_id: str, slug: str, saeule: str | None = None) -> dict:
+    """Löscht die Video-Master-Page und das verlinkte raw/transcripts-File (falls vorhanden).
+
+    Returns {deleted: bool, master_path: str, transcript_path: str | None}.
+    """
+    s = saeulen.validate_saeule(saeule)
+    v = _vault(vault_id)
+    p = video_path(vault_id, slug, s)
+    if not p.exists():
+        return {"deleted": False, "master_path": str(p), "transcript_path": None}
+    existing = get_video(vault_id, slug, s)
+    transcript_rel = (existing["frontmatter"].get("transcript") if existing else None) or ""
+    transcript_rel = str(transcript_rel).strip()
+    transcript_deleted_path = None
+    if transcript_rel:
+        tp = Path(v["path"]) / transcript_rel
+        if tp.exists():
+            tp.unlink()
+            transcript_deleted_path = str(tp)
+    p.unlink()
+    return {"deleted": True, "master_path": str(p), "transcript_path": transcript_deleted_path}

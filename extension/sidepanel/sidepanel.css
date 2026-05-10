@@ -579,9 +579,150 @@ footer button:hover { background: var(--bg-hover); }
 }
 .playlist-picker-list .playlist-pick-btn:hover { background: var(--bg-card); border-color: var(--accent, #3b82f6); }
 .playlist-picker-sep { font-size: 11px; color: var(--text-muted, #888); margin-top: 4px; }
-.playlist-picker input[type="text"] {
+.playlist-picker input[type="text"],
+.playlist-picker input[type="url"],
+.playlist-picker input[type="search"] {
   padding: 6px 8px; border: 1px solid var(--border-input);
-  border-radius: 4px; font-size: 12px; background: var(--bg);
+  border-radius: 4px; font-size: 12px;
+  background: var(--bg-card); color: var(--text);
+  font-family: inherit;
+}
+.playlist-picker input::placeholder,
+.bookmark-search input::placeholder {
+  color: var(--text-faint); opacity: 1;
 }
 .playlist-picker button.secondary { align-self: flex-end; padding: 4px 10px; font-size: 11px; }
+.playlist-picker button.primary {
+  background: var(--accent); color: var(--accent-text); border: 0;
+  padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;
+}
+.playlist-picker button.primary:hover { background: var(--accent-hover); }
+.playlist-picker-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
 .playlist-picker-empty { display: flex; flex-direction: column; gap: 6px; }
+
+/* Playlists Tool — list + detail views */
+.playlist-toolbar { display: flex; gap: 6px; padding: 4px 0 8px; }
+.playlist-toolbar button {
+  padding: 6px 10px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text);
+}
+.playlist-toolbar button:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+.playlist-list { display: flex; flex-direction: column; gap: 14px; }
+.playlist-group-header {
+  margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted);
+}
+.playlist-items { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.playlist-item {
+  padding: 8px 10px; border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.playlist-item:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+.playlist-item-main { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.playlist-name { font-weight: 500; font-size: 13px; color: var(--text); }
+.playlist-count { font-size: 11px; color: var(--text-muted); }
+.playlist-items-detail { display: flex; flex-direction: column; gap: 8px; }
+.playlist-item-card {
+  padding: 10px; border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text); display: flex; flex-direction: column; gap: 4px;
+}
+.playlist-item-title { font-weight: 500; font-size: 13px; color: var(--text); }
+.playlist-item-meta { display: flex; gap: 10px; font-size: 11px; color: var(--text-muted); }
+.playlist-item-links { display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+.playlist-item-links a,
+.playlist-item-links a:link,
+.playlist-item-links a:visited,
+.playlist-item-links a:hover,
+.playlist-item-links a:active { font-size: 11px; color: var(--accent); text-decoration: underline; }
+.playlist-item-links a:hover { opacity: 0.75; }
+button.small { padding: 3px 8px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--border-input); border-radius: 3px; background: transparent; color: var(--text);
+}
+button.small:hover { border-color: var(--status-offline); color: var(--status-offline); }
+
+/* Bookmarks Tool — Search + Tag-Cloud */
+.bookmark-search { padding: 4px 0 6px; }
+.bookmark-search input[type="search"] {
+  width: 100%; padding: 6px 10px; font-size: 12px;
+  border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text);
+}
+.tag-cloud {
+  display: flex; flex-wrap: wrap; gap: 3px; padding: 0 0 6px;
+  max-height: 52px; overflow-y: auto;
+}
+.tag-pill {
+  padding: 1px 6px; font-size: 10px; line-height: 1.4; cursor: pointer;
+  border: 1px solid var(--border-input); border-radius: 10px;
+  background: var(--bg-card); color: var(--text);
+  font-family: inherit; white-space: nowrap;
+}
+.tag-pill:hover { background: var(--bg-hover); }
+.tag-pill.active {
+  background: var(--accent); color: var(--accent-text); border-color: var(--accent);
+}
+.tag-pill.clear { color: var(--text-muted); }
+.bookmark-actions { display: flex; gap: 4px; align-items: center; }
+
+/* Bookmarks Tool */
+.bookmark-list { display: flex; flex-direction: column; gap: 6px; }
+.bookmark-card {
+  padding: 8px 10px; border: 1px solid var(--border-input); border-radius: 4px;
+  background: var(--bg-card); color: var(--text); display: flex; flex-direction: column; gap: 3px;
+}
+.bookmark-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bookmark-head a,
+.bookmark-head a:link,
+.bookmark-head a:visited,
+.bookmark-head a:hover,
+.bookmark-head a:active { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: underline; word-break: break-word; }
+.bookmark-head a:hover { opacity: 0.75; }
+.bookmark-date { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+.bookmark-note { font-size: 11px; color: var(--text); }
+.bookmark-meta { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 2px; font-size: 10px; color: var(--text-muted); }
+
+/* Empty placeholder */
+.tool-body .empty {
+  padding: 20px 12px; text-align: center; font-size: 12px; color: var(--text-muted);
+  border: 1px dashed var(--border-input); border-radius: 4px;
+  background: var(--bg-card);
+}
+
+/* Playlist-Item-Details (Inline-Preview Akkordeon) */
+.playlist-item-details { margin-top: 8px; padding: 10px; border-top: 1px solid var(--border-input); display: flex; flex-direction: column; gap: 6px; }
+.playlist-item-details.hidden { display: none; }
+.playlist-item-details .preview-h { margin: 8px 0 2px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+.playlist-item-details .preview-h:first-child { margin-top: 0; }
+.preview-md { font-size: 12px; line-height: 1.5; color: var(--text); }
+.preview-md p { margin: 4px 0; }
+.preview-md ul { margin: 4px 0; padding-left: 18px; }
+.preview-md li { margin: 2px 0; }
+.preview-md strong { font-weight: 600; }
+.preview-md h3, .preview-md h4 { margin: 8px 0 4px; font-size: 12px; }
+.transcript-content { margin-top: 6px; max-height: 280px; overflow: auto; padding: 6px; background: var(--bg-subtle); border-radius: 4px; }
+.transcript-text { white-space: pre-wrap; font-size: 11px; margin: 0; color: var(--text); font-family: inherit; }
+.obsidian-link,
+.obsidian-link:link,
+.obsidian-link:visited,
+.obsidian-link:hover,
+.obsidian-link:active { font-size: 11px; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.obsidian-link:hover { opacity: 0.75; }
+.details-toggle { font-family: inherit; }
+
+/* Remove-Confirm-Dialog */
+.remove-dialog { max-width: 340px; }
+.remove-dialog-info { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.remove-dialog-actions { display: flex; flex-direction: column; gap: 6px; }
+.remove-dialog-actions button { padding: 8px 12px; font-size: 12px; cursor: pointer; border-radius: 4px;
+  border: 1px solid var(--border-input); background: var(--bg-card); color: var(--text);
+}
+.remove-dialog-actions button:hover { background: var(--bg-hover); }
+.remove-dialog-actions button.primary {
+  background: var(--accent); color: var(--accent-text); border: 0;
+}
+.remove-dialog-actions button.primary:hover { background: var(--accent-hover); }
+.remove-dialog-actions button.danger {
+  border: 1px solid var(--status-offline); color: var(--status-offline); background: transparent;
+}
+.remove-dialog-actions button.danger:hover { background: var(--status-offline); color: white; }

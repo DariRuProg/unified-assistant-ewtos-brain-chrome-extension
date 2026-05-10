@@ -200,10 +200,20 @@ class BookmarkAddRequest(BaseModel):
     title: str | None = None
     note: str | None = None
     source: str | None = "manual"
+    themen: list[str] | None = None
 
 
 class BookmarkDeleteRequest(BaseModel):
     match: str
+    date: str | None = None
+
+
+class BookmarkUpdateRequest(BaseModel):
+    match: str
+    date: str | None = None
+    title: str | None = None
+    note: str | None = None
+    themen: list[str] | None = None
 
 
 @app.get("/tools/bookmarks")
@@ -214,7 +224,19 @@ def bookmarks_list() -> dict[str, Any]:
 @app.post("/tools/bookmarks")
 def bookmarks_add(req: BookmarkAddRequest) -> dict[str, Any]:
     try:
-        return bookmarks_tool.add_bookmark(req.url, req.title, req.note, req.source or "manual")
+        return bookmarks_tool.add_bookmark(
+            req.url, req.title, req.note, req.source or "manual", themen=req.themen,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/bookmarks/edit")
+def bookmarks_edit(req: BookmarkUpdateRequest) -> dict[str, Any]:
+    try:
+        return bookmarks_tool.update_bookmark(
+            req.match, date=req.date, title=req.title, note=req.note, themen=req.themen,
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -222,7 +244,7 @@ def bookmarks_add(req: BookmarkAddRequest) -> dict[str, Any]:
 @app.post("/tools/bookmarks/delete")
 def bookmarks_delete(req: BookmarkDeleteRequest) -> dict[str, Any]:
     try:
-        return bookmarks_tool.delete_bookmark(req.match)
+        return bookmarks_tool.delete_bookmark(req.match, req.date)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -247,6 +269,7 @@ class PlaylistAddItemRequest(BaseModel):
 
 class PlaylistRemoveItemRequest(BaseModel):
     match: str
+    also_delete_master: bool = False
 
 
 def _wrap_playlist_errors(fn, *args, **kwargs):
@@ -304,7 +327,8 @@ def playlists_remove_item(
     saeule: str | None = None,
 ) -> dict[str, Any]:
     return _wrap_playlist_errors(
-        playlists_tool.remove_from_playlist, vault_id, name, req.match, saeule=saeule,
+        playlists_tool.remove_from_playlist, vault_id, name, req.match,
+        saeule=saeule, also_delete_master=req.also_delete_master,
     )
 
 
@@ -313,6 +337,23 @@ def playlists_remove_item(
 class TranscriptSaveRequest(BaseModel):
     transcript: str
     with_timestamps: bool = False
+
+
+@app.get("/tools/vault_file/{vault_id}")
+def vault_file_read(vault_id: str, rel_path: str) -> dict[str, Any]:
+    """Read-only Zugriff auf eine .md-Datei im Vault. Wird vom Sidepanel
+    fürs Inline-Preview von Master-Pages und Transcripts genutzt.
+    rel_path ist relativ zum Vault-Root."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        content = wiki_reader.read_file(v["path"], rel_path)
+        return {"vault_id": vault_id, "rel_path": rel_path, "content": content}
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/tools/videos/{vault_id}/{slug}/transcript")

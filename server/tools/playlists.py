@@ -287,9 +287,22 @@ def remove_from_playlist(
     name: str,
     match: str,
     saeule: str | None = None,
+    also_delete_master: bool = False,
 ) -> dict:
     """Remove an item-block (H2 + bullet lines) from the playlist file.
-    Substring-match on title or URL. Multi-match raises."""
+
+    Substring-match on title or URL. Multi-match raises.
+
+    Side-effects (immer):
+    - Aus dem frontmatter `playlists`-Array der Video-Master-Page wird der
+      eigene Playlist-Slug entfernt — sonst wäre die Master-Page-Frontmatter
+      stale.
+
+    Wenn `also_delete_master=True`:
+    - Falls das Video in keiner anderen Playlist mehr ist (became_orphan),
+      wird die Master-Page UND das raw/transcripts-File gelöscht.
+    - Ansonsten bleibt die Master-Page erhalten (Hinweis im Returnwert).
+    """
     needle = (match or "").strip().lower()
     if not needle:
         raise ValueError("match darf nicht leer sein")
@@ -311,7 +324,11 @@ def remove_from_playlist(
     if len(matches) > 1:
         preview = "; ".join(it["title"] for it in matches[:5])
         raise ValueError(f"Mehrere Treffer: {preview} — bitte präziser.")
-    target_title = matches[0]["title"]
+    target = matches[0]
+    target_title = target["title"]
+    target_page = (target.get("page") or "").strip()
+    # Slug aus page = "wiki/<saeule>/videos/<slug>"
+    target_slug = target_page.rsplit("/", 1)[-1] if target_page else None
 
     # Walk lines and skip the matching block (from its H2 until next H2 or EOF)
     lines = body.splitlines()
@@ -329,4 +346,25 @@ def remove_from_playlist(
             out.append(line)
     new_body = "\n".join(out).rstrip() + "\n"
     p.write_text(fm + new_body, encoding="utf-8")
-    return {"removed": True, "saeule": s, "title": target_title}
+
+    playlist_slug = p.stem
+    master_deleted = False
+    transcript_deleted = None
+    became_orphan = False
+    if target_slug:
+        upd = videos.remove_from_playlists_array(vault_id, target_slug, playlist_slug, s)
+        became_orphan = bool(upd.get("became_orphan"))
+        if also_delete_master and became_orphan and upd.get("exists"):
+            res = videos.delete_video(vault_id, target_slug, s)
+            master_deleted = bool(res.get("deleted"))
+            transcript_deleted = res.get("transcript_path")
+
+    return {
+        "removed": True,
+        "saeule": s,
+        "title": target_title,
+        "video_slug": target_slug,
+        "became_orphan": became_orphan,
+        "master_deleted": master_deleted,
+        "transcript_deleted": transcript_deleted,
+    }

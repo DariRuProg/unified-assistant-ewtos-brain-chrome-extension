@@ -58,6 +58,8 @@ const TOOL_RENDERERS = {
   }),
   todos: renderTodos,
   chat: renderChat,
+  playlists: renderPlaylistsTool,
+  bookmarks: renderBookmarksTool,
 };
 
 const GROUPS = [
@@ -68,6 +70,8 @@ const GROUPS = [
       { id: "chat", label: "Chat mit Vault", hint: "Karpathy-Navigation, Claude API" },
       { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad" },
       { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates" },
+      { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule" },
+      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture" },
     ],
   },
   {
@@ -1261,6 +1265,715 @@ function inlineMd(s) {
   // Restore code spans
   s = s.replace(/\x01CODE(\d+)\x01/g, (_, i) => codes[Number(i)]);
   return s;
+}
+
+// --- Vault helper (used by Playlists/Bookmarks tools) -------------------
+
+async function getActiveVault(httpBase) {
+  const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+  try {
+    const res = await fetch(`${httpBase}/vaults`);
+    const data = await res.json();
+    const list = data.vaults || [];
+    if (selectedVaultId) {
+      const found = list.find((v) => v.id === selectedVaultId);
+      if (found) return found;
+    }
+    return list[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getActiveVaultId(httpBase) {
+  const v = await getActiveVault(httpBase);
+  return v?.id || null;
+}
+
+function obsidianUri(vaultName, relPath) {
+  // obsidian://open?vault=...&file=...   (URL-encode + drop .md if present)
+  const file = relPath.replace(/\.md$/i, "");
+  return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(file)}`;
+}
+
+function openInObsidian(vaultName, relPath) {
+  // Custom-Protocol-Handler brauchen User-Gesture + Chrome-API. Ein normaler
+  // <a href="obsidian://..."> wird vom Sidepanel-Context blockiert, deshalb
+  // gehen wir den Weg über chrome.tabs.create — die Extension hat dafür die
+  // Permission und Chrome lässt den Protocol-Handler greifen.
+  const uri = obsidianUri(vaultName, relPath);
+  if (chrome.tabs && chrome.tabs.create) {
+    chrome.tabs.create({ url: uri, active: true });
+  } else {
+    window.open(uri, "_blank");
+  }
+}
+
+// --- Playlists Tool -----------------------------------------------------
+
+async function renderPlaylistsTool() {
+  panelTitle.textContent = "Playlists";
+  panelBody.replaceChildren();
+
+  const status = el("div", { className: "tool-status" });
+  const toolbar = el("div", { className: "playlist-toolbar" });
+  const newBtn = el("button", { textContent: "+ Neue Playlist", type: "button" });
+  toolbar.append(newBtn);
+  const listWrap = el("div", { className: "playlist-list" });
+  panelBody.append(toolbar, status, listWrap);
+
+  const httpBase = await getHttpBase();
+  const vaultId = await getActiveVaultId(httpBase);
+  if (!vaultId) {
+    status.textContent = "Kein Vault konfiguriert. In den Einstellungen anlegen.";
+    status.className = "tool-status error";
+    return;
+  }
+
+  newBtn.addEventListener("click", () => showCreatePlaylistDialog(httpBase, vaultId, () => renderPlaylistsTool()));
+
+  status.textContent = "lade...";
+  try {
+    const res = await fetch(`${httpBase}/tools/playlists/${vaultId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+      status.className = "tool-status error";
+      return;
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    status.textContent = "";
+    if (!items.length) {
+      listWrap.append(el("div", { className: "empty", textContent: "Noch keine Playlists. Mit '+ Neue Playlist' anlegen." }));
+      return;
+    }
+    // Group by saeule
+    const groups = {};
+    for (const p of items) {
+      const k = p.saeule || "ki";
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(p);
+    }
+    for (const saeule of Object.keys(groups).sort()) {
+      const section = el("div", { className: "playlist-group" });
+      section.append(el("h4", { className: "playlist-group-header", textContent: saeule }));
+      const ul = el("ul", { className: "playlist-items" });
+      for (const p of groups[saeule]) {
+        const li = el("li", { className: "playlist-item" });
+        const main = el("div", { className: "playlist-item-main" });
+        main.append(el("span", { className: "playlist-name", textContent: p.name }));
+        main.append(el("span", { className: "playlist-count", textContent: `${p.item_count} Items` }));
+        li.append(main);
+        li.addEventListener("click", () => renderPlaylistDetail(p.name, p.saeule));
+        ul.append(li);
+      }
+      section.append(ul);
+      listWrap.append(section);
+    }
+  } catch (err) {
+    status.textContent = `Fehler: ${err.message || err}`;
+    status.className = "tool-status error";
+  }
+}
+
+function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker" });
+  dialog.append(el("h3", { textContent: "Neue Playlist anlegen" }));
+
+  const nameInput = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
+  const themaInput = el("input", { type: "text", placeholder: "Thema (frei, optional)" });
+  const saeuleInput = el("input", { type: "text", placeholder: "Säule (z.B. ki, tech/wordpress)", value: "ki" });
+  const status = el("div", { className: "tool-status" });
+  const actions = el("div", { className: "playlist-picker-actions" });
+  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
+  const ok = el("button", { type: "button", textContent: "Anlegen", className: "primary" });
+  actions.append(cancel, ok);
+
+  dialog.append(nameInput, themaInput, saeuleInput, status, actions);
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  cancel.addEventListener("click", () => overlay.remove());
+  ok.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) { status.textContent = "Name ist Pflicht"; status.className = "tool-status error"; return; }
+    const saeule = saeuleInput.value.trim() || "ki";
+    const body = { name, thema: themaInput.value.trim() || null };
+    ok.disabled = true; status.textContent = "lege an...";
+    try {
+      const url = `${httpBase}/tools/playlists/${vaultId}?saeule=${encodeURIComponent(saeule)}`;
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+        status.className = "tool-status error";
+        ok.disabled = false;
+        return;
+      }
+      overlay.remove();
+      onCreated && onCreated();
+    } catch (err) {
+      status.textContent = `Fehler: ${err.message || err}`;
+      status.className = "tool-status error";
+      ok.disabled = false;
+    }
+  });
+  nameInput.focus();
+}
+
+async function renderPlaylistDetail(name, saeule) {
+  panelTitle.textContent = `${name} (${saeule})`;
+  panelBody.replaceChildren();
+
+  const toolbar = el("div", { className: "playlist-toolbar" });
+  const backBtn = el("button", { type: "button", textContent: "← zurück" });
+  backBtn.addEventListener("click", () => renderPlaylistsTool());
+  toolbar.append(backBtn);
+  const status = el("div", { className: "tool-status" });
+  const itemsWrap = el("div", { className: "playlist-items-detail" });
+  panelBody.append(toolbar, status, itemsWrap);
+
+  const httpBase = await getHttpBase();
+  const vault = await getActiveVault(httpBase);
+  if (!vault) { status.textContent = "Kein Vault."; return; }
+  const vaultId = vault.id;
+  const vaultName = vault.name;
+
+  status.textContent = "lade...";
+  try {
+    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(name)}?saeule=${encodeURIComponent(saeule)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+      status.className = "tool-status error";
+      return;
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    status.textContent = "";
+    if (!items.length) {
+      itemsWrap.append(el("div", { className: "empty", textContent: "(keine Videos in der Playlist)" }));
+      return;
+    }
+    for (const it of items) {
+      itemsWrap.append(renderVideoCard(httpBase, vaultId, vaultName, name, saeule, it));
+    }
+  } catch (err) {
+    status.textContent = `Fehler: ${err.message || err}`;
+    status.className = "tool-status error";
+  }
+}
+
+function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it) {
+  const card = el("div", { className: "playlist-item-card" });
+  card.append(el("div", { className: "playlist-item-title", textContent: it.title }));
+  const meta = el("div", { className: "playlist-item-meta" });
+  if (it.channel) meta.append(el("span", { textContent: it.channel }));
+  if (it.added) meta.append(el("span", { textContent: it.added }));
+  card.append(meta);
+
+  const links = el("div", { className: "playlist-item-links" });
+  if (it.url) {
+    const a = el("a", { textContent: "YouTube", href: it.url, target: "_blank" });
+    a.rel = "noopener noreferrer";
+    links.append(a);
+  }
+
+  const detailsBtn = el("button", { type: "button", textContent: "▼ Details", className: "small details-toggle" });
+  links.append(detailsBtn);
+
+  if (it.page) {
+    const obsidianBtn = el("button", { type: "button", textContent: "✎ Obsidian", className: "small obsidian-button" });
+    obsidianBtn.addEventListener("click", () => openInObsidian(vaultName, it.page + ".md"));
+    links.append(obsidianBtn);
+  }
+
+  const removeBtn = el("button", { type: "button", textContent: "Entfernen", className: "small" });
+  removeBtn.addEventListener("click", () => showRemoveDialog({
+    httpBase, vaultId, playlistName, saeule, item: it,
+    onDone: () => renderPlaylistDetail(playlistName, saeule),
+  }));
+  links.append(removeBtn);
+  card.append(links);
+
+  // Details-Akkordeon (lazy load)
+  const details = el("div", { className: "playlist-item-details hidden" });
+  card.append(details);
+  let loaded = false;
+  detailsBtn.addEventListener("click", async () => {
+    const isHidden = details.classList.contains("hidden");
+    if (isHidden) {
+      details.classList.remove("hidden");
+      detailsBtn.textContent = "▲ Details";
+      if (!loaded && it.page) {
+        details.textContent = "lade...";
+        try {
+          const fileUrl = `${httpBase}/tools/vault_file/${vaultId}?rel_path=${encodeURIComponent(it.page + ".md")}`;
+          const res = await fetch(fileUrl);
+          if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            details.textContent = `Fehler beim Laden: ${e.detail || res.status}`;
+            return;
+          }
+          const data = await res.json();
+          details.replaceChildren();
+          renderMasterPagePreview(details, data.content || "", httpBase, vaultId, vaultName);
+          loaded = true;
+        } catch (err) {
+          details.textContent = `Fehler: ${err.message || err}`;
+        }
+      }
+    } else {
+      details.classList.add("hidden");
+      detailsBtn.textContent = "▼ Details";
+    }
+  });
+  return card;
+}
+
+function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName) {
+  // Strip frontmatter
+  let body = mdContent;
+  if (body.startsWith("---")) {
+    const end = body.indexOf("\n---", 3);
+    if (end !== -1) body = body.slice(end + 4).replace(/^\n+/, "");
+  }
+  // Find sections: ## Kern-Insights, ## Zusammenfassung, ## Transcript
+  const sections = {};
+  const headerRe = /^##\s+(.+?)\s*$/gm;
+  const positions = [];
+  let m;
+  while ((m = headerRe.exec(body)) !== null) {
+    positions.push({ name: m[1].trim(), start: m.index, contentStart: m.index + m[0].length });
+  }
+  for (let i = 0; i < positions.length; i++) {
+    const p = positions[i];
+    const next = positions[i + 1];
+    sections[p.name] = body.slice(p.contentStart, next ? next.start : body.length).trim();
+  }
+
+  const insights = sections["Kern-Insights"];
+  const summary = sections["Zusammenfassung"];
+  const transcript = sections["Transcript"];
+
+  if (insights) {
+    target.append(el("h5", { className: "preview-h", textContent: "Kern-Insights" }));
+    const div = el("div", { className: "preview-md" });
+    div.innerHTML = renderMarkdown(insights);
+    target.append(div);
+  }
+  if (summary) {
+    target.append(el("h5", { className: "preview-h", textContent: "Zusammenfassung" }));
+    const div = el("div", { className: "preview-md" });
+    div.innerHTML = renderMarkdown(summary);
+    target.append(div);
+  }
+  if (transcript) {
+    target.append(el("h5", { className: "preview-h", textContent: "Transcript" }));
+    // Transcript-Sektion ist meist nur ein Wikilink — extract und mache Vault-File-Read-Link
+    const wl = transcript.match(/\[\[([^\]]+)\]\]/);
+    if (wl) {
+      const transcriptPath = wl[1] + ".md";
+      const a = el("a", {
+        textContent: "Transcript anzeigen",
+        href: "#",
+        className: "obsidian-link",
+      });
+      a.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        const existing = target.querySelector(".transcript-content");
+        if (existing) { existing.remove(); return; }
+        const wrap = el("div", { className: "transcript-content" });
+        wrap.textContent = "lade...";
+        target.append(wrap);
+        try {
+          const url = `${httpBase}/tools/vault_file/${vaultId}?rel_path=${encodeURIComponent(transcriptPath)}`;
+          const r = await fetch(url);
+          const d = await r.json();
+          let txt = d.content || "";
+          if (txt.startsWith("---")) {
+            const end = txt.indexOf("\n---", 3);
+            if (end !== -1) txt = txt.slice(end + 4).replace(/^\n+/, "");
+          }
+          wrap.textContent = "";
+          const pre = el("pre", { className: "transcript-text", textContent: txt });
+          wrap.append(pre);
+        } catch (err) {
+          wrap.textContent = `Fehler: ${err.message || err}`;
+        }
+      });
+      target.append(a);
+      const obsidianA = el("button", {
+        type: "button",
+        textContent: "  •  in Obsidian öffnen",
+        className: "obsidian-link-btn",
+      });
+      obsidianA.addEventListener("click", () => openInObsidian(vaultName, transcriptPath));
+      target.append(obsidianA);
+    } else {
+      const div = el("div", { className: "preview-md" });
+      div.innerHTML = renderMarkdown(transcript);
+      target.append(div);
+    }
+  }
+  if (!insights && !summary && !transcript) {
+    target.append(el("div", { className: "empty", textContent: "(noch keine Insights/Summary/Transcript in der Master-Page)" }));
+  }
+}
+
+function showRemoveDialog({ httpBase, vaultId, playlistName, saeule, item, onDone }) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker remove-dialog" });
+  dialog.append(el("h3", { textContent: `'${item.title}' entfernen?` }));
+  dialog.append(el("div", {
+    className: "remove-dialog-info",
+    textContent: "Wähle, was passieren soll:",
+  }));
+
+  const status = el("div", { className: "tool-status" });
+  const actions = el("div", { className: "remove-dialog-actions" });
+  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen" });
+  const justPlaylistBtn = el("button", { type: "button", textContent: "Nur aus Playlist", className: "primary" });
+  const fullDeleteBtn = el("button", { type: "button", textContent: "Auch Master-Page + Transcript löschen", className: "danger" });
+  actions.append(cancelBtn, justPlaylistBtn, fullDeleteBtn);
+  dialog.append(status, actions);
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  const close = () => overlay.remove();
+  cancelBtn.addEventListener("click", close);
+
+  async function doRemove(alsoDeleteMaster) {
+    justPlaylistBtn.disabled = true;
+    fullDeleteBtn.disabled = true;
+    status.textContent = "läuft...";
+    try {
+      const matchValue = item.url || item.title;
+      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items/delete?saeule=${encodeURIComponent(saeule)}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ match: matchValue, also_delete_master: alsoDeleteMaster }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        status.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+        status.className = "tool-status error";
+        justPlaylistBtn.disabled = false;
+        fullDeleteBtn.disabled = false;
+        return;
+      }
+      const result = await r.json();
+      close();
+      if (alsoDeleteMaster) {
+        if (result.master_deleted) {
+          alert(`Komplett gelöscht. Transcript: ${result.transcript_deleted ? "auch gelöscht" : "kein Transcript vorhanden"}.`);
+        } else if (!result.became_orphan) {
+          alert("Aus Playlist entfernt — Master-Page bleibt, weil das Video noch in einer anderen Playlist ist.");
+        }
+      }
+      onDone && onDone();
+    } catch (err) {
+      status.textContent = `Fehler: ${err.message || err}`;
+      status.className = "tool-status error";
+      justPlaylistBtn.disabled = false;
+      fullDeleteBtn.disabled = false;
+    }
+  }
+  justPlaylistBtn.addEventListener("click", () => doRemove(false));
+  fullDeleteBtn.addEventListener("click", () => doRemove(true));
+}
+
+// --- Bookmarks Tool -----------------------------------------------------
+
+// Bookmarks-State (über Re-Render hinweg, weil filter+search lokal sind)
+let bookmarksState = { all: [], search: "", activeTag: null };
+
+async function renderBookmarksTool() {
+  panelTitle.textContent = "Bookmarks";
+  panelBody.replaceChildren();
+
+  const toolbar = el("div", { className: "playlist-toolbar" });
+  const addBtn = el("button", { type: "button", textContent: "+ Bookmark hinzufügen" });
+  toolbar.append(addBtn);
+  const status = el("div", { className: "tool-status" });
+  const searchWrap = el("div", { className: "bookmark-search" });
+  const searchInput = el("input", { type: "search", placeholder: "Suche Titel, URL, #tag…", value: bookmarksState.search });
+  searchWrap.append(searchInput);
+  const tagCloud = el("div", { className: "tag-cloud" });
+  const listWrap = el("div", { className: "bookmark-list" });
+  panelBody.append(toolbar, searchWrap, tagCloud, status, listWrap);
+
+  const httpBase = await getHttpBase();
+  addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, () => renderBookmarksTool()));
+
+  status.textContent = "lade...";
+  try {
+    const res = await fetch(`${httpBase}/tools/bookmarks`);
+    if (!res.ok) {
+      status.textContent = `Fehler ${res.status}`;
+      status.className = "tool-status error";
+      return;
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    status.textContent = "";
+    bookmarksState.all = items.slice().reverse(); // newest first
+
+    function applyFilters() {
+      let filtered = bookmarksState.all;
+      const q = bookmarksState.search.trim().toLowerCase();
+      if (q) {
+        filtered = filtered.filter((b) => {
+          if (b.title && b.title.toLowerCase().includes(q)) return true;
+          if (b.url && b.url.toLowerCase().includes(q)) return true;
+          if (b.note && b.note.toLowerCase().includes(q)) return true;
+          if (b.themen && b.themen.some((t) => t.toLowerCase().includes(q.replace(/^#/, "")))) return true;
+          return false;
+        });
+      }
+      if (bookmarksState.activeTag) {
+        filtered = filtered.filter((b) => b.themen && b.themen.includes(bookmarksState.activeTag));
+      }
+      renderBookmarksList(httpBase, listWrap, filtered);
+    }
+
+    // Tag-Wolke aufbauen aus allen items
+    function onTagClick(tag) {
+      bookmarksState.activeTag = bookmarksState.activeTag === tag ? null : tag;
+      renderTagCloud(tagCloud, bookmarksState.all, onTagClick);
+      applyFilters();
+    }
+    renderTagCloud(tagCloud, bookmarksState.all, onTagClick);
+
+    searchInput.addEventListener("input", () => {
+      bookmarksState.search = searchInput.value;
+      applyFilters();
+    });
+
+    if (!items.length) {
+      listWrap.append(el("div", { className: "empty", textContent: "Keine Bookmarks. Per Rechtsklick auf Webseiten oder mit '+ Bookmark hinzufügen'." }));
+      return;
+    }
+    applyFilters();
+  } catch (err) {
+    status.textContent = `Fehler: ${err.message || err}`;
+    status.className = "tool-status error";
+  }
+}
+
+function renderTagCloud(target, items, onTagClick) {
+  target.replaceChildren();
+  const counts = {};
+  for (const b of items) {
+    if (b.themen) for (const t of b.themen) counts[t] = (counts[t] || 0) + 1;
+  }
+  const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  if (!sorted.length) return;
+  for (const tag of sorted) {
+    const pill = el("button", {
+      type: "button",
+      textContent: `#${tag} ${counts[tag]}`,
+      className: "tag-pill" + (bookmarksState.activeTag === tag ? " active" : ""),
+    });
+    pill.addEventListener("click", () => onTagClick(tag));
+    target.append(pill);
+  }
+  if (bookmarksState.activeTag) {
+    const clear = el("button", { type: "button", textContent: "× Filter aufheben", className: "tag-pill clear" });
+    clear.addEventListener("click", () => onTagClick(bookmarksState.activeTag));
+    target.append(clear);
+  }
+}
+
+function renderBookmarksList(httpBase, target, items) {
+  target.replaceChildren();
+  if (!items.length) {
+    target.append(el("div", { className: "empty", textContent: "(keine Bookmarks matchen den Filter)" }));
+    return;
+  }
+  // Group by first thema
+  const groups = {};
+  for (const b of items) {
+    const key = (b.themen && b.themen[0]) || "(Ohne Tag)";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(b);
+  }
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === "(Ohne Tag)") return 1;
+    if (b === "(Ohne Tag)") return -1;
+    return a.localeCompare(b);
+  });
+  for (const key of sortedKeys) {
+    const section = el("div", { className: "playlist-group" });
+    section.append(el("h4", { className: "playlist-group-header", textContent: key }));
+    const sectionList = el("div", { className: "bookmark-list" });
+    section.append(sectionList);
+    for (const b of groups[key]) {
+      sectionList.append(renderBookmarkCard(httpBase, b));
+    }
+    target.append(section);
+  }
+}
+
+function renderBookmarkCard(httpBase, b) {
+  const card = el("div", { className: "bookmark-card" });
+  const head = el("div", { className: "bookmark-head" });
+  const titleLink = el("a", { textContent: b.title, href: b.url, target: "_blank" });
+  titleLink.rel = "noopener noreferrer";
+  head.append(titleLink);
+  head.append(el("span", { className: "bookmark-date", textContent: b.date }));
+  card.append(head);
+  if (b.note) card.append(el("div", { className: "bookmark-note", textContent: b.note }));
+  const meta = el("div", { className: "bookmark-meta" });
+  const left = el("span");
+  if (b.source) left.append(el("span", { textContent: `quelle: ${b.source}` }));
+  if (b.themen && b.themen.length) {
+    if (b.source) left.append(el("span", { textContent: " · " }));
+    left.append(el("span", { textContent: b.themen.map((t) => `#${t}`).join(" ") }));
+  }
+  meta.append(left);
+  const actions = el("span", { className: "bookmark-actions" });
+  const editBtn = el("button", { type: "button", textContent: "✎", className: "small", title: "Bearbeiten" });
+  editBtn.addEventListener("click", () => showEditBookmarkDialog(httpBase, b, () => renderBookmarksTool()));
+  actions.append(editBtn);
+  const delBtn = el("button", { type: "button", textContent: "Löschen", className: "small" });
+  delBtn.addEventListener("click", async () => {
+    if (!confirm(`'${b.title}' löschen?`)) return;
+    const matchValue = b.url || b.title;
+    const r = await fetch(`${httpBase}/tools/bookmarks/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match: matchValue, date: b.date || null }),
+    });
+    if (r.ok) renderBookmarksTool();
+    else { const e = await r.json().catch(() => ({})); alert(`Fehler ${r.status}: ${e.detail || ""}`); }
+  });
+  actions.append(delBtn);
+  meta.append(actions);
+  card.append(meta);
+  return card;
+}
+
+function showEditBookmarkDialog(httpBase, bookmark, onSaved) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker" });
+  dialog.append(el("h3", { textContent: "Bookmark bearbeiten" }));
+
+  const titleInput = el("input", { type: "text", placeholder: "Titel", value: bookmark.title || "" });
+  const noteInput = el("input", { type: "text", placeholder: "Notiz (optional)", value: bookmark.note || "" });
+  const themenInput = el("input", {
+    type: "text",
+    placeholder: "Themen (Komma-getrennt)",
+    value: (bookmark.themen || []).join(", "),
+  });
+  const status = el("div", { className: "tool-status" });
+  const actions = el("div", { className: "playlist-picker-actions" });
+  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
+  const ok = el("button", { type: "button", textContent: "Speichern", className: "primary" });
+  actions.append(cancel, ok);
+  dialog.append(
+    el("div", { className: "remove-dialog-info", textContent: bookmark.url }),
+    titleInput, noteInput, themenInput, status, actions,
+  );
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  cancel.addEventListener("click", () => overlay.remove());
+  ok.addEventListener("click", async () => {
+    const themen = themenInput.value
+      .split(",")
+      .map((t) => t.trim().replace(/^#/, "").toLowerCase())
+      .filter((t) => /^[a-z][\w\-/]*$/.test(t));
+    ok.disabled = true; status.textContent = "speichere...";
+    try {
+      const r = await fetch(`${httpBase}/tools/bookmarks/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          match: bookmark.url || bookmark.title,
+          date: bookmark.date || null,
+          title: titleInput.value.trim(),
+          note: noteInput.value.trim() || null,
+          themen,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        status.textContent = `Fehler ${r.status}: ${err.detail || ""}`;
+        status.className = "tool-status error";
+        ok.disabled = false;
+        return;
+      }
+      overlay.remove();
+      onSaved && onSaved();
+    } catch (err) {
+      status.textContent = `Fehler: ${err.message || err}`;
+      status.className = "tool-status error";
+      ok.disabled = false;
+    }
+  });
+  titleInput.focus();
+}
+
+function showAddBookmarkDialog(httpBase, onAdded) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "playlist-picker" });
+  dialog.append(el("h3", { textContent: "Bookmark hinzufügen" }));
+
+  const urlInput = el("input", { type: "url", placeholder: "https://..." });
+  const titleInput = el("input", { type: "text", placeholder: "Titel (optional, sonst URL)" });
+  const noteInput = el("input", { type: "text", placeholder: "Notiz (optional)" });
+  const themenInput = el("input", { type: "text", placeholder: "Themen (Komma-getrennt: ki, recherche, tech)" });
+  const status = el("div", { className: "tool-status" });
+  const actions = el("div", { className: "playlist-picker-actions" });
+  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
+  const ok = el("button", { type: "button", textContent: "Hinzufügen", className: "primary" });
+  actions.append(cancel, ok);
+  dialog.append(urlInput, titleInput, noteInput, themenInput, status, actions);
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  cancel.addEventListener("click", () => overlay.remove());
+  ok.addEventListener("click", async () => {
+    const url = urlInput.value.trim();
+    if (!url) { status.textContent = "URL ist Pflicht"; status.className = "tool-status error"; return; }
+    const themen = themenInput.value
+      .split(",")
+      .map((t) => t.trim().replace(/^#/, "").toLowerCase())
+      .filter((t) => /^[a-z][\w\-/]*$/.test(t));
+    ok.disabled = true; status.textContent = "speichere...";
+    try {
+      const r = await fetch(`${httpBase}/tools/bookmarks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          title: titleInput.value.trim() || null,
+          note: noteInput.value.trim() || null,
+          source: "sidepanel",
+          themen: themen.length ? themen : null,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        status.textContent = `Fehler ${r.status}: ${err.detail || ""}`;
+        status.className = "tool-status error";
+        ok.disabled = false;
+        return;
+      }
+      overlay.remove();
+      onAdded && onAdded();
+    } catch (err) {
+      status.textContent = `Fehler: ${err.message || err}`;
+      status.className = "tool-status error";
+      ok.disabled = false;
+    }
+  });
+  urlInput.focus();
 }
 
 function el(tag, props = {}) {
