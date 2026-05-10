@@ -108,10 +108,16 @@ function scrapeYouTubeTranscript() {
       const start = Date.now();
 
       function findPanel() {
+        // Engagement-Panel-Wrapper hat verschiedene target-id-Werte je YouTube-Version
         return (
           document.querySelector(
             'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]',
           ) ||
+          document.querySelector(
+            'ytd-engagement-panel-section-list-renderer[target-id*="transcript"]',
+          ) ||
+          // Neue Lit-Components (yt-prefix statt ytd-prefix)
+          document.querySelector('yt-section-list-renderer') ||
           document.querySelector("ytd-transcript-renderer") ||
           document.querySelector("ytd-transcript-segment-list-renderer") ||
           document.querySelector("ytd-transcript-search-panel-renderer")
@@ -120,7 +126,7 @@ function scrapeYouTubeTranscript() {
 
       function collectSegments(panel) {
         let text = "";
-        // Alte Renderer
+        // Alte Polymer-Renderer
         const oldEls = panel.querySelectorAll("ytd-transcript-segment-renderer");
         if (oldEls.length > 0) {
           oldEls.forEach((el) => {
@@ -130,7 +136,7 @@ function scrapeYouTubeTranscript() {
           });
           return { count: oldEls.length, text };
         }
-        // Neue View-Model-Renderer
+        // View-Model-Renderer (Übergangsphase)
         const newEls = panel.querySelectorAll("transcript-segment-view-model");
         if (newEls.length > 0) {
           newEls.forEach((el) => {
@@ -142,15 +148,34 @@ function scrapeYouTubeTranscript() {
           });
           return { count: newEls.length, text };
         }
-        // Fallback: generisch nach Listenelementen mit Timestamp + Text
+        // Neue Lit-Components: yt-item-section-renderer / yt-section-list-renderer
+        const litEls = panel.querySelectorAll("yt-item-section-renderer, yt-section-renderer");
+        if (litEls.length > 0) {
+          litEls.forEach((el) => {
+            // Innerhalb der Lit-Components stecken die Segments — extrahiere generisch
+            const time = el.querySelector('[class*="timestamp" i], [class*="Timestamp"], yt-formatted-string[id*="time" i]')?.textContent?.trim() || "";
+            const tx = el.querySelector('[class*="snippet-text" i], yt-formatted-string[role="text"], span[role="text"], yt-formatted-string')?.textContent?.trim() || "";
+            if (tx) text += `[${time}] ${tx}\n`;
+          });
+          return { count: litEls.length, text };
+        }
+        // Fallback 1: generische Listitems mit Timestamp + Text
         const generic = panel.querySelectorAll('[role="listitem"], div[class*="segment"]');
         if (generic.length > 0) {
           generic.forEach((el) => {
             const time = el.querySelector('[class*="timestamp" i], [class*="Timestamp"]')?.textContent?.trim() || "";
-            const tx = el.querySelector('[class*="text" i] yt-formatted-string, span[role="text"]')?.textContent?.trim() || "";
+            const tx = el.querySelector('[class*="text" i] yt-formatted-string, span[role="text"], yt-formatted-string')?.textContent?.trim() || "";
             if (tx) text += `[${time}] ${tx}\n`;
           });
           return { count: generic.length, text };
+        }
+        // Fallback 2: TreeWalker — extrahiere alle Text-Nodes, die einem Timestamp-Pattern folgen
+        // Robust gegen Selector-Wandel, aber unschöner Output (keine Trennung)
+        const allText = panel.textContent || "";
+        const matches = allText.match(/(\d+:\d+(?::\d+)?)[\s ]+([^\n\d][^\n]+)/g);
+        if (matches && matches.length > 0) {
+          matches.forEach((m) => { text += m + "\n"; });
+          return { count: matches.length, text };
         }
         return { count: 0, text: "" };
       }
