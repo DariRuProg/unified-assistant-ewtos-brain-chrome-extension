@@ -114,7 +114,17 @@ function scrapeYouTubeTranscript() {
       const start = Date.now();
 
       function findPanel() {
-        // Engagement-Panel-Wrapper hat verschiedene target-id-Werte je YouTube-Version
+        // Engagement-Panel-Wrapper hat verschiedene target-id-Werte je YouTube-Version.
+        // Reihenfolge: neue modern_transcript-Variante zuerst (enthält tatsächlich
+        // gerenderte Segments), das alte searchable_transcript-Panel als Fallback
+        // (kann leer/Spinner sein, wenn YouTube parallel die neue Variante ausspielt).
+        const panels = document.querySelectorAll(
+          "ytd-engagement-panel-section-list-renderer",
+        );
+        for (const p of panels) {
+          const id = (p.getAttribute("target-id") || "").toLowerCase();
+          if (id.includes("modern_transcript") || id.includes("modern-transcript")) return p;
+        }
         return (
           document.querySelector(
             'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"]',
@@ -164,6 +174,28 @@ function scrapeYouTubeTranscript() {
             if (tx) text += `[${time}] ${tx}\n`;
           });
           return { count: litEls.length, text };
+        }
+        // Macro-Markers-Panel (neue Variante mit Kapiteln) — DOM-weit suchen,
+        // weil die Komponenten u.U. außerhalb des erkannten Panel-Wrappers liegen
+        // (eigene Web-Component-Hierarchie, parallel zu engagement-panel-*).
+        const macroEls = document.querySelectorAll("macro-markers-panel-item-view-model");
+        if (macroEls.length > 0) {
+          let macroCount = 0;
+          macroEls.forEach((el) => {
+            const chapter = el.querySelector("h3.ytwTimelineChapterViewModelTitle");
+            if (chapter) {
+              const title = chapter.textContent.trim();
+              if (title) text += `\n## ${title}\n`;
+              return;
+            }
+            const ts = el.querySelector("div.ytwTranscriptSegmentViewModelTimestamp");
+            const tx = el.querySelector("span.ytAttributedStringHost");
+            if (ts && tx) {
+              text += `[${ts.textContent.trim()}] ${tx.textContent.trim()}\n`;
+              macroCount++;
+            }
+          });
+          if (macroCount > 0) return { count: macroCount, text };
         }
         // Fallback 1: generische Listitems mit Timestamp + Text
         const generic = panel.querySelectorAll('[role="listitem"], div[class*="segment"]');
