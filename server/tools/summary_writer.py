@@ -8,9 +8,8 @@ import re
 from datetime import date
 from pathlib import Path
 
-import anthropic
-
 import settings
+from llm_client import effective_llm_config, get_backend
 from tools import saeulen, videos
 
 
@@ -71,18 +70,16 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
     title = fm.get("titel") or video_slug
     channel = fm.get("youtuber") or "(unbekannt)"
 
-    api_key = settings.get("anthropic_api_key")
-    if not api_key:
-        raise ValueError("Kein Anthropic-API-Key in den Settings")
-    model = settings.get("chat_model") or "claude-haiku-4-5"
+    _, model = effective_llm_config()
+    model = model or "claude-haiku-4-5"
 
-    client = anthropic.Anthropic(api_key=api_key)
+    backend = get_backend()
     prompt = SUMMARY_PROMPT.format(
         title=title,
         channel=channel,
         transcript=transcript_text[:80000],  # safety cap
     )
-    response = client.messages.create(
+    response = backend.complete(
         model=model,
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],

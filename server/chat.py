@@ -12,9 +12,8 @@ from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
-import anthropic
-
 import settings
+from llm_client import effective_llm_config, get_backend
 from tools import bookmarks, notes_file, playlists, raw_promoter, videos, wiki_reader
 
 log = logging.getLogger("ewtosbrain.chat")
@@ -544,15 +543,13 @@ def send(vault_id: str, user_message: str) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
         raise LookupError(f"Vault {vault_id} nicht gefunden")
-    api_key = settings.get("anthropic_api_key")
-    if not api_key:
-        raise ValueError("Kein Anthropic API-Key in den Einstellungen hinterlegt")
 
     user_message = (user_message or "").strip()
     if not user_message:
         raise ValueError("Leere Nachricht")
 
-    model = settings.get("chat_model") or DEFAULT_MODEL
+    _, model = effective_llm_config()
+    model = model or DEFAULT_MODEL
     max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
     system_prompt, _ = _build_system_prompt(vault)
     vault_path = vault["path"]
@@ -562,7 +559,7 @@ def send(vault_id: str, user_message: str) -> dict:
 
     api_messages = [dict(m) for m in _trim_history(history, max_turns)]
 
-    client = anthropic.Anthropic(api_key=api_key)
+    backend = get_backend()
     tool_iterations = 0
     consulted_files: list[str] = []
 
@@ -570,7 +567,7 @@ def send(vault_id: str, user_message: str) -> dict:
         if tool_iterations >= MAX_TOOL_ITERATIONS:
             raise RuntimeError(f"Tool-Loop hat das Iterations-Limit ({MAX_TOOL_ITERATIONS}) erreicht")
 
-        response = client.messages.create(
+        response = backend.complete(
             model=model,
             max_tokens=MAX_TOKENS_RESPONSE,
             system=[
@@ -650,16 +647,13 @@ def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
         if not vault:
             yield _sse("error", {"message": f"Vault {vault_id} nicht gefunden"})
             return
-        api_key = settings.get("anthropic_api_key")
-        if not api_key:
-            yield _sse("error", {"message": "Kein Anthropic API-Key in den Einstellungen hinterlegt"})
-            return
         user_message = (user_message or "").strip()
         if not user_message:
             yield _sse("error", {"message": "Leere Nachricht"})
             return
 
-        model = settings.get("chat_model") or DEFAULT_MODEL
+        _, model = effective_llm_config()
+        model = model or DEFAULT_MODEL
         max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
         system_prompt, _ = _build_system_prompt(vault)
         vault_path = vault["path"]
@@ -668,7 +662,7 @@ def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
         history.append({"role": "user", "content": user_message})
         api_messages = [dict(m) for m in _trim_history(history, max_turns)]
 
-        client = anthropic.Anthropic(api_key=api_key)
+        backend = get_backend()
         tool_iterations = 0
         consulted: list[str] = []
         accumulated_text: list[str] = []
@@ -684,20 +678,18 @@ def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
                 yield _sse("error", {"message": f"Tool-Loop hat das Iterations-Limit ({MAX_TOOL_ITERATIONS}) erreicht"})
                 return
 
-            with client.messages.stream(
+            stream = backend.stream_complete(
                 model=model,
                 max_tokens=MAX_TOKENS_RESPONSE,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 tools=TOOL_DEFS,
                 messages=api_messages,
-            ) as stream:
-                for event in stream:
-                    if event.type == "content_block_delta" and event.delta.type == "text_delta":
-                        chunk = event.delta.text
-                        accumulated_text.append(chunk)
-                        yield _sse("text_delta", {"text": chunk})
+            )
+            for chunk in stream:
+                accumulated_text.append(chunk)
+                yield _sse("text_delta", {"text": chunk})
 
-                final_message = stream.get_final_message()
+            final_message = stream.get_final_result()
 
             usage_total["input_tokens"] += final_message.usage.input_tokens
             usage_total["output_tokens"] += final_message.usage.output_tokens
@@ -742,18 +734,15 @@ def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
 
 
 def generate_system_prompt(vault_path: str) -> dict:
-    """Read CLAUDE.md from the vault and ask Claude to generate a system prompt."""
-    api_key = settings.get("anthropic_api_key")
-    if not api_key:
-        raise ValueError("Kein Anthropic API-Key — kann keinen Prompt generieren. Trage einen Key in den Einstellungen ein oder verwende den 'Anweisung kopieren'-Button.")
-
+    """Read CLAUDE.md from the vault and ask the LLM to generate a system prompt."""
     claude_md = wiki_reader.find_claude_md(vault_path)
     if not claude_md:
         raise FileNotFoundError(f"Keine CLAUDE.md im Vault-Pfad oder dessen Parent gefunden: {vault_path}")
 
-    model = settings.get("chat_model") or DEFAULT_MODEL
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
+    _, model = effective_llm_config()
+    model = model or DEFAULT_MODEL
+    backend = get_backend()
+    response = backend.complete(
         model=model,
         max_tokens=4000,
         messages=[{"role": "user", "content": generator_instruction(claude_md)}],
