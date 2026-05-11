@@ -20,7 +20,13 @@ from pathlib import Path
 from typing import Any
 
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
-EDITABLE_KEYS = {"anthropic_api_key", "chat_model", "max_user_turns"}
+EDITABLE_KEYS = {
+    "anthropic_api_key",
+    "chat_model",
+    "max_user_turns",
+    "llm_provider",
+    "llm_model",
+}
 SECRET_KEYS = {"anthropic_api_key"}
 SECRET_ENV_MAP = {"anthropic_api_key": "ANTHROPIC_API_KEY"}
 
