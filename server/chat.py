@@ -48,13 +48,13 @@ BASE_SYSTEM_PROMPT = """Du bist ein Assistent für einen Markdown-Vault. Du hilf
 - `add_bookmark(url, title?, note?, source?)` — neuen Bookmark anhängen, Datum automatisch.
 - `delete_bookmark(match)` — Substring-Match auf Titel oder URL. Bei Mehrdeutigkeit Fehler — dann Nutzer fragen.
 
-**Playlists** (`wiki/ki/playlists/<slug>.md` im aktiven Vault) — themen-kuratierte Sammlungen (z.B. „KI", „Fitness", „Gesundheit"). Erfordert `write_playlists`-Recht auf dem aktiven Vault. Bei Permission-Fehler den Fehler 1:1 weitergeben:
-- `list_playlists(saeule?)` — Playlists eines Vaults zeigen. Ohne `saeule` über alle erlaubten Säulen, mit z.B. `saeule="ki"` nur eine. Jeder Eintrag enthält ein `saeule`-Feld.
-- `create_playlist(name, thema?, saeule?)` — neue Playlist anlegen unter `wiki/<saeule>/playlists/<slug>.md`. `saeule` defaultet auf `ki`. `thema` ist ein freier Frontmatter-String.
-- `add_to_playlist(name, url, title?, dauer?, saeule?)` — Eintrag hinzufügen. Master-Video-Page wird in derselben Säule angelegt. `saeule` defaultet auf `ki` und MUSS zur Playlist passen.
-- `remove_from_playlist(name, match, saeule?)` — Eintrag per Substring-Match löschen. `saeule` defaultet auf `ki`.
+**Playlists** (`wiki/<saeule>/playlists/<slug>.md` im aktiven Vault, z.B. `wiki/knowledge-library/ai/playlists/...`) — themen-kuratierte Sammlungen. Erfordert `write_playlists`-Recht auf dem aktiven Vault. Bei Permission-Fehler den Fehler 1:1 weitergeben:
+- `list_playlists(saeule?)` — Playlists eines Vaults zeigen. Ohne `saeule` über alle erlaubten Säulen, mit z.B. `saeule="knowledge-library/ai"` nur eine. Jeder Eintrag enthält ein `saeule`-Feld.
+- `create_playlist(name, thema?, saeule?)` — neue Playlist anlegen unter `wiki/<saeule>/playlists/<slug>.md`. `saeule` defaultet auf `knowledge-library/ai`. `thema` ist ein freier Frontmatter-String.
+- `add_to_playlist(name, url, title?, dauer?, saeule?)` — Eintrag hinzufügen. Master-Video-Page wird in derselben Säule angelegt. `saeule` defaultet auf `knowledge-library/ai` und MUSS zur Playlist passen.
+- `remove_from_playlist(name, match, saeule?)` — Eintrag per Substring-Match löschen. `saeule` defaultet auf `knowledge-library/ai`.
 
-**Säulen-Hinweis:** Wenn der Nutzer ein Thema klar nicht-KI nennt (Gesundheit, Fitness, Tech, ...), frage gezielt nach der Säule oder schlage eine vor. Erlaubte Säulen sind in `tools/saeulen.py` whitelisted; neue Säulen erfordern erst eine Schema-Erweiterung in der Vault-CLAUDE.md.
+**Säulen-Hinweis:** Wenn der Nutzer ein Thema klar außerhalb von `knowledge-library/ai` nennt (Health, Marketing, Spirituality, Industries, Work/Crafts, ...), frage gezielt nach der Säule oder schlage eine vor. Erlaubte Säulen sind in `tools/saeulen.py` whitelisted; neue Säulen erfordern erst eine Schema-Erweiterung in der Vault-CLAUDE.md.
 
 Nutze die Tools wenn der Nutzer sagt: „leg playlist X an", „füg [URL] zu meiner [name]-Playlist hinzu", „zeig meine playlists", „nimm das aus der playlist raus".
 
@@ -244,23 +244,23 @@ TOOL_DEFS = [
     },
     {
         "name": "list_playlists",
-        "description": "Listet Playlists des aktiven Vaults pro Säule. Ohne saeule-Parameter werden Playlists aus ALLEN erlaubten Säulen aufgelistet — der Eintrag enthält ein `saeule`-Feld zur Identifikation. Mit saeule (z.B. 'ki') wird gefiltert. Erfordert write_playlists-Recht.",
+        "description": "Listet Playlists des aktiven Vaults pro Säule. Ohne saeule-Parameter werden Playlists aus ALLEN erlaubten Säulen aufgelistet — der Eintrag enthält ein `saeule`-Feld zur Identifikation. Mit saeule (z.B. 'knowledge-library/ai') wird gefiltert. Erfordert write_playlists-Recht.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "saeule": {"type": "string", "description": "Optional. Wiki-Säule (z.B. 'ki', 'tech/wordpress'). Ohne Param: alle Säulen."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule (z.B. 'knowledge-library/ai', 'work/crafts/web-development/skills/wordpress'). Ohne Param: alle Säulen."},
             },
         },
     },
     {
         "name": "create_playlist",
-        "description": "Legt eine neue Playlist an unter wiki/<saeule>/playlists/<slug>.md mit Frontmatter (typ:ki, status:aktiv, optional thema). Bei doppeltem Namen in derselben Säule Fehler.",
+        "description": "Legt eine neue Playlist an unter wiki/<saeule>/playlists/<slug>.md mit Frontmatter (typ, status:aktiv, optional thema). Bei doppeltem Namen in derselben Säule Fehler.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Lesbarer Name, z.B. 'KI Tutorials'"},
-                "thema": {"type": "string", "description": "Optional. Frontmatter-Property (frei, z.B. 'ki', 'gesundheit')."},
-                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
+                "thema": {"type": "string", "description": "Optional. Frontmatter-Property (frei, z.B. 'ki', 'health', 'seo')."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'knowledge-library/ai'."},
             },
             "required": ["name"],
         },
@@ -276,7 +276,7 @@ TOOL_DEFS = [
                 "title": {"type": "string", "description": "Sichtbarer Titel des Videos"},
                 "youtuber": {"type": "string", "description": "Optional. Channel-Name / YouTuber."},
                 "dauer": {"type": "string", "description": "Optional. Format HH:MM oder MM:SS."},
-                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'knowledge-library/ai'."},
             },
             "required": ["name", "url", "title"],
         },
@@ -289,7 +289,7 @@ TOOL_DEFS = [
             "properties": {
                 "name": {"type": "string", "description": "Playlist-Name"},
                 "match": {"type": "string", "description": "Substring von Titel oder URL"},
-                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'ki'."},
+                "saeule": {"type": "string", "description": "Optional. Wiki-Säule. Default 'knowledge-library/ai'."},
             },
             "required": ["name", "match"],
         },

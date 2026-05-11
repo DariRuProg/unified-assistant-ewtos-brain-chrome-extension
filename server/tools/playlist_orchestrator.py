@@ -42,7 +42,7 @@ async def pull_pending_transcripts(
     """Hole alle pending Transcripts einer Playlist seriell ab.
 
     Args:
-        vault_id, playlist_name, saeule: identifizieren die Playlist (Default 'ki').
+        vault_id, playlist_name, saeule: identifizieren die Playlist (Default 'knowledge-library/ai').
         bridge: ExtensionBridge-Instanz aus main.py (für `bridge.call`).
         with_timestamps: wenn True, Transcript mit `[HH:MM:SS]`-Prefix.
         summarize: wenn True, ruft pro erfolgreich-transcribed Item zusätzlich

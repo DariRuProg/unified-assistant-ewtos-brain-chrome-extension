@@ -151,8 +151,10 @@ def delete_bookmark(match: str) -> dict:
 # --- Playlists (wiki/<saeule>/playlists/) ---------------------------------
 
 _SAEULE_DOC = (
-    "saeule: Wiki-Säule (z.B. 'ki', 'tech/wordpress', 'branchen/medizin'). "
-    "Default 'ki'. Erlaubte Werte siehe `tools/saeulen.py`."
+    "saeule: Wiki-Säule (z.B. 'knowledge-library/ai', "
+    "'work/crafts/web-development/skills/wordpress', "
+    "'knowledge-library/industries/medical'). "
+    "Default 'knowledge-library/ai'. Erlaubte Werte siehe `tools/saeulen.py`."
 )
 
 
@@ -161,8 +163,8 @@ def list_playlists(vault_id: str, saeule: str | None = None) -> list[dict]:
     """Listet Playlists eines Vaults mit Item-Count.
 
     saeule=None liefert Playlists aus ALLEN erlaubten Säulen.
-    saeule='ki'|'tech/wordpress'|... filtert auf eine Säule.
-    Jeder Eintrag enthält ein `saeule`-Feld zur Identifikation.
+    saeule='knowledge-library/ai'|'work/crafts/web-development/skills/wordpress'|...
+    filtert auf eine Säule. Jeder Eintrag enthält ein `saeule`-Feld zur Identifikation.
     """
     return playlists.list_playlists(vault_id, saeule=saeule)
 
@@ -171,7 +173,7 @@ def list_playlists(vault_id: str, saeule: str | None = None) -> list[dict]:
 def get_playlist(vault_id: str, name: str, saeule: str | None = None) -> dict:
     """Gibt eine Playlist mit allen Items (Titel, Channel, URL, Page-Link) zurück.
 
-    saeule defaultet auf 'ki', wenn nicht angegeben.
+    saeule defaultet auf 'knowledge-library/ai', wenn nicht angegeben.
     """
     return playlists.get_playlist(vault_id, name, saeule=saeule)
 
@@ -185,8 +187,8 @@ def create_playlist(
 ) -> dict:
     """Legt eine neue Playlist unter wiki/<saeule>/playlists/<slug>.md an.
 
-    `thema` optional (Frontmatter-Property, z.B. 'ki', 'gesundheit').
-    `saeule` defaultet auf 'ki'.
+    `thema` optional (Frontmatter-Property, z.B. 'ki', 'health', 'seo').
+    `saeule` defaultet auf 'knowledge-library/ai'.
     """
     return playlists.create_playlist(vault_id, name, thema=thema, saeule=saeule)
 
@@ -204,8 +206,8 @@ def add_to_playlist(
     """Fügt ein Video zu einer Playlist hinzu (legt Master-Video-Page in
     wiki/<saeule>/videos/ an oder erweitert die playlists-Liste, falls existiert).
 
-    `saeule` muss zur Playlist passen (Default 'ki'). Master-Video-Page wird
-    in derselben Säule angelegt.
+    `saeule` muss zur Playlist passen (Default 'knowledge-library/ai'). Master-Video-Page
+    wird in derselben Säule angelegt.
     """
     return playlists.add_to_playlist(
         vault_id,
@@ -227,7 +229,7 @@ def remove_from_playlist(
 ) -> dict:
     """Entfernt ein Item aus einer Playlist per Substring-Match (Titel oder URL).
 
-    `saeule` defaultet auf 'ki'.
+    `saeule` defaultet auf 'knowledge-library/ai'.
     """
     return playlists.remove_from_playlist(vault_id, name, match, saeule=saeule)
 
@@ -238,7 +240,7 @@ def remove_from_playlist(
 def get_video(vault_id: str, slug: str, saeule: str | None = None) -> dict | None:
     """Lädt eine Video-Page (Frontmatter + Body) per Slug. None wenn nicht gefunden.
 
-    `saeule` defaultet auf 'ki'.
+    `saeule` defaultet auf 'knowledge-library/ai'.
     """
     return videos.get_video(vault_id, slug, saeule=saeule)
 
@@ -255,8 +257,8 @@ def upsert_video(
 ) -> dict:
     """Legt eine Video-Page an oder ergänzt sie (idempotent per URL/Slug).
 
-    `saeule` defaultet auf 'ki'. Wenn Video bereits in einer anderen Säule
-    existiert, wird in der angegebenen Säule eine zweite Master-Page erstellt
+    `saeule` defaultet auf 'knowledge-library/ai'. Wenn Video bereits in einer anderen
+    Säule existiert, wird in der angegebenen Säule eine zweite Master-Page erstellt
     (bekannte Limitation, siehe Plan).
     """
     return videos.upsert_video(
@@ -317,7 +319,7 @@ def save_transcript(
     einer anderen Quelle). Für YouTube-Pull aus dem Browser:
     `pull_transcript_via_extension`.
 
-    `saeule` muss zur Video-Master-Page passen (Default 'ki').
+    `saeule` muss zur Video-Master-Page passen (Default 'knowledge-library/ai').
     """
     return transcript_writer.save_transcript(
         vault_id,
@@ -343,7 +345,7 @@ def pull_pending_transcripts(
 
     Long-running: pro Item ~10-15s, deshalb httpx-Timeout 900s (15 Min).
 
-    `saeule` defaultet auf 'ki'. `summarize` ist absichtlich NICHT exposed —
+    `saeule` defaultet auf 'knowledge-library/ai'. `summarize` ist absichtlich NICHT exposed —
     Claude Code soll Summaries selbst auf eigener Subscription schreiben.
 
     Returns: Statistik {total, transcribed, skipped_already_done, failed: [...],

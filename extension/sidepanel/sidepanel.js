@@ -1372,7 +1372,7 @@ async function renderPlaylistsTool() {
     // Group by saeule
     const groups = {};
     for (const p of items) {
-      const k = p.saeule || "ki";
+      const k = p.saeule || "knowledge-library/ai";
       if (!groups[k]) groups[k] = [];
       groups[k].push(p);
     }
@@ -1405,7 +1405,7 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
 
   const nameInput = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
   const themaInput = el("input", { type: "text", placeholder: "Thema (frei, optional)" });
-  const saeuleInput = el("input", { type: "text", placeholder: "Säule (z.B. ki, tech/wordpress)", value: "ki" });
+  const saeuleInput = el("input", { type: "text", placeholder: "Säule (z.B. knowledge-library/ai, work/crafts/web-development/skills/wordpress)", value: "knowledge-library/ai" });
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "playlist-picker-actions" });
   const cancel = el("button", { type: "button", textContent: "Abbrechen" });
@@ -1420,7 +1420,7 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   ok.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     if (!name) { status.textContent = "Name ist Pflicht"; status.className = "tool-status error"; return; }
-    const saeule = saeuleInput.value.trim() || "ki";
+    const saeule = saeuleInput.value.trim() || "knowledge-library/ai";
     const body = { name, thema: themaInput.value.trim() || null };
     ok.disabled = true; status.textContent = "lege an...";
     try {
@@ -2160,7 +2160,7 @@ function showMultiYoutubePicker(httpBase, vault, items) {
   // Neue Playlist Section
   const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neue Playlist anlegen:" });
   const newName = el("input", { type: "text", placeholder: "Name (z.B. Karpathy-Videos)", value: autoPlaylistName });
-  const newSaeule = el("input", { type: "text", placeholder: "Säule (default: ki)", value: "ki" });
+  const newSaeule = el("input", { type: "text", placeholder: "Säule (default: knowledge-library/ai)", value: "knowledge-library/ai" });
   const createBtn = el("button", { type: "button", textContent: "Anlegen + alle hinzufügen", className: "primary" });
   dialog.append(sep, newName, newSaeule, createBtn);
 
@@ -2194,7 +2194,7 @@ function showMultiYoutubePicker(httpBase, vault, items) {
 
   createBtn.addEventListener("click", async () => {
     const name = newName.value.trim();
-    const saeule = newSaeule.value.trim() || "ki";
+    const saeule = newSaeule.value.trim() || "knowledge-library/ai";
     if (!name) { status.textContent = "Name fehlt"; status.className = "tool-status error"; return; }
     createBtn.disabled = true;
     status.textContent = "lege Playlist an…";

@@ -5,52 +5,51 @@ EwtosBrain legt Videos und Playlists pro Wiki-Säule ab (`wiki/<saeule>/videos/`
 erlaubte Säulen-Werte.
 
 WICHTIG: Diese Liste muss synchron mit dem Säulen-Schema in der
-Vault-CLAUDE.md (Sektion "Die acht Wiki-Säulen") bleiben. Wenn dort eine
-neue Säule angelegt wird, hier ergänzen.
+Vault-CLAUDE.md (Trennlinien-Sektion) bleiben. Wenn dort eine neue
+Säule angelegt wird, hier ergänzen.
 
-Sperrzonen (`privat/*`) sind absichtlich NICHT in der Whitelist — Videos
-dort gehören manuell angelegt, nicht via App.
+Sperrzonen (`personal/*`) sind absichtlich NICHT in der Whitelist —
+Videos dort gehören manuell angelegt, nicht via App.
 """
 from __future__ import annotations
 
 ALLOWED_SAEULEN: set[str] = {
-    "ki",
-    "tech",
-    "branchen",
-    "kunden",
-    "kunden-deliverables",
-    "projekte",
-    "produkte",
-    "gesundheit",
+    "knowledge-library/ai",
+    "knowledge-library/industries",
+    "knowledge-library/marketing",
+    "knowledge-library/health",
+    "knowledge-library/spirituality",
 }
 
 ALLOWED_SUB_SAEULEN: set[str] = {
-    "branchen/medizin",
-    "branchen/e-commerce",
-    "branchen/handwerk",
-    "tech/wordpress",
-    "tech/nextjs",
-    "tech/n8n",
-    "tech/claude-code",
-    "tech/chrome-extensions",
-    "tech/mcp-api",
+    "knowledge-library/industries/medical",
+    "knowledge-library/industries/ecommerce",
+    "knowledge-library/industries/crafts-trades",
+    "knowledge-library/ai/chatbots",
+    "knowledge-library/marketing/seo",
+    "work/crafts/web-development/skills/wordpress",
+    "work/crafts/web-development/skills/nextjs",
+    "work/crafts/web-development/skills/automation",
+    "work/crafts/web-development/skills/claude-code",
+    "work/crafts/web-development/skills/chrome-extensions",
+    "work/crafts/web-development/skills/mcp-api",
 }
 
-DEFAULT_SAEULE = "ki"
+DEFAULT_SAEULE = "knowledge-library/ai"
 
 
 def validate_saeule(saeule: str | None) -> str:
-    """Prüft, ob die angegebene Säule erlaubt ist. Bei None: Default 'ki'.
+    """Prüft, ob die angegebene Säule erlaubt ist. Bei None: Default 'knowledge-library/ai'.
 
     Akzeptiert nur Werte aus ALLOWED_SAEULEN oder ALLOWED_SUB_SAEULEN.
-    Privat-Bereiche werden mit klarer Fehlermeldung abgelehnt.
+    Personal-Bereiche werden mit klarer Fehlermeldung abgelehnt.
     """
     s = (saeule or DEFAULT_SAEULE).strip().strip("/")
     if not s:
         return DEFAULT_SAEULE
-    if s.startswith("privat") or s.startswith("privat/"):
+    if s.startswith("personal") or s.startswith("personal/"):
         raise ValueError(
-            f"Säule '{s}' ist Sperrzone — Videos in wiki/privat/* manuell anlegen, "
+            f"Säule '{s}' ist Sperrzone — Videos in wiki/personal/* manuell anlegen, "
             f"EwtosBrain schreibt dort nicht."
         )
     if s in ALLOWED_SAEULEN or s in ALLOWED_SUB_SAEULEN:
