@@ -28,7 +28,19 @@ log = logging.getLogger(__name__)
 INTER_ITEM_DELAY_SECONDS = 1.0
 TRANSCRIPT_PULL_TIMEOUT_SECONDS = 90
 
+# Placeholder-Marker aus videos.py — solange er in der Master-Page steht,
+# wurde noch keine Summary erzeugt (auch wenn Transcript schon da ist).
+SUMMARY_PLACEHOLDER = "_(noch keine Zusammenfassung)_"
+
 _active_lock = asyncio.Lock()
+
+
+def _summary_missing(vault_id: str, slug: str, saeule: str) -> bool:
+    try:
+        p = videos.video_path(vault_id, slug, saeule)
+        return SUMMARY_PLACEHOLDER in p.read_text(encoding="utf-8")
+    except Exception:
+        return False
 
 
 async def pull_pending_transcripts(
@@ -125,64 +137,65 @@ async def _run(
             result["failed"].append({"title": title, "url": url, "error": "missing_video_master_page"})
             continue
         existing = (video["frontmatter"].get("transcript") or "")
-        if isinstance(existing, str) and existing.strip():
+        has_transcript = isinstance(existing, str) and bool(existing.strip())
+        needs_summary = summarize and _summary_missing(vault_id, slug, saeule)
+
+        if has_transcript and not needs_summary:
             result["skipped_already_done"] += 1
             continue
 
-        log.info("Orchestrator [%d/%d]: pull %s", idx + 1, len(items), title[:60])
+        if not has_transcript:
+            log.info("Orchestrator [%d/%d]: pull %s", idx + 1, len(items), title[:60])
 
-        # Pull via Bridge
-        try:
-            pull_result = await asyncio.wait_for(
-                bridge.call("youtube_transcript", {"url": url, "with_timestamps": with_timestamps}),
-                timeout=TRANSCRIPT_PULL_TIMEOUT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            result["failed"].append({
-                "title": title, "url": url,
-                "error": f"timeout nach {TRANSCRIPT_PULL_TIMEOUT_SECONDS}s",
-            })
-            continue
-        except RuntimeError as e:
-            # Bridge-Disconnect mid-call → Abbruch
-            msg = str(e)
-            if "disconnected" in msg.lower() or "reconnected" in msg.lower():
+            try:
+                pull_result = await asyncio.wait_for(
+                    bridge.call("youtube_transcript", {"url": url, "with_timestamps": with_timestamps}),
+                    timeout=TRANSCRIPT_PULL_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                result["failed"].append({
+                    "title": title, "url": url,
+                    "error": f"timeout nach {TRANSCRIPT_PULL_TIMEOUT_SECONDS}s",
+                })
+                continue
+            except RuntimeError as e:
+                msg = str(e)
+                if "disconnected" in msg.lower() or "reconnected" in msg.lower():
+                    result["aborted"] = True
+                    result["abort_reason"] = f"bridge_disconnected: {msg}"
+                    return result
+                result["failed"].append({"title": title, "url": url, "error": msg})
+                continue
+            except Exception as e:
+                result["failed"].append({"title": title, "url": url, "error": str(e)})
+                continue
+
+            if not pull_result.get("ok"):
+                result["failed"].append({
+                    "title": title, "url": url,
+                    "error": f"extension: {pull_result.get('error', 'unbekannt')}",
+                })
+                continue
+            text = (pull_result.get("data") or {}).get("transcript") or ""
+            if not text.strip():
+                result["failed"].append({"title": title, "url": url, "error": "leeres Transcript"})
+                continue
+
+            try:
+                transcript_writer.save_transcript(
+                    vault_id, slug, text, with_timestamps=with_timestamps, saeule=saeule,
+                )
+                result["transcribed"] += 1
+            except PermissionError as e:
                 result["aborted"] = True
-                result["abort_reason"] = f"bridge_disconnected: {msg}"
+                result["abort_reason"] = f"permission: {e}"
                 return result
-            result["failed"].append({"title": title, "url": url, "error": msg})
-            continue
-        except Exception as e:
-            result["failed"].append({"title": title, "url": url, "error": str(e)})
-            continue
+            except Exception as e:
+                result["failed"].append({"title": title, "url": url, "error": f"save: {e}"})
+                continue
+        else:
+            log.info("Orchestrator [%d/%d]: summary-only %s", idx + 1, len(items), title[:60])
 
-        # Bridge-Result-Schape: {ok: bool, data?: {transcript: ...}, error?: str}
-        if not pull_result.get("ok"):
-            result["failed"].append({
-                "title": title, "url": url,
-                "error": f"extension: {pull_result.get('error', 'unbekannt')}",
-            })
-            continue
-        text = (pull_result.get("data") or {}).get("transcript") or ""
-        if not text.strip():
-            result["failed"].append({"title": title, "url": url, "error": "leeres Transcript"})
-            continue
-
-        # Speichern
-        try:
-            transcript_writer.save_transcript(
-                vault_id, slug, text, with_timestamps=with_timestamps, saeule=saeule,
-            )
-            result["transcribed"] += 1
-        except PermissionError as e:
-            result["aborted"] = True
-            result["abort_reason"] = f"permission: {e}"
-            return result
-        except Exception as e:
-            result["failed"].append({"title": title, "url": url, "error": f"save: {e}"})
-            continue
-
-        # Optional Summary
         if summarize:
             try:
                 from tools import summary_writer
@@ -191,7 +204,6 @@ async def _run(
             except Exception as e:
                 result["failed_summaries"].append({"title": title, "error": str(e)})
 
-        # Inter-Item-Delay
         if idx + 1 < len(items):
             await asyncio.sleep(INTER_ITEM_DELAY_SECONDS)
 

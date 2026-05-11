@@ -151,6 +151,9 @@ def _list_playlists_for_saeule(vault_id: str, saeule: str) -> list[dict]:
         return []
     out = []
     for p in sorted(pdir.glob("*.md")):
+        # index.md ist eine Übersichts-Seite, keine echte Playlist
+        if p.stem == "index":
+            continue
         text = p.read_text(encoding="utf-8")
         _, body = _split_frontmatter(text)
         items = _parse_items_from_body(body)
