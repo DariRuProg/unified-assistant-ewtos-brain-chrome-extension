@@ -61,6 +61,16 @@ def validate_saeule(saeule: str | None) -> str:
     )
 
 
+def typ_from_saeule(saeule: str) -> str:
+    """Leitet den Obsidian-`typ`-Frontmatter-Wert aus der Säule ab.
+
+    work/* → "arbeit", alles andere (knowledge-library/*) → "ki".
+    """
+    if saeule.startswith("work"):
+        return "arbeit"
+    return "ki"
+
+
 def list_allowed() -> list[str]:
     """Sortierte Liste aller erlaubten Säulen-Werte (für UI-Dropdowns oder Doku)."""
     return sorted(ALLOWED_SAEULEN | ALLOWED_SUB_SAEULEN)

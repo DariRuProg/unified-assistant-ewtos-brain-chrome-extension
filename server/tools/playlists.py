@@ -63,9 +63,9 @@ def _playlist_path(vault_id: str, name: str, saeule: str) -> Path:
     return _playlist_dir(vault_id, saeule) / f"{_slugify(name)}.md"
 
 
-def _empty_playlist(name: str, thema: str | None) -> str:
+def _empty_playlist(name: str, thema: str | None, saeule: str) -> str:
     today = date.today().isoformat()
-    fm = ["---", "typ: ki", f"titel: {name}", "status: aktiv"]
+    fm = ["---", f"typ: {saeulen.typ_from_saeule(saeule)}", f"titel: {name}", "status: aktiv"]
     if thema:
         fm.append(f"thema: {thema}")
     fm.extend([
@@ -207,7 +207,7 @@ def create_playlist(
     p = _playlist_path(vault_id, name, s)
     if p.exists():
         raise ValueError(f"Playlist '{name}' existiert bereits ({p.name}) in Säule '{s}'")
-    p.write_text(_empty_playlist(name, thema), encoding="utf-8")
+    p.write_text(_empty_playlist(name, thema, s), encoding="utf-8")
     return {"created": True, "name": name, "slug": p.stem, "saeule": s, "path": str(p)}
 
 

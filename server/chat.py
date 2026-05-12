@@ -523,7 +523,7 @@ def load(vault_id: str) -> dict:
     return {
         "vault": vault,
         "messages": _load_history(vault_id),
-        "model": settings.get("chat_model") or DEFAULT_MODEL,
+        "model": effective_llm_config()[1] or DEFAULT_MODEL,
         "max_user_turns": settings.get("max_user_turns") or DEFAULT_MAX_TURNS,
         "prompt_source": source,
     }

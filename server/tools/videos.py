@@ -152,7 +152,7 @@ def upsert_video(
     playlists_list = [playlist_slug] if playlist_slug else []
     fm_lines = [
         "---",
-        "typ: ki",
+        f"typ: {saeulen.typ_from_saeule(s)}",
         f"titel: {title.strip()}",
         "status: aktiv",
         f"quelle_url: {url.strip()}",

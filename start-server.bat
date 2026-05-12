@@ -5,7 +5,7 @@ cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
   echo.
   echo === Erste Einrichtung ===
-  echo Erstelle Python-venv und installiere Dependencies...
+  echo Erstelle Python-venv...
   echo.
   python -m venv .venv
   if errorlevel 1 (
@@ -17,15 +17,17 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
   )
   ".venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-  ".venv\Scripts\python.exe" -m pip install --quiet -r server\requirements.txt
-  if errorlevel 1 (
-    echo.
-    echo FEHLER beim Installieren der Dependencies.
-    pause
-    exit /b 1
-  )
   echo Setup fertig.
   echo.
+)
+
+echo Pruefe Dependencies...
+".venv\Scripts\python.exe" -m pip install --quiet -r server\requirements.txt
+if errorlevel 1 (
+  echo.
+  echo FEHLER beim Installieren der Dependencies.
+  pause
+  exit /b 1
 )
 
 if not exist "server\.env" (
