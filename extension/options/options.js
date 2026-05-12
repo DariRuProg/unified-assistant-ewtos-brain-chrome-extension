@@ -35,12 +35,89 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "chatModel", "maxUserTurns"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
-  chatModel: "chat_model",
   maxUserTurns: "max_user_turns",
+  llmProvider: "llm_provider",
+  llmModel: "llm_model",
+  ollamaBaseUrl: "ollama_base_url",
 };
+
+// Provider-spezifische Modell-Hints + Datalist-Werte
+const PROVIDER_MODELS = {
+  anthropic: {
+    hint: "Modelle: claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5",
+    placeholder: "claude-opus-4-7",
+    options: [
+      ["claude-opus-4-7", "claude-opus-4-7 (Default, am stärksten für Tool-Use)"],
+      ["claude-sonnet-4-6", "claude-sonnet-4-6 (günstiger)"],
+      ["claude-haiku-4-5", "claude-haiku-4-5 (schnell, günstig)"],
+    ],
+  },
+  openai: {
+    hint: "Modelle: gpt-4o / gpt-4o-mini / o1-mini",
+    placeholder: "gpt-4o-mini",
+    options: [
+      ["gpt-4o", "gpt-4o"],
+      ["gpt-4o-mini", "gpt-4o-mini (günstiger)"],
+      ["o1-mini", "o1-mini (reasoning)"],
+    ],
+  },
+  ollama: {
+    hint: "Modelle (vorher pullen: ollama pull <name>): llama3.1:8b / qwen2.5:7b / mistral-nemo",
+    placeholder: "llama3.1:8b",
+    options: [
+      ["llama3.1:8b", "llama3.1:8b (tool-fähig)"],
+      ["qwen2.5:7b", "qwen2.5:7b (tool-fähig)"],
+      ["mistral-nemo", "mistral-nemo"],
+    ],
+  },
+  mistral: {
+    hint: "Modelle: mistral-large-latest / mistral-small-latest",
+    placeholder: "mistral-large-latest",
+    options: [
+      ["mistral-large-latest", "mistral-large-latest"],
+      ["mistral-small-latest", "mistral-small-latest (günstiger)"],
+    ],
+  },
+};
+
+function updateProviderUI(provider) {
+  document.querySelectorAll(".provider-field").forEach((el) => {
+    el.classList.toggle("hidden", el.dataset.provider !== provider);
+  });
+  const warn = document.getElementById("providerWarning");
+  if (warn) warn.classList.toggle("hidden", provider === "anthropic");
+
+  const cfg = PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
+  const hint = document.getElementById("llmModelHint");
+  if (hint) hint.textContent = cfg.hint;
+  const modelInput = document.getElementById("llmModel");
+  if (modelInput) modelInput.placeholder = cfg.placeholder;
+  const dl = document.getElementById("llmModelList");
+  if (dl) {
+    dl.replaceChildren();
+    for (const [value, label] of cfg.options) {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      dl.append(o);
+    }
+  }
+}
+
+function setApiKeyBadge(provider, isSet) {
+  const badge = document.getElementById(`${provider}ApiKeyStatus`);
+  if (!badge) return;
+  if (isSet) {
+    badge.textContent = "(gesetzt — leer lassen, um nicht zu ändern)";
+    badge.style.color = "#22c55e";
+  } else {
+    badge.textContent = "(noch nicht gesetzt)";
+    badge.style.color = "#ef4444";
+  }
+}
 
 function el(tag, props = {}) {
   const node = document.createElement(tag);
@@ -397,17 +474,16 @@ newSaveBtn.addEventListener("click", async () => {
       const value = server[SERVER_KEY_MAP[fieldId]];
       if (e && value !== undefined && value !== null) e.value = value;
     }
-    const badge = document.getElementById("apiKeyStatus");
-    if (badge) {
-      if (server.anthropic_api_key_set) {
-        badge.textContent = "(gesetzt — leer lassen, um nicht zu ändern)";
-        badge.style.color = "#22c55e";
-      } else {
-        badge.textContent = "(noch nicht gesetzt)";
-        badge.style.color = "#ef4444";
-      }
-    }
+    setApiKeyBadge("anthropic", server.anthropic_api_key_set);
+    setApiKeyBadge("openai", server.openai_api_key_set);
+    setApiKeyBadge("mistral", server.mistral_api_key_set);
   }
+
+  const providerEl = document.getElementById("llmProvider");
+  updateProviderUI(providerEl.value || "anthropic");
+  providerEl.addEventListener("change", (e) => {
+    updateProviderUI(e.target.value);
+  });
 
   await refreshVaults();
 })();
@@ -430,21 +506,27 @@ document.getElementById("save").addEventListener("click", async () => {
     if (!v) continue;
     serverPayload[SERVER_KEY_MAP[fieldId]] = fieldId === "maxUserTurns" ? parseInt(v, 10) : v;
   }
-  const apiKeyEl = document.getElementById("anthropicApiKey");
-  if (apiKeyEl && apiKeyEl.value.trim()) {
-    serverPayload.anthropic_api_key = apiKeyEl.value.trim();
+  const apiKeyInputs = [
+    ["anthropicApiKey", "anthropic_api_key"],
+    ["openaiApiKey", "openai_api_key"],
+    ["mistralApiKey", "mistral_api_key"],
+  ];
+  for (const [elId, payloadKey] of apiKeyInputs) {
+    const el = document.getElementById(elId);
+    if (el && el.value.trim()) serverPayload[payloadKey] = el.value.trim();
   }
 
   let serverError = null;
   if (Object.keys(serverPayload).length) {
     try {
       const updated = await saveServerSettings(serverPayload);
-      if (apiKeyEl) apiKeyEl.value = "";
-      const badge = document.getElementById("apiKeyStatus");
-      if (badge && updated.anthropic_api_key_set) {
-        badge.textContent = "(gesetzt — leer lassen, um nicht zu ändern)";
-        badge.style.color = "#22c55e";
+      for (const [elId] of apiKeyInputs) {
+        const el = document.getElementById(elId);
+        if (el) el.value = "";
       }
+      setApiKeyBadge("anthropic", updated.anthropic_api_key_set);
+      setApiKeyBadge("openai", updated.openai_api_key_set);
+      setApiKeyBadge("mistral", updated.mistral_api_key_set);
     } catch (err) {
       serverError = err.message || String(err);
     }

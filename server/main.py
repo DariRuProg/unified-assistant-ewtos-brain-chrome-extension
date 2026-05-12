@@ -416,17 +416,27 @@ def videos_generate_summary(vault_id: str, slug: str, saeule: str | None = None)
 class SettingsUpdate(BaseModel):
     notes_path: str | None = None
     anthropic_api_key: str | None = None
-    chat_model: str | None = None
+    chat_model: str | None = None  # legacy, von llm_model abgelöst
     max_user_turns: int | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    openai_api_key: str | None = None
+    ollama_base_url: str | None = None
+    mistral_api_key: str | None = None
 
 
 def _public_settings() -> dict[str, Any]:
     s = settings.all()
     return {
         "notes_path": s.get("notes_path") or config.NOTES_PATH,
-        "chat_model": s.get("chat_model") or chat.DEFAULT_MODEL,
+        "chat_model": s.get("chat_model") or chat.DEFAULT_MODEL,  # legacy für UI-Backward-Compat
         "max_user_turns": s.get("max_user_turns") or chat.DEFAULT_MAX_TURNS,
         "anthropic_api_key_set": bool(s.get("anthropic_api_key")),
+        "llm_provider": s.get("llm_provider") or "anthropic",
+        "llm_model": s.get("llm_model") or s.get("chat_model") or chat.DEFAULT_MODEL,
+        "openai_api_key_set": bool(s.get("openai_api_key")),
+        "ollama_base_url": s.get("ollama_base_url") or "http://localhost:11434",
+        "mistral_api_key_set": bool(s.get("mistral_api_key")),
     }
 
 

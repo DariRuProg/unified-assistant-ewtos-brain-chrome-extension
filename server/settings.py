@@ -26,9 +26,16 @@ EDITABLE_KEYS = {
     "max_user_turns",
     "llm_provider",
     "llm_model",
+    "openai_api_key",
+    "ollama_base_url",
+    "mistral_api_key",
 }
-SECRET_KEYS = {"anthropic_api_key"}
-SECRET_ENV_MAP = {"anthropic_api_key": "ANTHROPIC_API_KEY"}
+SECRET_KEYS = {"anthropic_api_key", "openai_api_key", "mistral_api_key"}
+SECRET_ENV_MAP = {
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "openai_api_key": "OPENAI_API_KEY",
+    "mistral_api_key": "MISTRAL_API_KEY",
+}
 
 _cache: dict[str, Any] | None = None
 

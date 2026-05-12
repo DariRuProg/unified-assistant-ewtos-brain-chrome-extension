@@ -183,6 +183,17 @@
     .dot-forest  { background: #4ade80; }
     .dot-sunset  { background: #a78bfa; }
     .dot-ember   { background: #fbbf24; }
+
+    .provider-field.hidden { display: none; }
+    .provider-warning {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      background: var(--badge-overdue-bg, #fef3c7);
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    .provider-warning.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -204,23 +215,56 @@
     <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
   </div>
 
-  <h2>Chat — Modell &amp; API</h2>
+  <h2>Chat — LLM-Provider</h2>
 
   <div class="field">
-    <label for="anthropicApiKey">Anthropic API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert (nicht in der Extension). <span id="apiKeyStatus" style="font-weight: 600;"></span></div>
-    <input id="anthropicApiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+    <label for="llmProvider">Provider</label>
+    <div class="hint">Wer beantwortet Chat-Fragen + schreibt Summaries. Anthropic ist Default.</div>
+    <select id="llmProvider">
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="openai">OpenAI (GPT) — Backend Stufe 4</option>
+      <option value="ollama">Ollama (lokal, DSGVO) — Backend Stufe 5</option>
+      <option value="mistral">Mistral — Backend Stufe 6</option>
+    </select>
+  </div>
+
+  <div id="providerWarning" class="provider-warning hidden">
+    Dieser Provider ist UI-seitig vorbereitet, aber das Backend ist noch nicht implementiert. Speichern okay — Chat/Summary fallen aktuell zurück auf Anthropic (mit Warning im Server-Log).
   </div>
 
   <div class="field">
-    <label for="chatModel">Chat-Modell</label>
-    <div class="hint">Default: claude-opus-4-7 (am stärksten für Tool-Use).</div>
-    <select id="chatModel">
-      <option value="claude-opus-4-7">claude-opus-4-7 (Default)</option>
-      <option value="claude-opus-4-6">claude-opus-4-6</option>
+    <label for="llmModel">Modell</label>
+    <div class="hint" id="llmModelHint">Modelle: claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5</div>
+    <input id="llmModel" type="text" placeholder="claude-opus-4-7" autocomplete="off" list="llmModelList" />
+    <datalist id="llmModelList">
+      <option value="claude-opus-4-7">claude-opus-4-7 (Default, am stärksten für Tool-Use)</option>
       <option value="claude-sonnet-4-6">claude-sonnet-4-6 (günstiger)</option>
       <option value="claude-haiku-4-5">claude-haiku-4-5 (schnell, günstig)</option>
-    </select>
+    </datalist>
+  </div>
+
+  <div class="field provider-field" data-provider="anthropic">
+    <label for="anthropicApiKey">Anthropic API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert (nicht in der Extension). <span id="anthropicApiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="anthropicApiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+  </div>
+
+  <div class="field provider-field hidden" data-provider="openai">
+    <label for="openaiApiKey">OpenAI API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert. <span id="openaiApiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+  </div>
+
+  <div class="field provider-field hidden" data-provider="ollama">
+    <label for="ollamaBaseUrl">Ollama Base-URL</label>
+    <div class="hint">Standard lokal: <code>http://localhost:11434</code>. Ollama muss separat installiert + gestartet sein (<code>ollama serve</code>).</div>
+    <input id="ollamaBaseUrl" type="text" placeholder="http://localhost:11434" autocomplete="off" />
+  </div>
+
+  <div class="field provider-field hidden" data-provider="mistral">
+    <label for="mistralApiKey">Mistral API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert. <span id="mistralApiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="mistralApiKey" type="password" placeholder="..." autocomplete="off" />
   </div>
 
   <div class="field">
