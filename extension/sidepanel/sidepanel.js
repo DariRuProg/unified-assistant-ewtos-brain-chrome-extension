@@ -49,6 +49,7 @@ const tabsNav = document.getElementById("tabs");
 const content = document.getElementById("content");
 const openOptions = document.getElementById("open-options");
 const reconnectBtn = document.getElementById("reconnect");
+const quickActions = document.getElementById("quick-actions");
 
 const TOOL_RENDERERS = {
   youtube_transcript: renderYoutubeTranscript,
@@ -95,6 +96,12 @@ const GROUPS = [
   },
 ];
 
+const QUICK_TOOLS = [
+  { id: "youtube_transcript", label: "Transcript" },
+  { id: "scratchpad", label: "Notiz" },
+  { id: "todos", label: "Todos" },
+];
+
 let activeTab = GROUPS[0].id;
 let activeTool = null;
 
@@ -113,6 +120,7 @@ async function getHttpBase() {
 setStatus(false, "verbinde...");
 renderTabs();
 renderToolList();
+renderQuickActions();
 checkPendingPlaylistPick();
 
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
@@ -386,10 +394,28 @@ function renderToolList() {
   content.append(list);
 }
 
+function renderQuickActions() {
+  quickActions.replaceChildren();
+  for (const t of QUICK_TOOLS) {
+    const btn = el("button", {
+      type: "button",
+      className: "quick-btn" + (activeTool === t.id ? " active" : ""),
+      textContent: t.label,
+    });
+    btn.addEventListener("click", () => openTool(t.id));
+    quickActions.append(btn);
+  }
+}
+
 function openTool(toolId) {
   const renderer = TOOL_RENDERERS[toolId];
   if (!renderer) return;
+  for (const g of GROUPS) {
+    if (g.tools.some((t) => t.id === toolId)) { activeTab = g.id; break; }
+  }
   activeTool = toolId;
+  renderTabs();
+  renderQuickActions();
 
   content.replaceChildren();
   const view = el("section", { className: "tool-view" });
@@ -409,6 +435,7 @@ function closeTool() {
   activeTool = null;
   panelTitle = null;
   panelBody = null;
+  renderQuickActions();
   renderToolList();
 }
 

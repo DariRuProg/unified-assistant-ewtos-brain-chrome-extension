@@ -792,3 +792,38 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   border: 1px solid var(--status-offline); color: var(--status-offline); background: transparent;
 }
 .remove-dialog-actions button.danger:hover { background: var(--status-offline); color: white; }
+
+/* ── Quick Actions ─────────────────────────────── */
+
+.quick-actions {
+  display: flex;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.quick-btn {
+  flex: 1;
+  padding: 5px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
+}
+
+.quick-btn:hover {
+  color: var(--text);
+  border-color: var(--border-input);
+}
+
+.quick-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
