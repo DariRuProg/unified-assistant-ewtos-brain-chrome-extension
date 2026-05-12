@@ -16,6 +16,8 @@ import logging
 import settings
 from llm_providers.anthropic_backend import AnthropicBackend
 from llm_providers.base import LLMBackend
+from llm_providers.ollama_backend import OllamaBackend
+from llm_providers.openai_backend import OpenAIBackend
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +43,24 @@ def get_backend() -> LLMBackend:
             raise ValueError("Kein Anthropic-API-Key in den Settings/Env")
         return AnthropicBackend(api_key=api_key)
 
-    # Stufe 4-6 ergänzen openai/ollama/mistral. Bis dahin: Fallback mit Warnung.
-    log.warning("LLM-Provider '%s' noch nicht implementiert — Fallback auf Anthropic", provider)
+    if provider == "openai":
+        api_key = settings.get("openai_api_key")
+        if not api_key:
+            raise ValueError("Kein OpenAI-API-Key in den Settings/Env")
+        return OpenAIBackend(api_key=api_key)
+
+    if provider == "ollama":
+        base_url = settings.get("ollama_base_url") or "http://localhost:11434"
+        return OllamaBackend(base_url=base_url)
+
+    if provider == "mistral":
+        api_key = settings.get("mistral_api_key")
+        if not api_key:
+            raise ValueError("Kein Mistral-API-Key in den Settings/Env")
+        return OpenAIBackend(api_key=api_key, base_url="https://api.mistral.ai/v1")
+
+    log.warning("Unbekannter LLM-Provider '%s' — Fallback auf Anthropic", provider)
     api_key = settings.get("anthropic_api_key")
     if not api_key:
-        raise ValueError(f"Provider '{provider}' nicht implementiert und kein Anthropic-API-Key für Fallback")
+        raise ValueError(f"Provider '{provider}' unbekannt und kein Anthropic-API-Key für Fallback")
     return AnthropicBackend(api_key=api_key)

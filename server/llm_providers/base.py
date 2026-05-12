@@ -8,8 +8,24 @@ Ollama- und Mistral-Backends übersetzen in Stufen 4-6 intern in dieses Schema.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator
+
+
+@dataclass
+class TextBlock:
+    """Anthropic-style text content block (provider-neutral)."""
+    text: str
+    type: str = "text"
+
+
+@dataclass
+class ToolUseBlock:
+    """Anthropic-style tool_use content block (provider-neutral)."""
+    id: str
+    name: str
+    input: dict = field(default_factory=dict)
+    type: str = "tool_use"
 
 
 @dataclass

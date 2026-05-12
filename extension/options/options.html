@@ -185,15 +185,6 @@
     .dot-ember   { background: #fbbf24; }
 
     .provider-field.hidden { display: none; }
-    .provider-warning {
-      font-size: 12px;
-      padding: 8px 10px;
-      border-radius: 4px;
-      background: var(--badge-overdue-bg, #fef3c7);
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-    .provider-warning.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -226,10 +217,6 @@
       <option value="ollama">Ollama (lokal, DSGVO) — Backend Stufe 5</option>
       <option value="mistral">Mistral — Backend Stufe 6</option>
     </select>
-  </div>
-
-  <div id="providerWarning" class="provider-warning hidden">
-    Dieser Provider ist UI-seitig vorbereitet, aber das Backend ist noch nicht implementiert. Speichern okay — Chat/Summary fallen aktuell zurück auf Anthropic (mit Warning im Server-Log).
   </div>
 
   <div class="field">

@@ -87,8 +87,6 @@ function updateProviderUI(provider) {
   document.querySelectorAll(".provider-field").forEach((el) => {
     el.classList.toggle("hidden", el.dataset.provider !== provider);
   });
-  const warn = document.getElementById("providerWarning");
-  if (warn) warn.classList.toggle("hidden", provider === "anthropic");
 
   const cfg = PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
   const hint = document.getElementById("llmModelHint");
