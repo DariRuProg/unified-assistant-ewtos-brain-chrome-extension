@@ -149,6 +149,46 @@ async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
     return result.get("data", {})
 
 
+@app.post("/tools/page_scrape")
+async def page_scrape_endpoint() -> dict[str, Any]:
+    result = await bridge.call("page_scrape", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+@app.post("/tools/seo_check")
+async def seo_check_endpoint() -> dict[str, Any]:
+    result = await bridge.call("seo_check", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+@app.post("/tools/image_analyse")
+async def image_analyse_endpoint() -> dict[str, Any]:
+    result = await bridge.call("image_analyse", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+@app.post("/tools/color_picker")
+async def color_picker_endpoint() -> dict[str, Any]:
+    result = await bridge.call("color_picker", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+@app.post("/tools/screenshot")
+async def screenshot_endpoint() -> dict[str, Any]:
+    result = await bridge.call("screenshot", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
 class NotesSaveRequest(BaseModel):
     content: str
 

@@ -61,6 +61,11 @@ const TOOL_RENDERERS = {
   chat: renderChat,
   playlists: renderPlaylistsTool,
   bookmarks: renderBookmarksTool,
+  page_scrape: renderPageScrape,
+  seo_check: renderSeoCheck,
+  image_analyse: renderImageAnalyse,
+  color_picker: renderColorPicker,
+  screenshot: renderScreenshot,
 };
 
 const GROUPS = [
@@ -80,11 +85,11 @@ const GROUPS = [
     label: "Web",
     tools: [
       { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab" },
-      { id: "page_scrape", label: "Page-Scrape", hint: "Sprint 3", soon: true },
-      { id: "seo_check", label: "SEO-Check", hint: "Sprint 3", soon: true },
-      { id: "image_analyse", label: "Image-Analyse", hint: "Sprint 3", soon: true },
-      { id: "color_picker", label: "Color-Picker", hint: "Sprint 3", soon: true },
-      { id: "screenshot", label: "Screenshot + Annotation", hint: "Sprint 3", soon: true },
+      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown" },
+      { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags" },
+      { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check" },
+      { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette" },
+      { id: "screenshot", label: "Screenshot", hint: "Sichtbaren Tab als PNG" },
     ],
   },
   {
@@ -97,9 +102,9 @@ const GROUPS = [
 ];
 
 const QUICK_TOOLS = [
-  { id: "youtube_transcript", label: "Transcript" },
-  { id: "scratchpad", label: "Notiz" },
-  { id: "todos", label: "Todos" },
+  { id: "chat",      label: "Chat",  icon: "💬" },
+  { id: "scratchpad", label: "Notiz", icon: "📝" },
+  { id: "todos",     label: "Todos", icon: "✅" },
 ];
 
 let activeTab = GROUPS[0].id;
@@ -400,8 +405,11 @@ function renderQuickActions() {
     const btn = el("button", {
       type: "button",
       className: "quick-btn" + (activeTool === t.id ? " active" : ""),
-      textContent: t.label,
     });
+    if (t.icon) {
+      btn.append(el("span", { className: "quick-icon", textContent: t.icon }));
+    }
+    btn.append(el("span", { textContent: t.label }));
     btn.addEventListener("click", () => openTool(t.id));
     quickActions.append(btn);
   }
@@ -968,7 +976,9 @@ async function renderChat() {
   const inputWrap = el("form", { className: "chat-input" });
   const inputArea = el("textarea", { placeholder: "Frage an den Vault... (Enter = senden, Shift+Enter = Zeilenumbruch)", rows: 2 });
   const sendBtn = el("button", { type: "submit", textContent: "→" });
-  inputWrap.append(inputArea, sendBtn);
+  const micBtn = el("button", { type: "button", textContent: "🎙", title: "Spracheingabe" });
+  micBtn.classList.add("mic-btn");
+  inputWrap.append(inputArea, micBtn, sendBtn);
 
   const toolbar = el("div", { className: "chat-toolbar" });
   const clearBtn = el("button", { type: "button", textContent: "Verlauf löschen" });
@@ -1058,6 +1068,7 @@ async function renderChat() {
     busy = true;
     sendBtn.disabled = true;
     inputArea.disabled = true;
+    micBtn.disabled = true;
     vaultSelect.disabled = true;
 
     // Echo user message immediately
@@ -1142,10 +1153,96 @@ async function renderChat() {
       busy = false;
       sendBtn.disabled = false;
       inputArea.disabled = false;
+      micBtn.disabled = false;
       vaultSelect.disabled = false;
       inputArea.focus();
     }
   }
+
+  // Spracheingabe via Content-Script-Injection — ewtos.com
+  // SpeechRecognition läuft im Tab-Kontext (dort ist getUserMedia erlaubt),
+  // Ergebnisse kommen per chrome.runtime.sendMessage zurück.
+  let recording = false;
+  let baseText = "";
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === "transcript_result") {
+      inputArea.value = baseText + msg.text;
+    } else if (msg.type === "transcript_end") {
+      baseText = inputArea.value;
+      recording = false;
+      micBtn.classList.remove("recording");
+      micBtn.title = "Spracheingabe";
+    } else if (msg.type === "transcript_error") {
+      recording = false;
+      micBtn.classList.remove("recording");
+      micBtn.title = "Spracheingabe";
+      if (msg.error !== "aborted") setStatus("Mikrofon-Fehler: " + msg.error, "error");
+    }
+  });
+
+  micBtn.addEventListener("click", async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (recording) {
+      if (tab?.id) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => { if (window.__ewtosMic) { window.__ewtosMic.stop(); } },
+        }).catch(() => {});
+      }
+      recording = false;
+      micBtn.classList.remove("recording");
+      micBtn.title = "Spracheingabe";
+      return;
+    }
+
+    if (!tab?.id || !tab.url?.startsWith("http")) {
+      setStatus("Spracheingabe braucht eine http(s)-Seite im aktiven Tab", "error");
+      return;
+    }
+
+    baseText = inputArea.value;
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          if (window.__ewtosMic) { window.__ewtosMic.stop(); window.__ewtosMic = null; }
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SR) return { error: "not_supported" };
+          const r = new SR();
+          r.lang = "de-DE";
+          r.interimResults = true;
+          r.continuous = false;
+          window.__ewtosMic = r;
+          r.onresult = (e) => {
+            let text = "";
+            for (const res of e.results) text += res[0].transcript;
+            chrome.runtime.sendMessage({ type: "transcript_result", text });
+          };
+          r.onend = () => {
+            window.__ewtosMic = null;
+            chrome.runtime.sendMessage({ type: "transcript_end" });
+          };
+          r.onerror = (ev) => {
+            window.__ewtosMic = null;
+            chrome.runtime.sendMessage({ type: "transcript_error", error: ev.error });
+          };
+          r.start();
+          return { ok: true };
+        },
+      });
+      if (results?.[0]?.result?.error === "not_supported") {
+        setStatus("SpeechRecognition nicht verfügbar", "error");
+        return;
+      }
+      recording = true;
+      micBtn.classList.add("recording");
+      micBtn.title = "Aufnahme stoppen";
+    } catch (err) {
+      setStatus("Spracheingabe-Fehler: " + err.message, "error");
+    }
+  });
 
   vaultSelect.addEventListener("change", () => {
     if (vaultSelect.value && vaultSelect.value !== currentVaultId) {
@@ -2398,4 +2495,340 @@ function el(tag, props = {}) {
   const node = document.createElement(tag);
   Object.assign(node, props);
   return node;
+}
+
+// ── Sprint 3: Web-Tools ──────────────────────────────────────────────────────
+
+function renderPageScrape() {
+  panelTitle.textContent = "Page-Scrape";
+
+  const runBtn = el("button", { textContent: "Aktiven Tab scrapen" });
+  const status = el("div", { className: "tool-status" });
+  const output = el("textarea", { readOnly: true, placeholder: "Ergebnis erscheint hier..." });
+  const copyBtn = el("button", { textContent: "Kopieren" });
+  copyBtn.classList.add("secondary");
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "scrapt...";
+    status.className = "tool-status";
+    output.value = "";
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/page_scrape`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      output.value = data.markdown || "";
+      status.textContent = `${data.title || ""} — ${data.wordCount || 0} Wörter`;
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  copyBtn.addEventListener("click", () => {
+    if (output.value) navigator.clipboard.writeText(output.value);
+  });
+
+  panelBody.append(runBtn, status, output, copyBtn);
+}
+
+function renderSeoCheck() {
+  panelTitle.textContent = "SEO-Check";
+
+  const runBtn = el("button", { textContent: "Aktiven Tab analysieren" });
+  const status = el("div", { className: "tool-status" });
+  const output = el("div");
+  output.style.cssText = "margin-top:8px;font-size:13px;line-height:1.6;";
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "analysiere...";
+    status.className = "tool-status";
+    output.replaceChildren();
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/seo_check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+
+      const row = (label, value) => {
+        if (!value && value !== 0) return null;
+        const wrap = el("div");
+        wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
+        const lbl = el("span", { textContent: label + ": " });
+        lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
+        wrap.append(lbl, document.createTextNode(value));
+        return wrap;
+      };
+
+      const headingRow = (items, label) => {
+        if (!items?.length) return null;
+        const wrap = el("div");
+        wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
+        const lbl = el("span", { textContent: `${label} (${items.length}): ` });
+        lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
+        const ul = el("ul");
+        ul.style.cssText = "margin:2px 0 0 16px;padding:0;";
+        items.slice(0, 5).forEach((t) => ul.append(el("li", { textContent: t })));
+        if (items.length > 5) ul.append(el("li", { textContent: `… +${items.length - 5} weitere` }));
+        wrap.append(lbl, ul);
+        return wrap;
+      };
+
+      [
+        row("URL", data.url),
+        row("Title", data.title),
+        row("Description", data.description),
+        row("Canonical", data.canonical),
+        row("Robots", data.robots),
+        headingRow(data.h1, "H1"),
+        headingRow(data.h2, "H2"),
+        headingRow(data.h3, "H3"),
+        row("OG Title", data.og_title),
+        row("OG Description", data.og_description),
+        row("OG Image", data.og_image),
+        row("Twitter Card", data.twitter_card),
+        row("Viewport", data.viewport),
+        row("Favicon", data.favicon),
+      ].forEach((node) => { if (node) output.append(node); });
+
+      status.textContent = "fertig";
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  panelBody.append(runBtn, status, output);
+}
+
+function renderImageAnalyse() {
+  panelTitle.textContent = "Image-Analyse";
+
+  const runBtn = el("button", { textContent: "Bilder analysieren" });
+  const status = el("div", { className: "tool-status" });
+  const summary = el("div", { className: "tool-status" });
+  const list = el("div");
+  list.style.cssText = "overflow-y:auto;max-height:420px;display:flex;flex-direction:column;gap:6px;margin-top:8px;";
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "analysiere...";
+    status.className = "tool-status";
+    summary.textContent = "";
+    list.replaceChildren();
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/image_analyse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+
+      const { images = [], total = 0, missing_alt = 0 } = data;
+      status.textContent = "fertig";
+      status.className = "tool-status success";
+      summary.textContent = `${total} Bilder${missing_alt > 0 ? `, ${missing_alt} ohne Alt-Text` : ""}`;
+
+      for (const img of images) {
+        const card = el("div");
+        card.style.cssText = "display:flex;gap:8px;align-items:flex-start;padding:6px;border:1px solid var(--border,#ddd);border-radius:4px;";
+        const thumb = el("img");
+        thumb.src = img.src;
+        thumb.style.cssText = "width:72px;height:72px;object-fit:cover;flex-shrink:0;border-radius:3px;";
+        const info = el("div");
+        info.style.cssText = "font-size:12px;line-height:1.5;overflow:hidden;min-width:0;";
+        const dims = el("div", { textContent: `${img.width} × ${img.height}` });
+        dims.style.color = "var(--muted,#888)";
+        const altEl = el("div");
+        if (img.alt === null) {
+          altEl.textContent = "kein alt-Attribut";
+          altEl.style.cssText = "color:var(--error,#c00);font-weight:600;";
+        } else if (img.alt === "") {
+          altEl.textContent = "(leeres alt)";
+          altEl.style.color = "var(--muted,#888)";
+        } else {
+          altEl.textContent = img.alt;
+        }
+        info.append(dims, altEl);
+        card.append(thumb, info);
+        list.append(card);
+      }
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  panelBody.append(runBtn, status, summary, list);
+}
+
+function renderColorPicker() {
+  panelTitle.textContent = "Color-Picker";
+
+  const runBtn = el("button", { textContent: "Farben extrahieren" });
+  const status = el("div", { className: "tool-status" });
+  const output = el("div");
+  output.style.cssText = "margin-top:8px;font-size:12px;";
+
+  const swatch = (value) => {
+    const s = el("span");
+    s.style.cssText = `display:inline-block;width:16px;height:16px;border:1px solid var(--border,#ccc);background:${value};vertical-align:middle;margin-right:6px;border-radius:2px;flex-shrink:0;`;
+    return s;
+  };
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "extrahiere...";
+    status.className = "tool-status";
+    output.replaceChildren();
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/color_picker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+
+      if (data.has_design_system && Object.keys(data.css_vars || {}).length > 0) {
+        const sec = el("div");
+        sec.append(el("strong", { textContent: "CSS-Variablen" }));
+        for (const [name, value] of Object.entries(data.css_vars)) {
+          const row = el("div");
+          row.style.cssText = "display:flex;align-items:center;margin:3px 0;";
+          row.append(swatch(value), document.createTextNode(`${name}: ${value}`));
+          sec.append(row);
+        }
+        output.append(sec);
+      }
+
+      if (data.computed?.length > 0) {
+        const sec = el("div");
+        sec.style.marginTop = "10px";
+        sec.append(el("strong", { textContent: "Key-Elemente" }));
+        for (const item of data.computed) {
+          const row = el("div");
+          row.style.cssText = "display:flex;align-items:center;gap:4px;margin:3px 0;";
+          const lbl = el("span", { textContent: item.selector });
+          lbl.style.cssText = "width:90px;color:var(--muted,#888);flex-shrink:0;";
+          row.append(lbl);
+          if (item.color) row.append(swatch(item.color));
+          if (item.background) row.append(swatch(item.background));
+          sec.append(row);
+        }
+        output.append(sec);
+      }
+
+      if (!data.has_design_system && !data.computed?.length) {
+        status.textContent = "Keine Farben gefunden";
+        status.className = "tool-status";
+        return;
+      }
+      status.textContent = "fertig";
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  panelBody.append(runBtn, status, output);
+}
+
+function renderScreenshot() {
+  panelTitle.textContent = "Screenshot";
+
+  const runBtn = el("button", { textContent: "Screenshot erstellen" });
+  const status = el("div", { className: "tool-status" });
+  const img = el("img");
+  img.style.cssText = "max-width:100%;border:1px solid var(--border,#ddd);border-radius:4px;display:none;margin-top:8px;";
+  const actions = el("div");
+  actions.style.cssText = "display:none;gap:8px;margin-top:6px;";
+  const copyBtn = el("button", { textContent: "Kopieren" });
+  const dlBtn = el("button", { textContent: "Download" });
+  copyBtn.classList.add("secondary");
+  dlBtn.classList.add("secondary");
+  actions.append(copyBtn, dlBtn);
+
+  let currentDataUrl = null;
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "erstelle Screenshot...";
+    status.className = "tool-status";
+    img.style.display = "none";
+    actions.style.display = "none";
+    currentDataUrl = null;
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/screenshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      currentDataUrl = data.dataUrl;
+      img.src = currentDataUrl;
+      img.style.display = "block";
+      actions.style.display = "flex";
+      status.textContent = "fertig";
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  copyBtn.addEventListener("click", async () => {
+    if (!currentDataUrl) return;
+    await navigator.clipboard.writeText(currentDataUrl);
+    copyBtn.textContent = "Kopiert!";
+    setTimeout(() => { copyBtn.textContent = "Kopieren"; }, 1500);
+  });
+
+  dlBtn.addEventListener("click", () => {
+    if (!currentDataUrl) return;
+    const a = document.createElement("a");
+    a.href = currentDataUrl;
+    a.download = `screenshot-${Date.now()}.png`;
+    a.click();
+  });
+
+  panelBody.append(runBtn, status, img, actions);
 }

@@ -7,6 +7,11 @@ import { runYoutubeTranscript } from "./tools/youtube_transcript.js";
 import { runTabCapture } from "./tools/tab_capture.js";
 import { runSelectionCapture } from "./tools/selection_capture.js";
 import { runYoutubeMeta } from "./tools/youtube_meta.js";
+import { runPageScrape } from "./tools/page_scrape.js";
+import { runSeoCheck } from "./tools/seo_check.js";
+import { runImageAnalyse } from "./tools/image_analyse.js";
+import { runColorPicker } from "./tools/color_picker.js";
+import { runScreenshot } from "./tools/screenshot.js";
 
 const DEFAULT_SERVER_URL = "ws://localhost:9988/ws";
 const DEFAULT_HTTP_BASE = "http://localhost:9988";
@@ -24,6 +29,11 @@ const TOOL_HANDLERS = {
   tab_capture: runTabCapture,
   selection_capture: runSelectionCapture,
   youtube_meta: runYoutubeMeta,
+  page_scrape: runPageScrape,
+  seo_check: runSeoCheck,
+  image_analyse: runImageAnalyse,
+  color_picker: runColorPicker,
+  screenshot: runScreenshot,
 };
 
 const CONTEXT_MENU_IDS = {
