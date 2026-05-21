@@ -635,6 +635,55 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def send_page_stream(page_content: str, user_message: str, history: list[dict]) -> Iterator[str]:
+    """SSE stream: chat about a specific page — no vault, no tools, no persistence."""
+    try:
+        user_message = (user_message or "").strip()
+        if not user_message:
+            yield _sse("error", {"message": "Leere Nachricht"})
+            return
+
+        _, model = effective_llm_config()
+        model = model or DEFAULT_MODEL
+
+        system_prompt = (
+            "Du beantwortest Fragen zu folgendem Seiteninhalt.\n"
+            "Antworte ausschließlich basierend auf diesem Inhalt — kein externes Wissen.\n\n"
+            "---\n\n" + page_content[:12000]
+        )
+        messages = list(history) + [{"role": "user", "content": user_message}]
+
+        backend = get_backend()
+        accumulated: list[str] = []
+        usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+
+        stream = backend.stream_complete(
+            model=model,
+            max_tokens=MAX_TOKENS_RESPONSE,
+            system=[{"type": "text", "text": system_prompt}],
+            tools=[],
+            messages=messages,
+        )
+        for chunk in stream:
+            accumulated.append(chunk)
+            yield _sse("text_delta", {"text": chunk})
+
+        final = stream.get_final_result()
+        usage["input_tokens"] = final.usage.input_tokens
+        usage["output_tokens"] = final.usage.output_tokens
+        usage["cache_read_input_tokens"] = getattr(final.usage, "cache_read_input_tokens", 0) or 0
+
+        final_text = "".join(accumulated).strip() or "(keine Textantwort)"
+        new_history = list(history) + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": final_text},
+        ]
+        yield _sse("done", {"messages": new_history, "consulted": [], "usage": usage})
+    except Exception as e:
+        log.exception("Page chat streaming error")
+        yield _sse("error", {"message": str(e)})
+
+
 def send_stream(vault_id: str, user_message: str, page_context: str | None = None) -> Iterator[str]:
     """SSE generator. Yields strings ready for StreamingResponse.
 

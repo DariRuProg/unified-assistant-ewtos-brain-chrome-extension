@@ -449,13 +449,16 @@ function renderQuickActions() {
   }
 }
 
-function openTool(toolId) {
+let pendingToolOptions = null;
+
+function openTool(toolId, options = null) {
   const renderer = TOOL_RENDERERS[toolId];
   if (!renderer) return;
   for (const g of GROUPS) {
     if (g.tools.some((t) => t.id === toolId)) { activeTab = g.id; break; }
   }
   activeTool = toolId;
+  pendingToolOptions = options;
   renderTabs();
   renderQuickActions();
 
@@ -471,6 +474,7 @@ function openTool(toolId) {
   content.append(view);
 
   renderer();
+  pendingToolOptions = null;
 }
 
 function closeTool() {
@@ -1112,6 +1116,8 @@ async function renderChat() {
   const status = el("div", { className: "tool-status" });
 
   let chatMode = "vault";
+  let scrapedPage = pendingToolOptions?.pageContent || null;
+  let pageChatHistory = [];
 
   const modeRow = el("div", { className: "chat-mode-row" });
   const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "📚 Vault" });
@@ -1122,20 +1128,43 @@ async function renderChat() {
     chatMode = "vault";
     vaultBtn.classList.add("active");
     pageBtn.classList.remove("active");
+    setStatus("");
   });
+
   pageBtn.addEventListener("click", async () => {
     chatMode = "page";
     pageBtn.classList.add("active");
     vaultBtn.classList.remove("active");
-    const stored = (await chrome.storage.local.get("lastPageScrape")).lastPageScrape;
-    if (stored?.title) {
-      setStatus(`Seite: ${stored.title}`);
-    } else {
-      setStatus("Kein Seiteninhalt — zuerst Page-Scrape ausführen", "error");
+    pageChatHistory = [];
+    setStatus("lese Seite...");
+    try {
+      const hb = await getHttpBase();
+      const res = await fetch(`${hb}/tools/page_scrape`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.markdown) throw new Error("Kein Seiteninhalt");
+      scrapedPage = { title: data.title || "", url: data.url || "", markdown: data.markdown };
+      setStatus(`Seite: ${scrapedPage.title}`);
+    } catch (err) {
+      scrapedPage = null;
+      setStatus("Seite konnte nicht gelesen werden: " + (err.message || err), "error");
     }
   });
 
   panelBody.append(header, modeRow, meta, log, status, inputWrap, toolbar);
+
+  // Wenn über "Mit Seite chatten" geöffnet: direkt in Page-Modus springen
+  if (scrapedPage?.markdown) {
+    chatMode = "page";
+    pageBtn.classList.add("active");
+    vaultBtn.classList.remove("active");
+    setStatus(`Seite: ${scrapedPage.title}`);
+  }
+
 
   let busy = false;
   let currentVaultId = null;
@@ -1213,8 +1242,12 @@ async function renderChat() {
 
   async function send(message) {
     if (busy) return;
-    if (!currentVaultId) {
+    if (chatMode === "vault" && !currentVaultId) {
       setStatus("Bitte zuerst einen Vault auswählen", "error");
+      return;
+    }
+    if (chatMode === "page" && !scrapedPage?.markdown) {
+      setStatus("Bitte zuerst Seite laden (🌐 Seite klicken)", "error");
       return;
     }
     busy = true;
@@ -1231,32 +1264,21 @@ async function renderChat() {
 
     setStatus("denkt...");
     try {
-      let pageContext = null;
+      let res;
       if (chatMode === "page") {
-        const stored = (await chrome.storage.local.get("lastPageScrape")).lastPageScrape;
-        if (!stored || !stored.markdown) {
-          assistantBubble.classList.remove("streaming");
-          assistantBubble.textContent = "Kein Seiteninhalt vorhanden — bitte zuerst das Page-Scrape-Tool ausführen.";
-          setStatus("Kein Seiteninhalt", "error");
-          busy = false;
-          sendBtn.disabled = false;
-          inputArea.disabled = false;
-          micBtn.disabled = false;
-          vaultSelect.disabled = false;
-          return;
-        }
-        pageContext = `Titel: ${stored.title}\nURL: ${stored.url}\n\n${stored.markdown}`.slice(0, 8000);
-        setStatus(`Seite: ${stored.title}`);
+        const pageText = `Titel: ${scrapedPage.title}\nURL: ${scrapedPage.url}\n\n${scrapedPage.markdown}`;
+        res = await fetch(`${httpBase}/tools/chat/page/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({ message, page_content: pageText.slice(0, 12000), history: pageChatHistory }),
+        });
+      } else {
+        res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({ message }),
+        });
       }
-
-      const chatBody = { message };
-      if (pageContext) chatBody.page_context = pageContext;
-
-      const res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify(chatBody),
-      });
       if (!res.ok || !res.body) {
         const errText = await res.text().catch(() => `HTTP ${res.status}`);
         throw new Error(errText || `HTTP ${res.status}`);
@@ -1285,6 +1307,7 @@ async function renderChat() {
           } else {
             assistantBubble.textContent = "(keine Textantwort)";
           }
+          if (chatMode === "page" && data.messages) pageChatHistory = data.messages;
           const u = data.usage || {};
           const consulted = data.consulted?.length ? ` · gelesen: ${data.consulted.join(", ")}` : "";
           const cached = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
@@ -2684,6 +2707,7 @@ function renderPageScrape() {
   copyBtn.classList.add("secondary");
 
   let lastMarkdown = "";
+  let lastUrl = "";
 
   runBtn.addEventListener("click", async () => {
     runBtn.disabled = true;
@@ -2703,11 +2727,12 @@ function renderPageScrape() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       lastMarkdown = data.markdown || "";
+      lastUrl = data.url || "";
       output.value = lastMarkdown;
       status.textContent = `${data.title || ""} — ${data.wordCount || 0} Wörter`;
       status.className = "tool-status success";
       if (data.title && !promoteTitle.value) promoteTitle.value = data.title;
-      await chrome.storage.local.set({ lastPageScrape: { title: data.title || "", url: data.url || "", markdown: lastMarkdown, timestamp: Date.now() } });
+      chatBtn.style.display = "";
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
@@ -2797,7 +2822,11 @@ function renderPageScrape() {
   const promoteSection = el("div");
   promoteSection.append(promoteBtn, promoteForm);
 
-  panelBody.append(runBtn, status, output, copyBtn, promoteSection);
+  const chatBtn = el("button", { type: "button", className: "secondary", textContent: "🌐 Mit Seite chatten" });
+  chatBtn.style.display = "none";
+  chatBtn.addEventListener("click", () => openTool("chat", { pageContent: { title: promoteTitle.value || "", url: lastUrl, markdown: output.value } }));
+
+  panelBody.append(runBtn, status, chatBtn, output, copyBtn, promoteSection);
 }
 
 function renderSeoCheck() {

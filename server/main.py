@@ -840,6 +840,23 @@ class ChatSendRequest(BaseModel):
     page_context: str | None = None
 
 
+class PageChatRequest(BaseModel):
+    message: str
+    page_content: str
+    history: list[dict] = []
+
+
+# Static route declared before {vault_id} routes so "page" is not matched as vault_id.
+@app.post("/tools/chat/page/stream")
+def chat_page_stream(req: PageChatRequest) -> StreamingResponse:
+    """SSE stream: chat about a scraped page — no vault needed."""
+    return StreamingResponse(
+        chat.send_page_stream(req.page_content, req.message, req.history),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # Per-vault routes — static segments (clear, stream) declared first to avoid
 # being matched as vault_id="clear" or vault_id="stream".
 @app.post("/tools/chat/{vault_id}/clear")
