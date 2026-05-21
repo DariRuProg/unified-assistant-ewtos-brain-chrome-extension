@@ -1114,8 +1114,8 @@ async function renderChat() {
   let chatMode = "vault";
 
   const modeRow = el("div", { className: "chat-mode-row" });
-  const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "Vault" });
-  const pageBtn  = el("button", { type: "button", className: "chat-mode-btn", textContent: "Seite" });
+  const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "📚 Vault" });
+  const pageBtn  = el("button", { type: "button", className: "chat-mode-btn", textContent: "🌐 Seite" });
   modeRow.append(vaultBtn, pageBtn);
 
   vaultBtn.addEventListener("click", () => {
@@ -1206,7 +1206,11 @@ async function renderChat() {
   }
 
   async function send(message) {
-    if (busy || !currentVaultId) return;
+    if (busy) return;
+    if (!currentVaultId) {
+      setStatus("Bitte zuerst einen Vault auswählen", "error");
+      return;
+    }
     busy = true;
     sendBtn.disabled = true;
     inputArea.disabled = true;
@@ -1237,15 +1241,8 @@ async function renderChat() {
           pageContext = `Titel: ${title}\nURL: ${scrapeData.url || ""}\n\n${text}`.slice(0, 8000);
           setStatus(`Seite gelesen: ${title}`);
         } catch (err) {
-          assistantBubble.classList.remove("streaming");
-          assistantBubble.textContent = "Fehler beim Laden der Seite: " + (err.message || err);
-          setStatus("Fehler beim Seiteninhalt", "error");
-          busy = false;
-          sendBtn.disabled = false;
-          inputArea.disabled = false;
-          micBtn.disabled = false;
-          vaultSelect.disabled = false;
-          return;
+          setStatus("Seite nicht lesbar — sende ohne Seitenkontext: " + (err.message || err), "error");
+          // weiter mit vault-chat ohne page_context
         }
       }
 
@@ -1502,10 +1499,12 @@ function renderMarkdown(text) {
     if (!lines.length) return "";
 
     // Heading
-    const h = lines[0].match(/^(#{1,6})\s+(.+)$/);
-    if (lines.length === 1 && h) {
-      const level = Math.min(h[1].length + 1, 6);
-      return `<h${level}>${inlineMd(h[2])}</h${level}>`;
+    const h = lines[0].match(/^(#{1,6})\s*(.+)$/);
+    if (h) {
+      const level = h[1].length;
+      const headingHtml = `<h${level}>${inlineMd(h[2])}</h${level}>`;
+      if (lines.length === 1) return headingHtml;
+      return headingHtml + "<p>" + inlineMd(lines.slice(1).join(" ")) + "</p>";
     }
 
     // Horizontal rule
@@ -3037,7 +3036,7 @@ function renderColorPicker() {
     }
   });
 
-  const eyeBtn = el("button", { type: "button", className: "secondary", textContent: "Aus Seite" });
+  const eyeBtn = el("button", { type: "button", className: "secondary", textContent: "🎨 Aus Seite" });
   const eyeResult = el("div");
   eyeResult.style.cssText = "margin-top:6px;font-size:12px;";
 
@@ -3052,15 +3051,22 @@ function renderColorPicker() {
       const { sRGBHex } = await dropper.open();
       eyeResult.replaceChildren();
       const row = el("div");
-      row.style.cssText = "display:flex;align-items:center;margin:3px 0;";
-      row.append(swatch(sRGBHex), document.createTextNode(sRGBHex));
+      row.style.cssText = "display:flex;align-items:center;gap:6px;margin:3px 0;";
+      const hexCopy = el("span", { textContent: sRGBHex });
+      hexCopy.style.cssText = "cursor:pointer;";
+      hexCopy.title = "Kopieren";
+      hexCopy.addEventListener("click", () => navigator.clipboard.writeText(sRGBHex));
+      row.append(swatch(sRGBHex), hexCopy);
       eyeResult.append(row);
     } catch {
       // ESC gedrückt — kein Fehler zeigen
     }
   });
 
-  panelBody.append(runBtn, eyeBtn, status, output, eyeResult);
+  const btnRow = el("div");
+  btnRow.style.cssText = "display:flex;gap:8px;";
+  btnRow.append(runBtn, eyeBtn);
+  panelBody.append(btnRow, eyeResult, status, output);
 }
 
 function renderScreenshot() {
