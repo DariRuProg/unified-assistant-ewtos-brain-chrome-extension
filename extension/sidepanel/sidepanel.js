@@ -27,6 +27,7 @@ function updateDarkToggleIcon(darkMode) {
     await chrome.storage.local.get(["theme", "darkMode"]);
   applyTheme(theme, darkMode);
   updateDarkToggleIcon(darkMode);
+  toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -66,6 +67,7 @@ const TOOL_RENDERERS = {
   image_analyse: renderImageAnalyse,
   color_picker: renderColorPicker,
   screenshot: renderScreenshot,
+  url_extractor: renderUrlExtractor,
 };
 
 const GROUPS = [
@@ -73,23 +75,24 @@ const GROUPS = [
     id: "vault",
     label: "Vault",
     tools: [
-      { id: "chat", label: "Chat mit Vault", hint: "Karpathy-Navigation, Claude API" },
-      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad" },
-      { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates" },
-      { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule" },
-      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture" },
+      { id: "chat", label: "Chat mit Vault", hint: "Karpathy-Navigation, Claude API", icon: "💬" },
+      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
+      { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates", icon: "✅" },
+      { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule", icon: "🎵" },
+      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture", icon: "🔖" },
     ],
   },
   {
     id: "web",
     label: "Web",
     tools: [
-      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab" },
-      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown" },
-      { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags" },
-      { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check" },
-      { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette" },
-      { id: "screenshot", label: "Screenshot", hint: "Sichtbaren Tab als PNG" },
+      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
+      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄" },
+      { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
+      { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
+      { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
+      { id: "screenshot", label: "Screenshot", hint: "Sichtbaren Tab als PNG", icon: "📸" },
+      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
     ],
   },
   {
@@ -105,10 +108,12 @@ const QUICK_TOOLS = [
   { id: "chat",      label: "Chat",  icon: "💬" },
   { id: "scratchpad", label: "Notiz", icon: "📝" },
   { id: "todos",     label: "Todos", icon: "✅" },
+  { id: "_briefing", label: "Morgen", icon: "☀", action: showBriefingPanel },
 ];
 
 let activeTab = GROUPS[0].id;
 let activeTool = null;
+let toolViewMode = "list";
 
 // Re-bound on each openTool call so renderers can target current tool view.
 let panelTitle = null;
@@ -127,6 +132,8 @@ renderTabs();
 renderToolList();
 renderQuickActions();
 checkPendingPlaylistPick();
+checkPendingBrainPick();
+checkActiveTabForYoutube();
 
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
   if (chrome.runtime.lastError) return;
@@ -142,6 +149,9 @@ chrome.runtime.onMessage.addListener((msg) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.playlistPick && changes.playlistPick.newValue) {
     checkPendingPlaylistPick();
+  }
+  if (area === "local" && changes.brainPick && changes.brainPick.newValue) {
+    checkPendingBrainPick();
   }
 });
 
@@ -384,11 +394,31 @@ function renderToolList() {
   content.replaceChildren();
   const group = GROUPS.find((g) => g.id === activeTab);
   if (!group) return;
-  const list = el("ul", { className: "tools" });
+
+  const listHeader = el("div", { className: "tools-header" });
+  const toggleBtn = el("button", {
+    type: "button",
+    className: "view-toggle-btn",
+    title: toolViewMode === "grid" ? "Listen-Ansicht" : "Kachel-Ansicht",
+    textContent: toolViewMode === "grid" ? "☰" : "⊞",
+  });
+  toggleBtn.addEventListener("click", async () => {
+    toolViewMode = toolViewMode === "grid" ? "list" : "grid";
+    await chrome.storage.local.set({ toolViewMode });
+    renderToolList();
+  });
+  listHeader.append(toggleBtn);
+
+  const list = el("ul", { className: "tools " + toolViewMode });
   for (const t of group.tools) {
     const li = el("li", { className: "tool" + (t.soon ? " soon" : "") });
+    if (toolViewMode === "grid" && t.icon) {
+      li.append(el("span", { className: "tool-icon", textContent: t.icon }));
+    }
     li.append(el("span", { className: "tool-label", textContent: t.label }));
-    if (t.hint) li.append(el("span", { className: "hint", textContent: t.hint }));
+    if (toolViewMode === "list" && t.hint) {
+      li.append(el("span", { className: "hint", textContent: t.hint }));
+    }
     if (t.soon) {
       li.append(el("span", { className: "badge", textContent: "bald" }));
     } else {
@@ -396,7 +426,7 @@ function renderToolList() {
     }
     list.append(li);
   }
-  content.append(list);
+  content.append(listHeader, list);
 }
 
 function renderQuickActions() {
@@ -410,7 +440,11 @@ function renderQuickActions() {
       btn.append(el("span", { className: "quick-icon", textContent: t.icon }));
     }
     btn.append(el("span", { textContent: t.label }));
-    btn.addEventListener("click", () => openTool(t.id));
+    if (t.action) {
+      btn.addEventListener("click", () => t.action());
+    } else {
+      btn.addEventListener("click", () => openTool(t.id));
+    }
     quickActions.append(btn);
   }
 }
@@ -451,6 +485,11 @@ function renderYoutubeTranscript() {
   panelTitle.textContent = "YouTube-Transcript";
 
   const urlInput = el("input", { type: "url", placeholder: "https://www.youtube.com/watch?v=..." });
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab?.url && /youtube\.com\/watch/.test(tab.url)) {
+      urlInput.value = tab.url;
+    }
+  });
   const runBtn = el("button", { textContent: "Transcript holen" });
   const status = el("div", { className: "tool-status" });
   const output = el("textarea", { placeholder: "Ergebnis erscheint hier...", readOnly: true });
@@ -513,7 +552,92 @@ async function renderNotesFile(kind, opts) {
   fallbackBtns.append(fallbackSave, fallbackCancel);
   fallbackRow.append(fallbackInput, fallbackBtns);
 
-  panelBody.append(meta, textarea, status, exportBtn, fallbackRow);
+  // Promote-to-raw ("Ins Brain") — nur für Scratchpad
+  let promoteSection = null;
+  if (kind === "scratchpad") {
+    const promoteBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
+    promoteBtn.style.marginTop = "6px";
+
+    const promoteForm = el("div");
+    promoteForm.style.cssText = "display:none;margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle);";
+
+    const promoteTitle = el("input", { type: "text", placeholder: "Titel (Pflichtfeld)" });
+    const promoteSub = el("select");
+    ["eigene-notizen", "artikel", "chat-archive"].forEach(s => promoteSub.append(new Option(s, s)));
+    const promoteDesc = el("textarea", { placeholder: "Beschreibung (optional)" });
+    promoteDesc.style.cssText = "min-height:52px;resize:vertical;margin-top:6px;font-size:12px;";
+    const promoteHint = el("div", { className: "tool-status" });
+    const promoteSubBtn = el("button", { textContent: "Promote" });
+    const promoteCancelBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
+    promoteCancelBtn.style.marginLeft = "6px";
+
+    const promoteSubLabel = el("label", { textContent: "Ziel-Ordner:" });
+    promoteSubLabel.style.cssText = "margin-top:6px;display:block;";
+    const promoteInfoHint = el("div", { className: "tool-status", textContent: "Sucht Datumsblock oder Textmatch im Scratchpad" });
+    promoteInfoHint.style.fontSize = "11px";
+    const promoteActRow = el("div");
+    promoteActRow.style.marginTop = "8px";
+    promoteActRow.append(promoteSubBtn, promoteCancelBtn);
+
+    promoteForm.append(
+      promoteInfoHint,
+      promoteTitle,
+      promoteSubLabel,
+      promoteSub,
+      promoteDesc,
+      promoteHint,
+      promoteActRow,
+    );
+
+    promoteBtn.addEventListener("click", () => {
+      promoteForm.style.display = promoteForm.style.display === "none" ? "block" : "none";
+    });
+    promoteCancelBtn.addEventListener("click", () => {
+      promoteForm.style.display = "none";
+    });
+    promoteSubBtn.addEventListener("click", async () => {
+      const title = promoteTitle.value.trim();
+      if (!title) { promoteHint.textContent = "Titel erforderlich"; promoteHint.className = "tool-status error"; return; }
+      promoteSubBtn.disabled = true;
+      promoteHint.textContent = "promoting...";
+      promoteHint.className = "tool-status";
+      try {
+        const httpBase2 = await getHttpBase();
+        const vaultId = await getActiveVaultId(httpBase2);
+        if (!vaultId) throw new Error("Kein Vault konfiguriert");
+        const res = await fetch(`${httpBase2}/tools/promote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vault_id: vaultId,
+            source: "scratchpad",
+            identifier: title,
+            target_subfolder: promoteSub.value,
+            title,
+            description: promoteDesc.value.trim() || null,
+          }),
+        });
+        const text = await res.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+        promoteHint.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+        promoteHint.className = "tool-status success";
+        promoteTitle.value = "";
+        promoteDesc.value = "";
+      } catch (err) {
+        promoteHint.textContent = err.message || String(err);
+        promoteHint.className = "tool-status error";
+      } finally {
+        promoteSubBtn.disabled = false;
+      }
+    });
+
+    promoteSection = el("div");
+    promoteSection.append(promoteBtn, promoteForm);
+  }
+
+  panelBody.append(meta, textarea, status, exportBtn, fallbackRow, ...(promoteSection ? [promoteSection] : []));
 
   const httpBase = await getHttpBase();
   let saveTimer = null;
@@ -987,7 +1111,25 @@ async function renderChat() {
 
   const status = el("div", { className: "tool-status" });
 
-  panelBody.append(header, meta, log, status, inputWrap, toolbar);
+  let chatMode = "vault";
+
+  const modeRow = el("div", { className: "chat-mode-row" });
+  const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "Vault" });
+  const pageBtn  = el("button", { type: "button", className: "chat-mode-btn", textContent: "Seite" });
+  modeRow.append(vaultBtn, pageBtn);
+
+  vaultBtn.addEventListener("click", () => {
+    chatMode = "vault";
+    vaultBtn.classList.add("active");
+    pageBtn.classList.remove("active");
+  });
+  pageBtn.addEventListener("click", () => {
+    chatMode = "page";
+    pageBtn.classList.add("active");
+    vaultBtn.classList.remove("active");
+  });
+
+  panelBody.append(header, modeRow, meta, log, status, inputWrap, toolbar);
 
   let busy = false;
   let currentVaultId = null;
@@ -1079,10 +1221,41 @@ async function renderChat() {
 
     setStatus("denkt...");
     try {
+      let pageContext = null;
+      if (chatMode === "page") {
+        setStatus("lese Seite...");
+        try {
+          const scrapeRes = await fetch(`${httpBase}/tools/page_scrape`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!scrapeRes.ok) throw new Error(`HTTP ${scrapeRes.status}`);
+          const scrapeData = await scrapeRes.json();
+          const title = scrapeData.title || "(ohne Titel)";
+          const text  = scrapeData.markdown || scrapeData.text || "";
+          pageContext = `Titel: ${title}\nURL: ${scrapeData.url || ""}\n\n${text}`.slice(0, 8000);
+          setStatus(`Seite gelesen: ${title}`);
+        } catch (err) {
+          assistantBubble.classList.remove("streaming");
+          assistantBubble.textContent = "Fehler beim Laden der Seite: " + (err.message || err);
+          setStatus("Fehler beim Seiteninhalt", "error");
+          busy = false;
+          sendBtn.disabled = false;
+          inputArea.disabled = false;
+          micBtn.disabled = false;
+          vaultSelect.disabled = false;
+          return;
+        }
+      }
+
+      const chatBody = { message };
+      if (pageContext) chatBody.page_context = pageContext;
+
       const res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(chatBody),
       });
       if (!res.ok || !res.body) {
         const errText = await res.text().catch(() => `HTTP ${res.status}`);
@@ -1097,7 +1270,7 @@ async function renderChat() {
       function dispatch(event, data) {
         if (event === "text_delta") {
           assistantText += data.text;
-          assistantBubble.textContent = assistantText;
+          assistantBubble.innerHTML = renderMarkdown(assistantText);
           log.scrollTop = log.scrollHeight;
         } else if (event === "tool_start") {
           const path = data.input?.path ? ` ${data.input.path}` : "";
@@ -2508,11 +2681,14 @@ function renderPageScrape() {
   const copyBtn = el("button", { textContent: "Kopieren" });
   copyBtn.classList.add("secondary");
 
+  let lastMarkdown = "";
+
   runBtn.addEventListener("click", async () => {
     runBtn.disabled = true;
     status.textContent = "scrapt...";
     status.className = "tool-status";
     output.value = "";
+    lastMarkdown = "";
     try {
       const httpBase = await getHttpBase();
       const res = await fetch(`${httpBase}/tools/page_scrape`, {
@@ -2524,9 +2700,11 @@ function renderPageScrape() {
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-      output.value = data.markdown || "";
+      lastMarkdown = data.markdown || "";
+      output.value = lastMarkdown;
       status.textContent = `${data.title || ""} — ${data.wordCount || 0} Wörter`;
       status.className = "tool-status success";
+      if (data.title && !promoteTitle.value) promoteTitle.value = data.title;
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
@@ -2539,7 +2717,84 @@ function renderPageScrape() {
     if (output.value) navigator.clipboard.writeText(output.value);
   });
 
-  panelBody.append(runBtn, status, output, copyBtn);
+  // ── Ins Brain ────────────────────────────────────────────────────────────
+  const promoteBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
+  promoteBtn.style.marginTop = "6px";
+
+  const promoteForm = el("div");
+  promoteForm.style.cssText = "display:none;margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle);";
+
+  const promoteTitle = el("input", { type: "text", placeholder: "Titel (Pflichtfeld)" });
+  const promoteSub = el("select");
+  ["artikel", "eigene-notizen", "chat-archive"].forEach(s => promoteSub.append(new Option(s, s)));
+  const promoteDesc = el("textarea", { placeholder: "Beschreibung (optional)" });
+  promoteDesc.style.cssText = "min-height:52px;resize:vertical;margin-top:6px;font-size:12px;";
+  const promoteHint = el("div", { className: "tool-status" });
+  const promoteSubBtn = el("button", { textContent: "Speichern" });
+  const promoteCancelBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
+  promoteCancelBtn.style.marginLeft = "6px";
+
+  const promoteSubLabel = el("label", { textContent: "Ziel-Ordner:" });
+  promoteSubLabel.style.cssText = "margin-top:6px;display:block;";
+  const promoteActRow = el("div");
+  promoteActRow.style.marginTop = "8px";
+  promoteActRow.append(promoteSubBtn, promoteCancelBtn);
+
+  promoteForm.append(promoteTitle, promoteSubLabel, promoteSub, promoteDesc, promoteHint, promoteActRow);
+
+  promoteBtn.addEventListener("click", () => {
+    promoteForm.style.display = promoteForm.style.display === "none" ? "block" : "none";
+  });
+  promoteCancelBtn.addEventListener("click", () => {
+    promoteForm.style.display = "none";
+  });
+  promoteSubBtn.addEventListener("click", async () => {
+    const title = promoteTitle.value.trim();
+    if (!title) { promoteHint.textContent = "Titel erforderlich"; promoteHint.className = "tool-status error"; return; }
+    if (!lastMarkdown) { promoteHint.textContent = "Erst Seite scrapen"; promoteHint.className = "tool-status error"; return; }
+    promoteSubBtn.disabled = true;
+    promoteHint.textContent = "speichere...";
+    promoteHint.className = "tool-status";
+    try {
+      const httpBase = await getHttpBase();
+      const vaultId = await getActiveVaultId(httpBase);
+      if (!vaultId) throw new Error("Kein Vault konfiguriert");
+      const res = await fetch(`${httpBase}/tools/raw/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          title,
+          content: lastMarkdown,
+          target_subfolder: promoteSub.value,
+          description: promoteDesc.value.trim() || null,
+        }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) {
+        if (res.status === 403) throw new Error(`Fehlende Berechtigung. <a href="#" class="open-options-link">In Options aktivieren</a>`);
+        throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      }
+      promoteHint.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+      promoteHint.className = "tool-status success";
+      promoteTitle.value = "";
+      promoteDesc.value = "";
+      promoteForm.style.display = "none";
+    } catch (err) {
+      promoteHint.innerHTML = err.message || String(err);
+      promoteHint.className = "tool-status error";
+      promoteHint.querySelector(".open-options-link")?.addEventListener("click", e => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+    } finally {
+      promoteSubBtn.disabled = false;
+    }
+  });
+
+  const promoteSection = el("div");
+  promoteSection.append(promoteBtn, promoteForm);
+
+  panelBody.append(runBtn, status, output, copyBtn, promoteSection);
 }
 
 function renderSeoCheck() {
@@ -2674,8 +2929,27 @@ function renderImageAnalyse() {
           altEl.textContent = img.alt;
         }
         info.append(dims, altEl);
+        const dlBtn = el("button", { type: "button", className: "secondary", textContent: "Download" });
+        dlBtn.style.cssText = "margin-top:4px;font-size:11px;padding:2px 8px;";
+        dlBtn.addEventListener("click", () => {
+          const filename = (img.src || img.url || "").split("/").pop().split("?")[0] || "image.jpg";
+          chrome.downloads.download({ url: img.src || img.url, filename });
+        });
+        info.append(dims, altEl, dlBtn);
         card.append(thumb, info);
         list.append(card);
+      }
+
+      if (images.length > 1) {
+        const dlAllBtn = el("button", { type: "button", className: "secondary", textContent: "Alle herunterladen" });
+        dlAllBtn.style.marginTop = "6px";
+        dlAllBtn.addEventListener("click", () => {
+          for (const img of images) {
+            const filename = (img.src || img.url || "").split("/").pop().split("?")[0] || "image.jpg";
+            chrome.downloads.download({ url: img.src || img.url, filename });
+          }
+        });
+        list.append(dlAllBtn);
       }
     } catch (err) {
       status.textContent = err.message || String(err);
@@ -2763,16 +3037,91 @@ function renderColorPicker() {
     }
   });
 
-  panelBody.append(runBtn, status, output);
+  const eyeBtn = el("button", { type: "button", className: "secondary", textContent: "Aus Seite" });
+  const eyeResult = el("div");
+  eyeResult.style.cssText = "margin-top:6px;font-size:12px;";
+
+  eyeBtn.addEventListener("click", async () => {
+    if (!window.EyeDropper) {
+      eyeBtn.disabled = true;
+      eyeBtn.textContent = "Nicht verfügbar";
+      return;
+    }
+    try {
+      const dropper = new EyeDropper();
+      const { sRGBHex } = await dropper.open();
+      eyeResult.replaceChildren();
+      const row = el("div");
+      row.style.cssText = "display:flex;align-items:center;margin:3px 0;";
+      row.append(swatch(sRGBHex), document.createTextNode(sRGBHex));
+      eyeResult.append(row);
+    } catch {
+      // ESC gedrückt — kein Fehler zeigen
+    }
+  });
+
+  panelBody.append(runBtn, eyeBtn, status, output, eyeResult);
 }
 
 function renderScreenshot() {
-  panelTitle.textContent = "Screenshot";
+  panelTitle.textContent = "Screenshot + Annotation";
 
   const runBtn = el("button", { textContent: "Screenshot erstellen" });
   const status = el("div", { className: "tool-status" });
-  const img = el("img");
-  img.style.cssText = "max-width:100%;border:1px solid var(--border,#ddd);border-radius:4px;display:none;margin-top:8px;";
+
+  // Annotation-Toolbar (versteckt bis Screenshot geladen)
+  const toolbar = el("div", { className: "annot-toolbar" });
+  toolbar.style.display = "none";
+
+  const toolBtns = {};
+  const tools = [
+    { id: "pen",  label: "✏ Stift" },
+    { id: "rect", label: "□ Rechteck" },
+    { id: "arrow", label: "→ Pfeil" },
+    { id: "text", label: "T Text" },
+  ];
+  let activeTool = "pen";
+
+  tools.forEach(({ id, label }) => {
+    const btn = el("button", { textContent: label });
+    btn.classList.add("secondary", "annot-tool-btn");
+    btn.dataset.tool = id;
+    btn.addEventListener("click", () => {
+      activeTool = id;
+      Object.values(toolBtns).forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+    toolBtns[id] = btn;
+    toolbar.append(btn);
+  });
+  toolBtns["pen"].classList.add("active");
+
+  const colorPicker = document.createElement("input");
+  colorPicker.type = "color";
+  colorPicker.value = "#ff0000";
+  colorPicker.className = "annot-color-picker";
+  colorPicker.title = "Farbe";
+
+  const sizeSelect = document.createElement("select");
+  sizeSelect.className = "annot-size-select";
+  [["2px", "2"], ["4px", "4"], ["6px", "6"]].forEach(([label, val]) => {
+    const opt = document.createElement("option");
+    opt.textContent = label;
+    opt.value = val;
+    sizeSelect.append(opt);
+  });
+  sizeSelect.value = "2";
+
+  const undoBtn = el("button", { textContent: "↩ Undo" });
+  undoBtn.classList.add("secondary", "annot-tool-btn");
+
+  toolbar.append(colorPicker, sizeSelect, undoBtn);
+
+  // Canvas
+  const canvas = document.createElement("canvas");
+  canvas.className = "annot-canvas";
+  canvas.style.display = "none";
+
   const actions = el("div");
   actions.style.cssText = "display:none;gap:8px;margin-top:6px;";
   const copyBtn = el("button", { textContent: "Kopieren" });
@@ -2781,15 +3130,123 @@ function renderScreenshot() {
   dlBtn.classList.add("secondary");
   actions.append(copyBtn, dlBtn);
 
-  let currentDataUrl = null;
+  // Zeichnen-State
+  const ctx = canvas.getContext("2d");
+  const undoStack = [];
+  let drawing = false;
+  let startX = 0, startY = 0;
+  let snapshot = null;
 
+  function saveUndo() {
+    if (undoStack.length >= 20) undoStack.shift();
+    undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  }
+
+  function getPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (canvas.width / r.width),
+      y: (e.clientY - r.top) * (canvas.height / r.height),
+    };
+  }
+
+  function drawArrow(x1, y1, x2, y2) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const headLen = Math.max(12, ctx.lineWidth * 4);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+  }
+
+  canvas.addEventListener("mousedown", (e) => {
+    const pos = getPos(e);
+    startX = pos.x;
+    startY = pos.y;
+    drawing = true;
+    ctx.strokeStyle = colorPicker.value;
+    ctx.fillStyle = colorPicker.value;
+    ctx.lineWidth = parseInt(sizeSelect.value, 10);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (activeTool === "text") {
+      drawing = false;
+      const text = prompt("Text eingeben:");
+      if (!text) return;
+      saveUndo();
+      ctx.font = `${14 + parseInt(sizeSelect.value, 10) * 2}px sans-serif`;
+      ctx.fillText(text, pos.x, pos.y);
+      return;
+    }
+
+    saveUndo();
+
+    if (activeTool === "pen") {
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    } else {
+      snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
+  });
+
+  canvas.addEventListener("mousemove", (e) => {
+    if (!drawing) return;
+    const pos = getPos(e);
+
+    if (activeTool === "pen") {
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      return;
+    }
+
+    // Vorschau für Rect + Arrow: vorherigen Snapshot zurückspielen
+    ctx.putImageData(snapshot, 0, 0);
+    ctx.strokeStyle = colorPicker.value;
+    ctx.lineWidth = parseInt(sizeSelect.value, 10);
+    ctx.lineCap = "round";
+
+    if (activeTool === "rect") {
+      ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
+    } else if (activeTool === "arrow") {
+      drawArrow(startX, startY, pos.x, pos.y);
+    }
+  });
+
+  canvas.addEventListener("mouseup", (e) => {
+    if (!drawing) return;
+    drawing = false;
+    if (activeTool === "pen") {
+      ctx.closePath();
+    }
+    // Rect + Arrow sind bereits im letzten mousemove gezeichnet — nichts weiter nötig
+    snapshot = null;
+  });
+
+  canvas.addEventListener("mouseleave", () => {
+    if (drawing && activeTool === "pen") {
+      drawing = false;
+      ctx.closePath();
+    }
+  });
+
+  undoBtn.addEventListener("click", () => {
+    if (!undoStack.length) return;
+    ctx.putImageData(undoStack.pop(), 0, 0);
+  });
+
+  // Screenshot laden
   runBtn.addEventListener("click", async () => {
     runBtn.disabled = true;
     status.textContent = "erstelle Screenshot...";
     status.className = "tool-status";
-    img.style.display = "none";
+    canvas.style.display = "none";
+    toolbar.style.display = "none";
     actions.style.display = "none";
-    currentDataUrl = null;
+    undoStack.length = 0;
     try {
       const httpBase = await getHttpBase();
       const res = await fetch(`${httpBase}/tools/screenshot`, {
@@ -2801,12 +3258,19 @@ function renderScreenshot() {
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-      currentDataUrl = data.dataUrl;
-      img.src = currentDataUrl;
-      img.style.display = "block";
-      actions.style.display = "flex";
-      status.textContent = "fertig";
-      status.className = "tool-status success";
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+        canvas.style.display = "block";
+        toolbar.style.display = "flex";
+        actions.style.display = "flex";
+        status.textContent = "fertig — Annotation möglich";
+        status.className = "tool-status success";
+      };
+      img.src = data.dataUrl;
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
@@ -2816,19 +3280,516 @@ function renderScreenshot() {
   });
 
   copyBtn.addEventListener("click", async () => {
-    if (!currentDataUrl) return;
-    await navigator.clipboard.writeText(currentDataUrl);
-    copyBtn.textContent = "Kopiert!";
-    setTimeout(() => { copyBtn.textContent = "Kopieren"; }, 1500);
+    canvas.toBlob(async (blob) => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        copyBtn.textContent = "Kopiert!";
+        setTimeout(() => { copyBtn.textContent = "Kopieren"; }, 1500);
+      } catch {
+        copyBtn.textContent = "Fehler";
+        setTimeout(() => { copyBtn.textContent = "Kopieren"; }, 1500);
+      }
+    }, "image/png");
   });
 
   dlBtn.addEventListener("click", () => {
-    if (!currentDataUrl) return;
     const a = document.createElement("a");
-    a.href = currentDataUrl;
-    a.download = `screenshot-${Date.now()}.png`;
+    a.href = canvas.toDataURL("image/png");
+    a.download = `screenshot-annotated-${Date.now()}.png`;
     a.click();
   });
 
-  panelBody.append(runBtn, status, img, actions);
+  panelBody.append(runBtn, status, toolbar, canvas, actions);
 }
+
+// ── URL-Extraktor ────────────────────────────────────────────────────────────
+
+function renderUrlExtractor() {
+  panelTitle.textContent = "URL-Extraktor";
+
+  const filterRow = el("label", { className: "checkbox-row" });
+  const filterCb = el("input", { type: "checkbox" });
+  filterCb.checked = true;
+  filterRow.append(filterCb, el("span", { textContent: "Nur diese Domain" }));
+
+  const runBtn = el("button", { textContent: "URLs extrahieren" });
+  const status = el("div", { className: "tool-status" });
+
+  const formatTabs = el("div", { className: "format-tabs" });
+  const formats = ["Liste", "Komma", "JSON"];
+  let activeFormat = "Liste";
+  let lastUrls = [];
+
+  const output = el("textarea", { readOnly: true, className: "url-extractor-output", placeholder: "URLs erscheinen hier..." });
+
+  function renderOutput() {
+    if (!lastUrls.length) return;
+    if (activeFormat === "Liste") output.value = lastUrls.join("\n");
+    else if (activeFormat === "Komma") output.value = lastUrls.join(", ");
+    else output.value = JSON.stringify(lastUrls, null, 2);
+  }
+
+  for (const fmt of formats) {
+    const btn = el("button", { type: "button", textContent: fmt, className: "format-tab-btn" + (fmt === activeFormat ? " active" : "") });
+    btn.addEventListener("click", () => {
+      activeFormat = fmt;
+      for (const b of formatTabs.querySelectorAll(".format-tab-btn")) b.classList.remove("active");
+      btn.classList.add("active");
+      renderOutput();
+    });
+    formatTabs.append(btn);
+  }
+
+  const copyBtn = el("button", { textContent: "Kopieren" });
+  copyBtn.classList.add("secondary");
+
+  let lastBaseUrl = "";
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    status.textContent = "extrahiere...";
+    status.className = "tool-status";
+    output.value = "";
+    lastUrls = [];
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/url_extractor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filter_domain: filterCb.checked }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      lastUrls = data.urls || [];
+      lastBaseUrl = data.base_url || "";
+      renderOutput();
+      status.textContent = `${data.count || 0} URLs gefunden`;
+      status.className = "tool-status success";
+      panelBody.querySelector(".url-source-row")?.remove();
+      const sourceRow = el("div", { className: "url-source-row" });
+      sourceRow.append(el("span", { className: "url-source-label", textContent: "Quelle:" }));
+      try {
+        const hostname = new URL(data.base_url).hostname;
+        const link = el("a", { href: data.base_url, textContent: hostname, target: "_blank", className: "url-source-link" });
+        sourceRow.append(link);
+        if (!promoteTitle.value) promoteTitle.value = hostname;
+      } catch {
+        sourceRow.append(el("span", { textContent: data.base_url }));
+      }
+      output.before(sourceRow);
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+
+  copyBtn.addEventListener("click", () => {
+    if (output.value) navigator.clipboard.writeText(output.value);
+  });
+
+  // ── Ins Brain ────────────────────────────────────────────────────────────
+  const promoteBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
+  promoteBtn.style.marginTop = "6px";
+
+  const promoteForm = el("div");
+  promoteForm.style.cssText = "display:none;margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle);";
+
+  const promoteTitle = el("input", { type: "text", placeholder: "Titel (Pflichtfeld)" });
+  const promoteSub = el("select");
+  ["eigene-notizen", "artikel", "chat-archive"].forEach(s => promoteSub.append(new Option(s, s)));
+  const promoteDesc = el("textarea", { placeholder: "Beschreibung (optional)" });
+  promoteDesc.style.cssText = "min-height:52px;resize:vertical;margin-top:6px;font-size:12px;";
+  const promoteHint = el("div", { className: "tool-status" });
+  const promoteSubBtn = el("button", { textContent: "Speichern" });
+  const promoteCancelBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
+  promoteCancelBtn.style.marginLeft = "6px";
+
+  const promoteSubLabel = el("label", { textContent: "Ziel-Ordner:" });
+  promoteSubLabel.style.cssText = "margin-top:6px;display:block;";
+  const promoteActRow = el("div");
+  promoteActRow.style.marginTop = "8px";
+  promoteActRow.append(promoteSubBtn, promoteCancelBtn);
+
+  promoteForm.append(promoteTitle, promoteSubLabel, promoteSub, promoteDesc, promoteHint, promoteActRow);
+
+  promoteBtn.addEventListener("click", () => {
+    promoteForm.style.display = promoteForm.style.display === "none" ? "block" : "none";
+  });
+  promoteCancelBtn.addEventListener("click", () => {
+    promoteForm.style.display = "none";
+  });
+  promoteSubBtn.addEventListener("click", async () => {
+    const title = promoteTitle.value.trim();
+    if (!title) { promoteHint.textContent = "Titel erforderlich"; promoteHint.className = "tool-status error"; return; }
+    if (!lastUrls.length) { promoteHint.textContent = "Erst URLs extrahieren"; promoteHint.className = "tool-status error"; return; }
+    promoteSubBtn.disabled = true;
+    promoteHint.textContent = "speichere...";
+    promoteHint.className = "tool-status";
+    try {
+      const httpBase = await getHttpBase();
+      const vaultId = await getActiveVaultId(httpBase);
+      if (!vaultId) throw new Error("Kein Vault konfiguriert");
+      const content = lastUrls.map(u => `- ${u}`).join("\n");
+      const res = await fetch(`${httpBase}/tools/raw/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          title,
+          content,
+          target_subfolder: promoteSub.value,
+          description: promoteDesc.value.trim() || null,
+        }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) {
+        if (res.status === 403) throw new Error(`Fehlende Berechtigung. <a href="#" class="open-options-link">In Options aktivieren</a>`);
+        throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      }
+      promoteHint.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+      promoteHint.className = "tool-status success";
+      promoteTitle.value = "";
+      promoteDesc.value = "";
+      promoteForm.style.display = "none";
+    } catch (err) {
+      promoteHint.innerHTML = err.message || String(err);
+      promoteHint.className = "tool-status error";
+      promoteHint.querySelector(".open-options-link")?.addEventListener("click", e => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+    } finally {
+      promoteSubBtn.disabled = false;
+    }
+  });
+
+  const promoteSection = el("div");
+  promoteSection.append(promoteBtn, promoteForm);
+
+  panelBody.append(filterRow, runBtn, status, formatTabs, output, copyBtn, promoteSection);
+}
+
+// ── Guten-Morgen-Briefing ────────────────────────────────────────────────────
+
+async function showBriefingPanel() {
+  const existing = document.querySelector(".briefing-panel");
+  if (existing) { existing.remove(); return; }
+
+  const panel = el("div", { className: "briefing-panel" });
+  const header = el("div", { className: "briefing-header" });
+  header.append(el("strong", { textContent: "Guten Morgen" }));
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  header.append(el("div", { className: "briefing-datetime", textContent: `${dateStr} · ${timeStr}` }));
+  const closeBtn = el("button", { type: "button", textContent: "×", className: "briefing-close" });
+  closeBtn.addEventListener("click", () => panel.remove());
+  header.append(closeBtn);
+  panel.append(header);
+
+  const body = el("div", { className: "briefing-body" });
+  body.textContent = "laden...";
+  panel.append(body);
+  document.body.append(panel);
+
+  try {
+    const httpBase = await getHttpBase();
+    const res = await fetch(`${httpBase}/tools/briefing?profile=default`);
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch {}
+    if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+    body.replaceChildren();
+    renderBriefingSections(body, data.data || data);
+  } catch (err) {
+    body.textContent = "Fehler: " + (err.message || err);
+    body.className = "briefing-body error";
+  }
+}
+
+function renderBriefingSections(target, briefingData) {
+  const sections = briefingData.sections || [];
+  for (const sec of sections) {
+    const card = el("div", { className: `briefing-section briefing-section--${sec.type}` });
+    card.append(el("h4", { className: "briefing-section-title", textContent: sec.title }));
+
+    if (sec.type === "wetter") {
+      for (const w of sec.items || []) {
+        const row = el("div", { className: "briefing-wetter-row" });
+        const city = el("span", { className: "briefing-wetter-city", textContent: w.stadt });
+        const temp = el("span", { className: "briefing-wetter-temp", textContent: `${w.temp_c}°` });
+        const desc = el("span", { className: "briefing-wetter-desc", textContent: w.beschreibung });
+        const extra = el("span", { className: "briefing-wetter-extra", textContent: `${w.luftfeuchtigkeit}% · ${w.windgeschwindigkeit} km/h` });
+        row.append(city, temp, desc, extra);
+        card.append(row);
+      }
+    } else if (sec.type === "todos") {
+      const today = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      for (const t of sec.items || []) {
+        if (t.done) continue;
+        const row = el("div", { className: "briefing-todo-row" });
+        const text = el("span", { textContent: t.text });
+        row.append(text);
+        if (t.due && (t.due === today || t.due === tomorrow)) {
+          row.append(el("span", { className: "briefing-due-badge", textContent: t.due === today ? "heute" : "morgen" }));
+        }
+        card.append(row);
+      }
+      if (!card.querySelector(".briefing-todo-row")) {
+        card.append(el("div", { className: "briefing-empty", textContent: "Keine offenen Todos" }));
+      }
+    } else if (sec.type === "fristen") {
+      for (const f of sec.items || []) {
+        const cls = f.days_left <= 7 ? "urgent" : f.days_left <= 30 ? "warning" : "";
+        const row = el("div", { className: "frist-item" + (cls ? " " + cls : "") });
+        row.append(el("span", { textContent: f.title }));
+        row.append(el("span", { className: "frist-days", textContent: `${f.days_left}d` }));
+        card.append(row);
+      }
+      if (!card.querySelector(".frist-item")) {
+        card.append(el("div", { className: "briefing-empty", textContent: "Keine Fristen" }));
+      }
+    } else if (sec.type === "lernstreak") {
+      const msg = sec.days_ago === 0
+        ? "Heute schon gelernt"
+        : sec.last_video_title
+          ? `Letztes Video: "${sec.last_video_title}" — vor ${sec.days_ago} Tag${sec.days_ago === 1 ? "" : "en"}`
+          : "Heute noch kein Video";
+      card.append(el("div", { textContent: msg }));
+    }
+
+    target.append(card);
+  }
+  if (!sections.length) {
+    target.append(el("div", { className: "briefing-empty", textContent: "Keine Daten" }));
+  }
+}
+
+// ── YouTube Auto-Brain Modal ─────────────────────────────────────────────────
+
+async function checkPendingBrainPick() {
+  const { brainPick } = await chrome.storage.local.get("brainPick");
+  if (!brainPick || !brainPick.url) return;
+  if (brainPick.ts && Date.now() - brainPick.ts > 5 * 60 * 1000) {
+    chrome.storage.local.remove("brainPick");
+    return;
+  }
+  chrome.storage.local.remove("brainPick");
+  await showBrainModal(brainPick);
+}
+
+async function showBrainModal({ url, tabId }) {
+  const overlay = el("div", { className: "playlist-picker-overlay" });
+  const dialog = el("div", { className: "brain-modal" });
+  dialog.append(el("h3", { textContent: "Video ins Brain speichern" }));
+  dialog.append(el("div", { className: "brain-modal-meta", textContent: url }));
+
+  const status = el("div", { className: "tool-status", textContent: "Transcript wird extrahiert..." });
+  dialog.append(status);
+
+  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen", className: "secondary" });
+  cancelBtn.addEventListener("click", () => overlay.remove());
+
+  overlay.append(dialog);
+  document.body.append(overlay);
+
+  const httpBase = await getHttpBase();
+  const vaultId = await getActiveVaultId(httpBase);
+  if (!vaultId) {
+    status.textContent = "Kein Vault konfiguriert.";
+    status.className = "tool-status error";
+    dialog.append(cancelBtn);
+    return;
+  }
+
+  // Lade Säulen + Transcript parallel
+  let brainData = null;
+  let saeulenList = [];
+  try {
+    const [brainRes, saeulenRes] = await Promise.all([
+      fetch(`${httpBase}/tools/auto_brain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, vault_id: vaultId, tab_id: tabId }),
+      }),
+      fetch(`${httpBase}/vaults/${vaultId}/saeulen`),
+    ]);
+    const brainText = await brainRes.text();
+    let brainJson = null;
+    try { brainJson = JSON.parse(brainText); } catch {}
+    if (!brainRes.ok) throw new Error(brainJson?.detail || brainText || `HTTP ${brainRes.status}`);
+    brainData = brainJson.data || brainJson;
+    if (saeulenRes.ok) {
+      const sd = await saeulenRes.json().catch(() => ({}));
+      saeulenList = sd.saeulen || [];
+    }
+  } catch (err) {
+    status.textContent = "Fehler: " + (err.message || err);
+    status.className = "tool-status error";
+    dialog.append(cancelBtn);
+    return;
+  }
+
+  status.textContent = "";
+  status.className = "tool-status";
+
+  dialog.append(el("div", { className: "brain-modal-title", textContent: brainData.title || url }));
+
+  const suggestion = brainData.suggestion || {};
+  const confidenceCls = { high: "high", medium: "medium", low: "low" }[suggestion.confidence] || "low";
+  dialog.append(el("span", { className: `confidence-badge ${confidenceCls}`, textContent: suggestion.confidence || "?" }));
+
+  // Säulen-Dropdown
+  const saeulaLabel = el("label", { textContent: "Säule" });
+  const saeulaSelect = el("select");
+  saeulenList.forEach(s => {
+    const opt = new Option(s, s);
+    if (s === suggestion.saeule) opt.selected = true;
+    saeulaSelect.append(opt);
+  });
+  if (!saeulenList.length) saeulaSelect.append(new Option(suggestion.saeule || "knowledge-library/ai", suggestion.saeule || "knowledge-library/ai"));
+
+  // Playlist-Dropdown mit Lazy-Load
+  const playlistLabel = el("label", { textContent: "Playlist" });
+  const playlistSelect = el("select");
+  const playlistNewInput = el("input", { type: "text", placeholder: "Neue Playlist eingeben..." });
+  playlistNewInput.style.display = "none";
+
+  async function loadPlaylists(saeule) {
+    try {
+      const res = await fetch(`${httpBase}/tools/playlists/${vaultId}?saeule=${encodeURIComponent(saeule)}`);
+      const data = await res.json().catch(() => ({}));
+      const items = data.items || [];
+      playlistSelect.replaceChildren();
+      items.forEach(p => {
+        const opt = new Option(p.name, p.name);
+        if (p.name === suggestion.playlist_name) opt.selected = true;
+        playlistSelect.append(opt);
+      });
+      playlistSelect.append(new Option("+ Neue Playlist...", "__new__"));
+    } catch {}
+  }
+
+  saeulaSelect.addEventListener("change", () => loadPlaylists(saeulaSelect.value));
+  playlistSelect.addEventListener("change", () => {
+    playlistNewInput.style.display = playlistSelect.value === "__new__" ? "block" : "none";
+  });
+
+  await loadPlaylists(saeulaSelect.value);
+
+  dialog.append(saeulaLabel, saeulaSelect, playlistLabel, playlistSelect, playlistNewInput);
+
+  if (suggestion.tags && suggestion.tags.length) {
+    dialog.append(el("div", { className: "brain-modal-tags", textContent: suggestion.tags.map(t => `#${t}`).join(" ") }));
+  }
+
+  // Ingest-Checkbox
+  const ingestRow = el("label", { className: "checkbox-row" });
+  const ingestCb = el("input", { type: "checkbox" });
+  ingestCb.checked = true;
+  ingestRow.append(ingestCb, el("span", { textContent: "Direkt ingestet (ohne Claude Code)" }));
+  ingestRow.style.cssText = "margin-top:8px;font-size:12px;";
+  dialog.append(ingestRow);
+
+  const saveStatus = el("div", { className: "tool-status" });
+  dialog.append(saveStatus);
+
+  const actions = el("div", { className: "playlist-picker-actions" });
+  const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "primary" });
+
+  saveBtn.addEventListener("click", async () => {
+    const saeule = saeulaSelect.value;
+    const playlistName = playlistSelect.value === "__new__"
+      ? playlistNewInput.value.trim()
+      : playlistSelect.value;
+    if (!playlistName || playlistName === "__new__") {
+      saveStatus.textContent = "Playlist erforderlich";
+      saveStatus.className = "tool-status error";
+      return;
+    }
+    saveBtn.disabled = true;
+    saveStatus.textContent = "speichere...";
+    saveStatus.className = "tool-status";
+    try {
+      const res = await fetch(`${httpBase}/tools/brain/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          url,
+          title: brainData.title || url,
+          transcript: brainData.transcript || "",
+          saeule,
+          playlist_name: playlistName,
+          tags: suggestion.tags || [],
+          ingest_now: ingestCb.checked,
+        }),
+      });
+      const resText = await res.text();
+      let resData = null;
+      try { resData = JSON.parse(resText); } catch {}
+      if (!res.ok) throw new Error(resData?.detail || resText || `HTTP ${res.status}`);
+      if (resData?.data?.ingest_warning) {
+        saveStatus.textContent = `Gespeichert (Ingest-Warnung: ${resData.data.ingest_warning})`;
+        saveStatus.className = "tool-status";
+        setTimeout(() => overlay.remove(), 2500);
+      } else {
+        overlay.remove();
+      }
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes("Schreibrecht") || msg.includes("write_raw") || msg.includes("write_playlists")) {
+        saveStatus.innerHTML = `Fehlende Berechtigung. <a href="#" id="perm-link">In Options aktivieren</a>`;
+        saveStatus.querySelector("#perm-link").addEventListener("click", e => {
+          e.preventDefault();
+          chrome.runtime.openOptionsPage();
+        });
+      } else {
+        saveStatus.textContent = "Fehler: " + msg;
+      }
+      saveStatus.className = "tool-status error";
+      saveBtn.disabled = false;
+    }
+  });
+
+  actions.append(cancelBtn, saveBtn);
+  dialog.append(actions);
+}
+
+// ── YouTube-Hint im Header ───────────────────────────────────────────────────
+
+async function checkActiveTabForYoutube() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url && /^https?:\/\/(www\.)?youtube\.com\/watch/.test(tab.url)) {
+      showBrainHint(tab.url, tab.id);
+    } else {
+      hideBrainHint();
+    }
+  } catch {
+    hideBrainHint();
+  }
+}
+
+function showBrainHint(url, tabId) {
+  if (document.getElementById("brain-hint-btn")) return;
+  const btn = el("button", {
+    type: "button",
+    id: "brain-hint-btn",
+    className: "quick-btn quick-btn--brain",
+  });
+  btn.append(el("span", { className: "quick-icon", textContent: "⬇" }));
+  btn.append(el("span", { textContent: "Brain" }));
+  btn.addEventListener("click", () => showBrainModal({ url, tabId }));
+  document.getElementById("quick-actions")?.append(btn);
+}
+
+function hideBrainHint() {
+  document.getElementById("brain-hint-btn")?.remove();
+}
+
+chrome.tabs.onActivated.addListener(() => checkActiveTabForYoutube());

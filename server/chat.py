@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import settings
@@ -341,13 +341,14 @@ def _build_system_prompt(vault: dict) -> tuple[str, str]:
       - 'claude_md'  — vault has CLAUDE.md, base prompt + CLAUDE.md is used
       - 'default'    — no override, no CLAUDE.md → just base prompt + hint
     """
+    date_line = f"Aktuelles Datum und Uhrzeit: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
     override = (vault.get("system_prompt") or "").strip()
     if override:
-        return override, "override"
+        return date_line + override, "override"
     claude_md = wiki_reader.find_claude_md(vault["path"])
     if claude_md:
-        return f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault-Konventionen (aus CLAUDE.md)\n\n{claude_md}", "claude_md"
-    return BASE_SYSTEM_PROMPT + DEFAULT_TAIL, "default"
+        return date_line + f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault-Konventionen (aus CLAUDE.md)\n\n{claude_md}", "claude_md"
+    return date_line + BASE_SYSTEM_PROMPT + DEFAULT_TAIL, "default"
 
 
 def _block_to_input(block) -> dict:
@@ -539,7 +540,7 @@ def clear(vault_id: str) -> dict:
     return {"cleared": True, "vault_id": vault_id}
 
 
-def send(vault_id: str, user_message: str) -> dict:
+def send(vault_id: str, user_message: str, page_context: str | None = None) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
         raise LookupError(f"Vault {vault_id} nicht gefunden")
@@ -552,6 +553,8 @@ def send(vault_id: str, user_message: str) -> dict:
     model = model or DEFAULT_MODEL
     max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
     system_prompt, _ = _build_system_prompt(vault)
+    if page_context:
+        system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
     vault_path = vault["path"]
 
     history = _load_history(vault_id)
@@ -632,7 +635,7 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
+def send_stream(vault_id: str, user_message: str, page_context: str | None = None) -> Iterator[str]:
     """SSE generator. Yields strings ready for StreamingResponse.
 
     Event types:
@@ -656,6 +659,8 @@ def send_stream(vault_id: str, user_message: str) -> Iterator[str]:
         model = model or DEFAULT_MODEL
         max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
         system_prompt, _ = _build_system_prompt(vault)
+        if page_context:
+            system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
         vault_path = vault["path"]
 
         history = _load_history(vault_id)

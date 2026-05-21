@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import date
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,10 @@ from tools import notes_file, wiki_reader
 from tools import playlists as playlists_tool
 from tools import playlist_orchestrator
 from tools import summary_writer, transcript_writer
+from tools import briefing as briefing_tool
+from tools import auto_tagger
+from tools import raw_promoter
+from tools import saeulen as saeulen_tool
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -184,6 +189,18 @@ async def color_picker_endpoint() -> dict[str, Any]:
 @app.post("/tools/screenshot")
 async def screenshot_endpoint() -> dict[str, Any]:
     result = await bridge.call("screenshot", {})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+class UrlExtractorRequest(BaseModel):
+    filter_domain: bool = True
+
+
+@app.post("/tools/url_extractor")
+async def url_extractor_endpoint(req: UrlExtractorRequest) -> dict[str, Any]:
+    result = await bridge.call("url_extractor", {"filter_domain": req.filter_domain})
     if not result.get("ok"):
         raise HTTPException(500, result.get("error", "Tool call failed"))
     return result.get("data", {})
@@ -402,6 +419,189 @@ async def playlists_pull_pending(
         raise HTTPException(400, str(e))
 
 
+# --- Briefing ------------------------------------------------------------
+
+@app.get("/tools/briefing")
+async def briefing_get(profile: str = "default", vault_id: str | None = None) -> dict[str, Any]:
+    try:
+        data = await briefing_tool.get_briefing(profile_id=profile, vault_id=vault_id)
+        return {"ok": True, "data": data}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/tools/briefing/profiles")
+def briefing_profiles_list() -> dict[str, Any]:
+    return {"ok": True, "data": briefing_tool.list_profiles()}
+
+
+class BriefingProfileSaveRequest(BaseModel):
+    id: str | None = None
+    name: str
+    sources: list[str]
+    standorte: list[str] | None = None
+
+
+@app.post("/tools/briefing/profiles")
+def briefing_profiles_save(req: BriefingProfileSaveRequest) -> dict[str, Any]:
+    try:
+        saved = briefing_tool.save_profile(req.model_dump(exclude_none=True))
+        return {"ok": True, "data": saved}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.delete("/tools/briefing/profiles/{profile_id}")
+def briefing_profiles_delete(profile_id: str) -> dict[str, Any]:
+    deleted = briefing_tool.delete_profile(profile_id)
+    if not deleted:
+        raise HTTPException(400, "Profil nicht gefunden oder 'default' kann nicht gelöscht werden")
+    return {"ok": True, "deleted": profile_id}
+
+
+# --- Auto-Tag ------------------------------------------------------------
+
+class AutoTagRequest(BaseModel):
+    transcript: str
+    title: str
+    vault_id: str
+
+
+@app.post("/tools/auto_tag")
+def auto_tag_endpoint(req: AutoTagRequest) -> dict[str, Any]:
+    try:
+        data = auto_tagger.auto_tag(req.transcript, req.title, req.vault_id)
+        return {"ok": True, "data": data}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+class AutoBrainRequest(BaseModel):
+    url: str
+    vault_id: str
+    tab_id: int | None = None
+    with_timestamps: bool = False
+
+
+@app.post("/tools/auto_brain")
+async def auto_brain_endpoint(req: AutoBrainRequest) -> dict[str, Any]:
+    params: dict[str, Any] = {"url": req.url, "vault_id": req.vault_id, "with_timestamps": req.with_timestamps}
+    if req.tab_id is not None:
+        params["tabId"] = req.tab_id
+    result = await bridge.call("auto_brain", params)
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "auto_brain failed"))
+    return {"ok": True, "data": result.get("data", {})}
+
+
+class BrainSaveRequest(BaseModel):
+    vault_id: str
+    url: str
+    title: str
+    transcript: str
+    saeule: str
+    playlist_name: str
+    tags: list[str] = []
+    ingest_now: bool = True
+
+
+@app.post("/tools/brain/save")
+def brain_save_endpoint(req: BrainSaveRequest) -> dict[str, Any]:
+    try:
+        result = raw_promoter.save_video_to_raw(
+            vault_id=req.vault_id,
+            url=req.url,
+            title=req.title,
+            transcript=req.transcript,
+            saeule=req.saeule,
+            playlist_name=req.playlist_name,
+            tags=req.tags,
+        )
+        if req.ingest_now:
+            try:
+                try:
+                    playlists_tool.add_to_playlist(
+                        req.vault_id, req.playlist_name, req.url, req.title, saeule=req.saeule
+                    )
+                except ValueError as ve:
+                    if "nicht gefunden" in str(ve):
+                        playlists_tool.create_playlist(req.vault_id, req.playlist_name, saeule=req.saeule)
+                        playlists_tool.add_to_playlist(
+                            req.vault_id, req.playlist_name, req.url, req.title, saeule=req.saeule
+                        )
+                    else:
+                        raise
+            except Exception as ingest_err:
+                result["ingest_warning"] = str(ingest_err)
+        return {"ok": True, "data": result}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class RawContentSaveRequest(BaseModel):
+    vault_id: str
+    title: str
+    content: str
+    target_subfolder: str
+    description: str | None = None
+    filename_slug: str | None = None
+
+
+@app.post("/tools/raw/save")
+def raw_content_save_endpoint(req: RawContentSaveRequest) -> dict[str, Any]:
+    try:
+        result = raw_promoter.save_raw_content(
+            vault_id=req.vault_id,
+            title=req.title,
+            content=req.content,
+            target_subfolder=req.target_subfolder,
+            description=req.description,
+            filename_slug=req.filename_slug,
+        )
+        return {"ok": True, "data": result}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class PromoteRequest(BaseModel):
+    vault_id: str
+    source: str
+    identifier: str
+    target_subfolder: str
+    title: str | None = None
+    description: str | None = None
+    filename_slug: str | None = None
+
+
+@app.post("/tools/promote")
+def promote_endpoint(req: PromoteRequest) -> dict[str, Any]:
+    try:
+        result = raw_promoter.promote_to_raw(
+            vault_id=req.vault_id,
+            source=req.source,
+            identifier=req.identifier,
+            target_subfolder=req.target_subfolder,
+            filename_slug=req.filename_slug,
+            title=req.title,
+            description=req.description,
+        )
+        return {"ok": True, "data": result}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # --- Videos: Transcript + Summary ---------------------------------------
 
 class TranscriptSaveRequest(BaseModel):
@@ -562,6 +762,11 @@ def vaults_generate_prompt(req: GeneratePromptRequest) -> dict[str, Any]:
         raise HTTPException(500, str(e))
 
 
+@app.get("/vaults/{vault_id}/saeulen")
+def vaults_saeulen(vault_id: str) -> dict[str, Any]:
+    return {"saeulen": saeulen_tool.list_allowed()}
+
+
 @app.get("/vaults/{vault_id}")
 def vaults_get(vault_id: str) -> dict[str, Any]:
     v = settings.get_vault(vault_id)
@@ -588,10 +793,51 @@ def vaults_delete(vault_id: str) -> dict[str, Any]:
     return {"removed": True, "vault_id": vault_id}
 
 
+@app.post("/vaults/{vault_id}/scaffold")
+def vaults_scaffold(vault_id: str) -> dict[str, Any]:
+    """Create standard Karpathy vault structure. Non-destructive — skips existing files."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault nicht gefunden")
+    vault_path = Path(v["path"])
+    if not vault_path.exists():
+        raise HTTPException(400, f"Pfad existiert nicht: {vault_path}")
+
+    today = date.today().isoformat()
+    vault_name = v["name"]
+
+    templates = {
+        "CLAUDE.md": f"# {vault_name}\n\nDieser Vault folgt der Karpathy-Methode.\n\n## Struktur\n\n- `raw/` — Rohdaten und Quellen\n- `wiki/` — Kuratierte Wissensseiten\n- `notes/` — Persönliche Notizen\n",
+        "notes/todos.md": "---\ntyp: todos\n---\n\n",
+        "notes/scratchpad.md": f"---\ntyp: scratchpad\n---\n\n## {today}\n\n",
+        "wiki/index.md": f"---\ntyp: index\naktualisiert: {today}\n---\n\n# Index\n\n",
+        "wiki/log.md": f"---\ntyp: log\n---\n\n## {today} — Vault erstellt\n\nVault wurde mit EwtosBrain Setup-Wizard erstellt.\n",
+    }
+
+    created = []
+    skipped = []
+    for rel, content in templates.items():
+        target = vault_path / rel
+        if target.exists():
+            skipped.append(rel)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        created.append(rel)
+
+    raw_dir = vault_path / "raw"
+    if not raw_dir.exists():
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        created.append("raw/")
+
+    return {"ok": True, "created": created, "skipped": skipped}
+
+
 # --- Chat -----------------------------------------------------------------
 
 class ChatSendRequest(BaseModel):
     message: str
+    page_context: str | None = None
 
 
 # Per-vault routes — static segments (clear, stream) declared first to avoid
@@ -608,7 +854,7 @@ def chat_clear(vault_id: str) -> dict[str, Any]:
 def chat_stream(vault_id: str, req: ChatSendRequest) -> StreamingResponse:
     """SSE stream of chat events: tool_start, tool_end, text_delta, done, error."""
     return StreamingResponse(
-        chat.send_stream(vault_id, req.message),
+        chat.send_stream(vault_id, req.message, page_context=req.page_context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -625,7 +871,7 @@ def chat_load(vault_id: str) -> dict[str, Any]:
 @app.post("/tools/chat/{vault_id}")
 def chat_send(vault_id: str, req: ChatSendRequest) -> dict[str, Any]:
     try:
-        return chat.send(vault_id, req.message)
+        return chat.send(vault_id, req.message, page_context=req.page_context)
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
