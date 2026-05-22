@@ -450,6 +450,7 @@ function renderQuickActions() {
 }
 
 let pendingToolOptions = null;
+let _chatPageModeScrape = null; // set when chat is in page mode — fires on tab change
 
 function openTool(toolId, options = null) {
   const renderer = TOOL_RENDERERS[toolId];
@@ -1092,6 +1093,10 @@ async function renderTodos() {
 async function renderChat() {
   panelTitle.textContent = "Chat mit Vault";
 
+  function updateChatTitle(mode) {
+    panelTitle.textContent = mode === "page" ? "Chat mit Seite" : "Chat mit Vault";
+  }
+
   const httpBase = await getHttpBase();
 
   // Header: vault picker + meta line
@@ -1114,28 +1119,21 @@ async function renderChat() {
   toolbar.append(clearBtn);
 
   const status = el("div", { className: "tool-status" });
+  const pageUrlRow = el("div", { className: "page-url-row", style: "display:none" });
 
   let chatMode = "vault";
   let scrapedPage = pendingToolOptions?.pageContent || null;
   let pageChatHistory = [];
 
-  const modeRow = el("div", { className: "chat-mode-row" });
-  const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "📚 Vault" });
-  const pageBtn  = el("button", { type: "button", className: "chat-mode-btn", textContent: "🌐 Seite" });
-  modeRow.append(vaultBtn, pageBtn);
+  function setPageUrlRow(state, text) {
+    if (state === "hide") { pageUrlRow.style.display = "none"; return; }
+    pageUrlRow.style.display = "";
+    pageUrlRow.className = "page-url-row" + (state === "error" ? " error" : state === "loading" ? " loading" : "");
+    pageUrlRow.textContent = text;
+  }
 
-  vaultBtn.addEventListener("click", () => {
-    chatMode = "vault";
-    vaultBtn.classList.add("active");
-    pageBtn.classList.remove("active");
-    setStatus("");
-  });
-
-  pageBtn.addEventListener("click", async () => {
-    chatMode = "page";
-    pageBtn.classList.add("active");
-    vaultBtn.classList.remove("active");
-    pageChatHistory = [];
+  async function scrapeCurrentPage() {
+    setPageUrlRow("loading", "Lese Seite...");
     setStatus("lese Seite...");
     try {
       const hb = await getHttpBase();
@@ -1148,21 +1146,50 @@ async function renderChat() {
       const data = await res.json();
       if (!data.markdown) throw new Error("Kein Seiteninhalt");
       scrapedPage = { title: data.title || "", url: data.url || "", markdown: data.markdown };
-      setStatus(`Seite: ${scrapedPage.title}`);
+      setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
+      setStatus("");
     } catch (err) {
       scrapedPage = null;
+      setPageUrlRow("error", "Fehler: " + (err.message || err));
       setStatus("Seite konnte nicht gelesen werden: " + (err.message || err), "error");
     }
+  }
+
+  const modeRow = el("div", { className: "chat-mode-row" });
+  const vaultBtn = el("button", { type: "button", className: "chat-mode-btn active", textContent: "📚 Vault" });
+  const pageBtn  = el("button", { type: "button", className: "chat-mode-btn", textContent: "🌐 Seite" });
+  modeRow.append(vaultBtn, pageBtn);
+
+  vaultBtn.addEventListener("click", () => {
+    chatMode = "vault";
+    vaultBtn.classList.add("active");
+    pageBtn.classList.remove("active");
+    _chatPageModeScrape = null;
+    setPageUrlRow("hide");
+    setStatus("");
+    updateChatTitle("vault");
   });
 
-  panelBody.append(header, modeRow, meta, log, status, inputWrap, toolbar);
+  pageBtn.addEventListener("click", async () => {
+    chatMode = "page";
+    pageBtn.classList.add("active");
+    vaultBtn.classList.remove("active");
+    pageChatHistory = [];
+    _chatPageModeScrape = scrapeCurrentPage;
+    updateChatTitle("page");
+    await scrapeCurrentPage();
+  });
+
+  panelBody.append(header, modeRow, pageUrlRow, meta, log, status, inputWrap, toolbar);
 
   // Wenn über "Mit Seite chatten" geöffnet: direkt in Page-Modus springen
   if (scrapedPage?.markdown) {
     chatMode = "page";
     pageBtn.classList.add("active");
     vaultBtn.classList.remove("active");
-    setStatus(`Seite: ${scrapedPage.title}`);
+    _chatPageModeScrape = scrapeCurrentPage;
+    setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
+    updateChatTitle("page");
   }
 
 
@@ -1247,7 +1274,7 @@ async function renderChat() {
       return;
     }
     if (chatMode === "page" && !scrapedPage?.markdown) {
-      setStatus("Bitte zuerst Seite laden (🌐 Seite klicken)", "error");
+      setStatus("Seite wird noch geladen — kurz warten", "error");
       return;
     }
     busy = true;
@@ -3831,4 +3858,14 @@ function hideBrainHint() {
   document.getElementById("brain-hint-btn")?.remove();
 }
 
-chrome.tabs.onActivated.addListener(() => checkActiveTabForYoutube());
+chrome.tabs.onActivated.addListener(() => {
+  checkActiveTabForYoutube();
+  if (_chatPageModeScrape) _chatPageModeScrape();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status !== "complete" || !_chatPageModeScrape) return;
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab?.id === tabId) _chatPageModeScrape();
+  });
+});
