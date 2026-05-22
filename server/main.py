@@ -154,9 +154,14 @@ async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
     return result.get("data", {})
 
 
+class PageScrapeRequest(BaseModel):
+    mode: str = "content"
+
+
 @app.post("/tools/page_scrape")
-async def page_scrape_endpoint() -> dict[str, Any]:
-    result = await bridge.call("page_scrape", {})
+async def page_scrape_endpoint(req: PageScrapeRequest = None) -> dict[str, Any]:
+    mode = req.mode if req else "content"
+    result = await bridge.call("page_scrape", {"mode": mode})
     if not result.get("ok"):
         raise HTTPException(500, result.get("error", "Tool call failed"))
     return result.get("data", {})

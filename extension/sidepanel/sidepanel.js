@@ -1122,8 +1122,24 @@ async function renderChat() {
   const pageUrlRow = el("div", { className: "page-url-row", style: "display:none" });
 
   let chatMode = "vault";
+  let scrapeMode = "content"; // "content" | "full"
   let scrapedPage = pendingToolOptions?.pageContent || null;
   let pageChatHistory = [];
+
+  // --- Scrape-Mode Radio-Buttons ---
+  const scrapeModeRow = el("div", { className: "scrape-mode-row", style: "display:none" });
+  function makeScrapeRadio(value, label) {
+    const btn = el("button", { type: "button", className: "scrape-mode-btn" + (value === "content" ? " active" : ""), textContent: label });
+    btn.dataset.value = value;
+    btn.addEventListener("click", async () => {
+      if (scrapeMode === value) return;
+      scrapeMode = value;
+      scrapeModeRow.querySelectorAll(".scrape-mode-btn").forEach(b => b.classList.toggle("active", b.dataset.value === value));
+      if (chatMode === "page") await scrapeCurrentPage();
+    });
+    return btn;
+  }
+  scrapeModeRow.append(makeScrapeRadio("content", "Nur Inhalt"), makeScrapeRadio("full", "Alles"));
 
   function setPageUrlRow(state, text) {
     if (state === "hide") { pageUrlRow.style.display = "none"; return; }
@@ -1140,7 +1156,7 @@ async function renderChat() {
       const res = await fetch(`${hb}/tools/page_scrape`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode: scrapeMode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1165,6 +1181,7 @@ async function renderChat() {
     vaultBtn.classList.add("active");
     pageBtn.classList.remove("active");
     _chatPageModeScrape = null;
+    scrapeModeRow.style.display = "none";
     setPageUrlRow("hide");
     setStatus("");
     updateChatTitle("vault");
@@ -1175,18 +1192,20 @@ async function renderChat() {
     pageBtn.classList.add("active");
     vaultBtn.classList.remove("active");
     pageChatHistory = [];
+    scrapeModeRow.style.display = "";
     _chatPageModeScrape = scrapeCurrentPage;
     updateChatTitle("page");
     await scrapeCurrentPage();
   });
 
-  panelBody.append(header, modeRow, pageUrlRow, meta, log, status, inputWrap, toolbar);
+  panelBody.append(header, modeRow, scrapeModeRow, pageUrlRow, meta, log, status, inputWrap, toolbar);
 
   // Wenn über "Mit Seite chatten" geöffnet: direkt in Page-Modus springen
   if (scrapedPage?.markdown) {
     chatMode = "page";
     pageBtn.classList.add("active");
     vaultBtn.classList.remove("active");
+    scrapeModeRow.style.display = "";
     _chatPageModeScrape = scrapeCurrentPage;
     setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
     updateChatTitle("page");

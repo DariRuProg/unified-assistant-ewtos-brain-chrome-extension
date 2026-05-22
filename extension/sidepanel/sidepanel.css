@@ -1295,6 +1295,34 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
 }
 .chat-mode-btn:not(.active):hover { opacity: 0.85; color: var(--text); border-color: var(--text-muted); }
 
+/* scrape mode radio (Nur Inhalt / Alles) */
+.scrape-mode-row {
+  display: flex;
+  gap: 5px;
+  margin: 0 0 5px;
+}
+.scrape-mode-btn {
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  padding: 3px 11px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.scrape-mode-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  opacity: 1;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--accent);
+}
+.scrape-mode-btn:not(.active):hover { opacity: 0.8; color: var(--text); border-color: var(--text-muted); }
+
 .page-url-row {
   font-size: 10px;
   padding: 3px 7px;
