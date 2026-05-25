@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>EwtosBrain — Bild</title>
+  <link rel="stylesheet" href="lightbox.css" />
+</head>
+<body>
+  <div id="stage">
+    <img id="img" alt="" />
+  </div>
+
+  <div id="overlay" class="open">
+    <button id="toggle" title="Prompt ein-/ausblenden" type="button">▾</button>
+    <div id="overlay-body">
+      <div id="meta"></div>
+      <div id="prompt"></div>
+      <div id="actions">
+        <button id="dl" type="button">⬇ Download</button>
+        <button id="edit" type="button">✎ Im Sidepanel weiterbearbeiten</button>
+        <button id="close" type="button">× Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lightbox.js"></script>
+</body>
+</html>

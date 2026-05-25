@@ -408,28 +408,31 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -
             path = tool_input.get("path", "")
             return wiki_reader.read_file(vault_path, path), False
         if name == "list_todos":
-            return _format_todos(notes_file.list_todos()), False
+            return _format_todos(notes_file.list_todos(vault_id=vault_id)), False
         if name == "add_todo":
-            res = notes_file.add_todo(tool_input.get("text", ""), tool_input.get("due"))
+            res = notes_file.add_todo(
+                tool_input.get("text", ""), tool_input.get("due"), vault_id=vault_id,
+            )
             due_str = f" (fällig {res['due']})" if res["due"] else ""
             return f"Todo hinzugefügt: {res['added']}{due_str}", False
         if name == "update_todo":
             res = notes_file.update_todo(
                 tool_input.get("match_text", ""),
                 tool_input.get("action", ""),
+                vault_id=vault_id,
             )
             return f"{res['action']}: {res['todo']}", False
         if name == "read_scratchpad":
-            data = notes_file.read_scratchpad()
+            data = notes_file.read_scratchpad(vault_id=vault_id)
             return data["content"] or "(Scratchpad ist leer)", False
         if name == "append_scratchpad":
-            res = notes_file.append_scratchpad(tool_input.get("text", ""))
+            res = notes_file.append_scratchpad(tool_input.get("text", ""), vault_id=vault_id)
             return f"Scratchpad ergänzt unter Datum {res['date']}", False
         if name == "replace_scratchpad":
-            res = notes_file.replace_scratchpad(tool_input.get("content", ""))
+            res = notes_file.replace_scratchpad(tool_input.get("content", ""), vault_id=vault_id)
             return f"Scratchpad ersetzt ({res['length']} Zeichen)", False
         if name == "list_bookmarks":
-            items = bookmarks.list_bookmarks()
+            items = bookmarks.list_bookmarks(vault_id=vault_id)
             if not items:
                 return "(keine Bookmarks gespeichert)", False
             lines = []
@@ -447,10 +450,11 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -
                 tool_input.get("title"),
                 tool_input.get("note"),
                 tool_input.get("source") or "manual",
+                vault_id=vault_id,
             )
             return f"Bookmark hinzugefügt: {res['added']} ({res['url']})", False
         if name == "delete_bookmark":
-            res = bookmarks.delete_bookmark(tool_input.get("match", ""))
+            res = bookmarks.delete_bookmark(tool_input.get("match", ""), vault_id=vault_id)
             return f"Bookmark gelöscht: {res['deleted']}", False
         if name == "list_playlists":
             pls = playlists.list_playlists(vault_id, saeule=tool_input.get("saeule"))
@@ -635,21 +639,100 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def send_page_stream(page_content: str, user_message: str, history: list[dict]) -> Iterator[str]:
-    """SSE stream: chat about a specific page — no vault, no tools, no persistence."""
+def resolve_source(source_type: str, source_ref: dict) -> tuple[str, str]:
+    """Returns (title, content_text) for a chat source.
+
+    source_type:
+      - "page":       source_ref = {"content": str, "title"?: str}
+      - "transcript": source_ref = {"vault_id": str, "rel_path": str}
+      - "vault_file": source_ref = {"vault_id": str, "rel_path": str}
+                     → einzelne .md-Datei aus dem Vault als Chat-Quelle.
+      - "video":      source_ref = {"vault_id": str, "slug": str, "saeule"?: str}
+                     → Master-Page + verlinktes Transcript zusammengeführt.
+    """
+    if source_type == "page":
+        return (source_ref.get("title") or "Seite", source_ref.get("content") or "")
+
+    if source_type in ("transcript", "vault_file"):
+        vault_id = source_ref.get("vault_id")
+        rel_path = source_ref.get("rel_path")
+        if not vault_id or not rel_path:
+            raise ValueError(f"{source_type}-Quelle braucht vault_id und rel_path")
+        vault = settings.get_vault(vault_id)
+        if not vault:
+            raise ValueError(f"Vault {vault_id} nicht gefunden")
+        text = wiki_reader.read_file(vault["path"], rel_path)
+        title = rel_path if source_type == "vault_file" else Path(rel_path).stem
+        return (title, text)
+
+    if source_type == "video":
+        vault_id = source_ref.get("vault_id")
+        slug = source_ref.get("slug")
+        saeule = source_ref.get("saeule")
+        if not vault_id or not slug:
+            raise ValueError("video-Quelle braucht vault_id und slug")
+        vault = settings.get_vault(vault_id)
+        if not vault:
+            raise ValueError(f"Vault {vault_id} nicht gefunden")
+        video = videos.get_video(vault_id, slug, saeule)
+        if not video:
+            raise ValueError(f"Video {slug} nicht gefunden")
+        title = video["frontmatter"].get("titel") or slug
+        master_body = video.get("body") or ""
+        transcript_rel = str(video["frontmatter"].get("transcript") or "").strip()
+        parts = [f"# {title}", "", "## Master-Page", "", master_body]
+        if transcript_rel and transcript_rel.lower() != "pending":
+            try:
+                transcript_text = wiki_reader.read_file(vault["path"], transcript_rel)
+                parts.extend(["", "## Transcript", "", transcript_text])
+            except Exception as err:
+                parts.extend(["", f"_(Transcript {transcript_rel} konnte nicht geladen werden: {err})_"])
+        return (title, "\n".join(parts))
+
+    raise ValueError(f"Unbekannter source_type: {source_type}")
+
+
+def send_source_stream(
+    source_type: str,
+    source_ref: dict,
+    user_message: str,
+    history: list[dict],
+    strict_source: bool = True,
+) -> Iterator[str]:
+    """SSE stream: chat about a single source (page / transcript / video) — no vault tools, no persistence."""
     try:
         user_message = (user_message or "").strip()
         if not user_message:
             yield _sse("error", {"message": "Leere Nachricht"})
             return
 
+        title, content_text = resolve_source(source_type, source_ref)
+
         _, model = effective_llm_config()
         model = model or DEFAULT_MODEL
 
+        if strict_source:
+            knowledge_instruction = (
+                "Antworte ausschließlich basierend auf diesem Inhalt.\n"
+                "Wenn die Antwort nicht im Inhalt steht, sag das klar — füge kein externes Wissen hinzu."
+            )
+        else:
+            knowledge_instruction = (
+                "Nutze primär den bereitgestellten Inhalt als Quelle. Du darfst allgemeines Wissen ergänzend einsetzen,\n"
+                "um Zusammenhänge zu erklären — mach aber deutlich wenn du über den Inhalt hinausgehst."
+            )
+
+        source_label = {
+            "page": "Seiteninhalt",
+            "transcript": "Transcript",
+            "vault_file": "Vault-Datei",
+            "video": "Video (Master-Page + Transcript)",
+        }.get(source_type, "Inhalt")
+
         system_prompt = (
-            "Du beantwortest Fragen zu folgendem Seiteninhalt.\n"
-            "Antworte ausschließlich basierend auf diesem Inhalt — kein externes Wissen.\n\n"
-            "---\n\n" + page_content[:12000]
+            f"Du beantwortest Fragen zu folgendem {source_label}: „{title}“.\n"
+            + knowledge_instruction + "\n\n"
+            "---\n\n" + content_text[:80000]
         )
         messages = list(history) + [{"role": "user", "content": user_message}]
 
@@ -678,10 +761,21 @@ def send_page_stream(page_content: str, user_message: str, history: list[dict]) 
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": final_text},
         ]
-        yield _sse("done", {"messages": new_history, "consulted": [], "usage": usage})
+        yield _sse("done", {"messages": new_history, "consulted": [], "usage": usage, "source_title": title})
     except Exception as e:
-        log.exception("Page chat streaming error")
+        log.exception("Source chat streaming error")
         yield _sse("error", {"message": str(e)})
+
+
+def send_page_stream(page_content: str, user_message: str, history: list[dict], strict_page: bool = True) -> Iterator[str]:
+    """Backwards-compat wrapper. Use send_source_stream with source_type='page'."""
+    yield from send_source_stream(
+        "page",
+        {"content": page_content},
+        user_message,
+        history,
+        strict_source=strict_page,
+    )
 
 
 def send_stream(vault_id: str, user_message: str, page_context: str | None = None) -> Iterator[str]:

@@ -15,6 +15,14 @@
         <span id="status-text">verbinde...</span>
       </div>
       <button id="dark-toggle" class="dark-toggle" type="button" title="Dark/Light Mode">&#9728;</button>
+      <div class="burger-wrap">
+        <button id="burger-btn" class="burger" type="button" title="Menü" aria-haspopup="true" aria-expanded="false">&#9776;</button>
+        <div id="burger-menu" class="burger-menu hidden" role="menu">
+          <button id="view-toggle" type="button" role="menuitem">⊞ Kachel-Ansicht</button>
+          <button id="open-options" type="button" role="menuitem">Einstellungen</button>
+          <button id="reconnect" type="button" role="menuitem">Neu verbinden</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -29,11 +37,6 @@
   </div>
 
   <main id="content"></main>
-
-  <footer>
-    <button id="open-options" type="button">Einstellungen</button>
-    <button id="reconnect" type="button">Neu verbinden</button>
-  </footer>
 
   <script src="sidepanel.js" type="module"></script>
 </body>

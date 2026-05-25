@@ -28,6 +28,7 @@ function updateDarkToggleIcon(darkMode) {
   applyTheme(theme, darkMode);
   updateDarkToggleIcon(darkMode);
   toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
+  updateViewToggleBtn();
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -60,6 +61,7 @@ const TOOL_RENDERERS = {
   }),
   todos: renderTodos,
   chat: renderChat,
+  vault_explorer: renderVaultExplorer,
   playlists: renderPlaylistsTool,
   bookmarks: renderBookmarksTool,
   page_scrape: renderPageScrape,
@@ -68,6 +70,7 @@ const TOOL_RENDERERS = {
   color_picker: renderColorPicker,
   screenshot: renderScreenshot,
   url_extractor: renderUrlExtractor,
+  image_generator: renderImageGenerator,
 };
 
 const GROUPS = [
@@ -75,7 +78,7 @@ const GROUPS = [
     id: "vault",
     label: "Vault",
     tools: [
-      { id: "chat", label: "Chat mit Vault", hint: "Karpathy-Navigation, Claude API", icon: "💬" },
+      { id: "vault_explorer", label: "Explorer", hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
       { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
       { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates", icon: "✅" },
       { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule", icon: "🎵" },
@@ -91,8 +94,9 @@ const GROUPS = [
       { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
       { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
       { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
-      { id: "screenshot", label: "Screenshot", hint: "Sichtbaren Tab als PNG", icon: "📸" },
+      { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸" },
       { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
+      { id: "image_generator", label: "Image-Gen", hint: "Bild erzeugen + editieren (Gemini Nano Banana)", icon: "🪄" },
     ],
   },
   {
@@ -105,7 +109,7 @@ const GROUPS = [
 ];
 
 const QUICK_TOOLS = [
-  { id: "chat",      label: "Chat",  icon: "💬" },
+  { id: "vault_explorer", label: "Vault", icon: "📚" },
   { id: "scratchpad", label: "Notiz", icon: "📝" },
   { id: "todos",     label: "Todos", icon: "✅" },
   { id: "_briefing", label: "Morgen", icon: "☀", action: showBriefingPanel },
@@ -135,6 +139,20 @@ checkPendingPlaylistPick();
 checkPendingBrainPick();
 checkActiveTabForYoutube();
 
+// Globaler Click-Handler für Obsidian-Wikilinks aus renderMarkdown.
+// Öffnet die Ziel-Datei im Vault-Explorer (gleicher Vault wie aktuell ausgewählt).
+document.addEventListener("click", async (e) => {
+  const link = e.target.closest("a.wiki-link");
+  if (!link) return;
+  e.preventDefault();
+  let rel = link.dataset.rel || "";
+  if (!rel) return;
+  if (!/\.(md|txt)$/i.test(rel)) rel = rel + ".md";
+  const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+  if (!selectedVaultId) return;
+  openTool("vault_explorer", { initialFile: rel, vaultId: selectedVaultId });
+});
+
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
   if (chrome.runtime.lastError) return;
   if (resp) setStatus(!!resp.connected);
@@ -153,13 +171,62 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.brainPick && changes.brainPick.newValue) {
     checkPendingBrainPick();
   }
+  // Vault-Switch: Notes-Tools sind vault-scoped, also komplett neu rendern,
+  // damit scratchpad/todos/bookmarks aus dem neu gewählten Vault geladen werden.
+  if (area === "local" && changes.selectedVaultId && activeTool && NOTES_TOOLS.has(activeTool)) {
+    openTool(activeTool);
+  }
 });
 
-openOptions.addEventListener("click", () => chrome.runtime.openOptionsPage());
+openOptions.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+  closeBurgerMenu();
+});
 
 reconnectBtn.addEventListener("click", () => {
   setStatus(false, "verbinde...");
   chrome.runtime.sendMessage({ type: "reconnect" });
+  closeBurgerMenu();
+});
+
+const burgerBtn = document.getElementById("burger-btn");
+const burgerMenu = document.getElementById("burger-menu");
+const viewToggleMenuBtn = document.getElementById("view-toggle");
+
+function updateViewToggleBtn() {
+  if (viewToggleMenuBtn) {
+    viewToggleMenuBtn.textContent = toolViewMode === "grid" ? "☰ Listen-Ansicht" : "⊞ Kachel-Ansicht";
+  }
+}
+
+viewToggleMenuBtn.addEventListener("click", async () => {
+  toolViewMode = toolViewMode === "grid" ? "list" : "grid";
+  await chrome.storage.local.set({ toolViewMode });
+  updateViewToggleBtn();
+  if (!activeTool) renderToolList();
+  closeBurgerMenu();
+});
+
+function openBurgerMenu() {
+  burgerMenu.classList.remove("hidden");
+  burgerBtn.setAttribute("aria-expanded", "true");
+}
+function closeBurgerMenu() {
+  burgerMenu.classList.add("hidden");
+  burgerBtn.setAttribute("aria-expanded", "false");
+}
+burgerBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (burgerMenu.classList.contains("hidden")) openBurgerMenu();
+  else closeBurgerMenu();
+});
+document.addEventListener("click", (e) => {
+  if (burgerMenu.classList.contains("hidden")) return;
+  if (e.target === burgerBtn || burgerMenu.contains(e.target)) return;
+  closeBurgerMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !burgerMenu.classList.contains("hidden")) closeBurgerMenu();
 });
 
 document.getElementById("retry-connect")?.addEventListener("click", () => {
@@ -395,20 +462,6 @@ function renderToolList() {
   const group = GROUPS.find((g) => g.id === activeTab);
   if (!group) return;
 
-  const listHeader = el("div", { className: "tools-header" });
-  const toggleBtn = el("button", {
-    type: "button",
-    className: "view-toggle-btn",
-    title: toolViewMode === "grid" ? "Listen-Ansicht" : "Kachel-Ansicht",
-    textContent: toolViewMode === "grid" ? "☰" : "⊞",
-  });
-  toggleBtn.addEventListener("click", async () => {
-    toolViewMode = toolViewMode === "grid" ? "list" : "grid";
-    await chrome.storage.local.set({ toolViewMode });
-    renderToolList();
-  });
-  listHeader.append(toggleBtn);
-
   const list = el("ul", { className: "tools " + toolViewMode });
   for (const t of group.tools) {
     const li = el("li", { className: "tool" + (t.soon ? " soon" : "") });
@@ -419,6 +472,9 @@ function renderToolList() {
     if (toolViewMode === "list" && t.hint) {
       li.append(el("span", { className: "hint", textContent: t.hint }));
     }
+    if (toolViewMode === "grid" && t.hint) {
+      li.append(el("span", { className: "tool-hint", textContent: t.hint }));
+    }
     if (t.soon) {
       li.append(el("span", { className: "badge", textContent: "bald" }));
     } else {
@@ -426,7 +482,7 @@ function renderToolList() {
     }
     list.append(li);
   }
-  content.append(listHeader, list);
+  content.append(list);
 }
 
 function renderQuickActions() {
@@ -451,10 +507,19 @@ function renderQuickActions() {
 
 let pendingToolOptions = null;
 let _chatPageModeScrape = null; // set when chat is in page mode — fires on tab change
+let currentToolCleanup = null;  // optional cleanup callback set by tool renderers
+
+function runToolCleanup() {
+  if (currentToolCleanup) {
+    try { currentToolCleanup(); } catch {}
+    currentToolCleanup = null;
+  }
+}
 
 function openTool(toolId, options = null) {
   const renderer = TOOL_RENDERERS[toolId];
   if (!renderer) return;
+  runToolCleanup();
   for (const g of GROUPS) {
     if (g.tools.some((t) => t.id === toolId)) { activeTab = g.id; break; }
   }
@@ -479,6 +544,7 @@ function openTool(toolId, options = null) {
 }
 
 function closeTool() {
+  runToolCleanup();
   activeTool = null;
   panelTitle = null;
   panelBody = null;
@@ -489,28 +555,97 @@ function closeTool() {
 function renderYoutubeTranscript() {
   panelTitle.textContent = "YouTube-Transcript";
 
+  const urlRow = el("div");
+  urlRow.style.cssText = "display:flex;gap:6px;align-items:stretch;";
   const urlInput = el("input", { type: "url", placeholder: "https://www.youtube.com/watch?v=..." });
-  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (tab?.url && /youtube\.com\/watch/.test(tab.url)) {
-      urlInput.value = tab.url;
-    }
+  urlInput.style.flex = "1";
+  const refreshBtn = el("button", {
+    type: "button", textContent: "↻", title: "URL aus aktivem Tab übernehmen",
+    className: "secondary",
   });
+  refreshBtn.style.cssText = "padding:4px 10px;flex:0 0 auto;";
+  urlRow.append(urlInput, refreshBtn);
+
+  let lastAutoUrl = "";
+  function loadFromActiveTab(force = false) {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      const u = tab?.url || "";
+      if (!/youtube\.com\/watch/.test(u)) return;
+      // Auto-update nur wenn Feld leer ist, das letzte Auto-Loaded entspricht
+      // oder explizit ueber Refresh-Button getriggert — so wird kein manuell
+      // editierter URL ueberschrieben.
+      if (force || !urlInput.value.trim() || urlInput.value === lastAutoUrl) {
+        urlInput.value = u;
+        lastAutoUrl = u;
+      }
+    });
+  }
+  loadFromActiveTab(true);
+  refreshBtn.addEventListener("click", () => loadFromActiveTab(true));
+
+  // Auto-Detect Tab-Wechsel + URL-Aenderung im aktiven Tab
+  const onActivated = () => loadFromActiveTab(false);
+  const onUpdated = (tabId, changeInfo, tab) => {
+    if (changeInfo.url && tab.active) loadFromActiveTab(false);
+  };
+  chrome.tabs.onActivated.addListener(onActivated);
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  currentToolCleanup = () => {
+    chrome.tabs.onActivated.removeListener(onActivated);
+    chrome.tabs.onUpdated.removeListener(onUpdated);
+  };
   const runBtn = el("button", { textContent: "Transcript holen" });
+  const brainBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
+  brainBtn.style.marginLeft = "6px";
+  brainBtn.title = "Transcript ins Vault speichern (Säule, Playlist, Tags)";
   const status = el("div", { className: "tool-status" });
   const output = el("textarea", { placeholder: "Ergebnis erscheint hier...", readOnly: true });
 
-  runBtn.addEventListener("click", async () => {
+  // Fallback-Row: erscheint nur, wenn Browser + Server-Fallback beide fail liefern
+  const fallbackRow = el("div", { className: "tool-fallback hidden" });
+  fallbackRow.style.cssText = "margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle,#f5f5f5);";
+  const fallbackHint = el("div", { className: "tool-status" });
+  fallbackHint.style.cssText = "margin-bottom:6px;font-size:12px;";
+  fallbackHint.textContent = "Beide Auto-Pfade fehlgeschlagen. Tab öffnen, Drei-Punkte-Menü → 'Transkript anzeigen', Liste markieren + kopieren, dann hier einfügen.";
+  const openTabBtn = el("button", { textContent: "Im YouTube-Tab öffnen", className: "secondary" });
+  const manualArea = el("textarea", { placeholder: "Manuell kopiertes Transcript hier einfügen..." });
+  manualArea.style.cssText = "margin-top:8px;min-height:80px;";
+  const useManualBtn = el("button", { textContent: "Übernehmen", className: "secondary" });
+  useManualBtn.style.marginTop = "6px";
+  fallbackRow.append(fallbackHint, openTabBtn, manualArea, useManualBtn);
+
+  openTabBtn.addEventListener("click", () => {
+    const url = urlInput.value.trim();
+    if (!url) return;
+    chrome.tabs.create({ url, active: true });
+  });
+
+  useManualBtn.addEventListener("click", () => {
+    const txt = manualArea.value.trim();
+    if (!txt) {
+      status.textContent = "Bitte erst Transcript einfügen";
+      status.className = "tool-status error";
+      return;
+    }
+    output.value = txt;
+    status.textContent = "manuell übernommen";
+    status.className = "tool-status success";
+    fallbackRow.classList.add("hidden");
+  });
+
+  async function fetchTranscript() {
     const url = urlInput.value.trim();
     if (!url) {
       status.textContent = "URL angeben";
       status.className = "tool-status error";
-      return;
+      return null;
     }
     runBtn.disabled = true;
-    status.textContent = "läuft... (kann ~10 Sek dauern)";
+    brainBtn.disabled = true;
+    status.textContent = "läuft... (Server-API zuerst, Browser als Fallback)";
     status.className = "tool-status";
     output.value = "";
-
+    fallbackRow.classList.add("hidden");
     try {
       const httpBase = await getHttpBase();
       const res = await fetch(`${httpBase}/tools/youtube_transcript`, {
@@ -523,27 +658,94 @@ function renderYoutubeTranscript() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       output.value = data?.transcript || "";
-      status.textContent = "fertig";
+      let src;
+      if (data?.source === "server_api") src = `fertig (Server-API${data?.lang ? ", " + data.lang : ""})`;
+      else if (data?.source === "extension") src = "fertig (Browser-Fallback)";
+      else src = "fertig";
+      status.textContent = src;
       status.className = "tool-status success";
+      return data;
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
+      fallbackRow.classList.remove("hidden");
+      return null;
     } finally {
       runBtn.disabled = false;
+      brainBtn.disabled = false;
     }
+  }
+
+  runBtn.addEventListener("click", fetchTranscript);
+
+  brainBtn.addEventListener("click", async () => {
+    const url = urlInput.value.trim();
+    if (!url) {
+      status.textContent = "URL angeben";
+      status.className = "tool-status error";
+      return;
+    }
+
+    // 1. Transcript holen falls noch nicht da
+    let transcript = output.value.trim();
+    if (!transcript) {
+      const data = await fetchTranscript();
+      transcript = (data?.transcript || "").trim();
+      if (!transcript) return;  // Fehler-Status ist schon gesetzt
+    }
+
+    // 2. Title aus aktivem Tab wenn URL passt — sonst undefined (showBrainModal nimmt URL)
+    let title;
+    try {
+      const [tab] = await new Promise((resolve) =>
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve)
+      );
+      if (tab?.url === url && tab.title) {
+        title = tab.title.replace(/ - YouTube$/, "").trim();
+      }
+    } catch {}
+
+    // 3. Modal mit prefetched → ueberspringt auto_brain, ruft nur auto_tag
+    await showBrainModal({ url, prefetched: { transcript, title } });
   });
 
-  panelBody.append(urlInput, runBtn, status, output);
+  const chatBtn = el("button", { textContent: "💬 Chat mit Transcript", className: "secondary" });
+  chatBtn.style.marginLeft = "6px";
+  chatBtn.title = "Direkt mit dem geholten Transcript chatten (ohne ins Brain zu speichern)";
+  chatBtn.addEventListener("click", () => {
+    const transcript = (output.value || "").trim();
+    if (!transcript) {
+      status.textContent = "Erst Transcript holen";
+      status.className = "tool-status error";
+      return;
+    }
+    const url = urlInput.value.trim();
+    openTool("chat", {
+      sourceType: "page",
+      sourceRef: { content: `URL: ${url}\n\n${transcript}`, title: url },
+      sourceTitle: "YouTube-Transcript",
+    });
+  });
+
+  const btnRow = el("div");
+  btnRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;";
+  btnRow.append(runBtn, brainBtn, chatBtn);
+
+  panelBody.append(urlRow, btnRow, status, output, fallbackRow);
 }
 
 async function renderNotesFile(kind, opts) {
   panelTitle.textContent = opts.title;
 
+  const vaultHint = el("div", { className: "notes-vault-hint" });
   const meta = el("div", { className: "tool-status", textContent: "lade..." });
   const textarea = el("textarea", { placeholder: opts.placeholder });
   textarea.classList.add("scratchpad");
+  const rendered = el("div", { className: "notes-rendered hidden" });
   const status = el("div", { className: "tool-status" });
 
+  const viewToggle = el("button", { type: "button", textContent: "Vorschau" });
+  viewToggle.classList.add("secondary");
   const exportBtn = el("button", { textContent: "Speichern unter..." });
   const fallbackRow = el("div", { className: "export-row hidden" });
   const fallbackInput = el("input", {
@@ -642,12 +844,42 @@ async function renderNotesFile(kind, opts) {
     promoteSection.append(promoteBtn, promoteForm);
   }
 
-  panelBody.append(meta, textarea, status, exportBtn, fallbackRow, ...(promoteSection ? [promoteSection] : []));
+  const toolbar = el("div", { className: "todo-toolbar" });
+  toolbar.append(viewToggle, exportBtn);
+
+  panelBody.append(vaultHint, meta, textarea, rendered, status, toolbar, fallbackRow, ...(promoteSection ? [promoteSection] : []));
 
   const httpBase = await getHttpBase();
+  const vaultId = await getActiveVaultId(httpBase);
+  const vault = await getActiveVault(httpBase);
+  if (vault) {
+    vaultHint.textContent = `Notes-Inbox: ${vault.name}`;
+  } else {
+    vaultHint.textContent = "Kein Vault aktiv — Notes laufen global";
+  }
   let saveTimer = null;
   let lastSaved = "";
   let started = null;
+  let viewMode = "edit"; // "edit" | "rendered"
+
+  function refreshRendered() {
+    rendered.innerHTML = renderMarkdown(textarea.value || "");
+  }
+
+  viewToggle.addEventListener("click", () => {
+    if (viewMode === "edit") {
+      refreshRendered();
+      textarea.classList.add("hidden");
+      rendered.classList.remove("hidden");
+      viewToggle.textContent = "Quellcode";
+      viewMode = "rendered";
+    } else {
+      rendered.classList.add("hidden");
+      textarea.classList.remove("hidden");
+      viewToggle.textContent = "Vorschau";
+      viewMode = "edit";
+    }
+  });
 
   function setMeta() {
     meta.textContent = started ? `aktiv seit ${started}` : "";
@@ -674,7 +906,7 @@ async function renderNotesFile(kind, opts) {
     if (content === lastSaved) return;
     setStatus("speichere...");
     try {
-      const res = await fetch(`${httpBase}/tools/notes/${kind}`, {
+      const res = await fetch(withVaultId(`${httpBase}/tools/notes/${kind}`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -706,7 +938,7 @@ async function renderNotesFile(kind, opts) {
   }
 
   async function exportViaServer(target) {
-    const res = await fetch(`${httpBase}/tools/notes/${kind}/export`, {
+    const res = await fetch(withVaultId(`${httpBase}/tools/notes/${kind}/export`, vaultId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: target, content: textarea.value }),
@@ -768,7 +1000,7 @@ async function renderNotesFile(kind, opts) {
   });
 
   try {
-    const res = await fetch(`${httpBase}/tools/notes/${kind}`);
+    const res = await fetch(withVaultId(`${httpBase}/tools/notes/${kind}`, vaultId));
     const text = await res.text();
     let data = null;
     try { data = JSON.parse(text); } catch {}
@@ -864,6 +1096,7 @@ function appendTodo(content, text) {
 async function renderTodos() {
   panelTitle.textContent = "Todos";
 
+  const vaultHint = el("div", { className: "notes-vault-hint" });
   const meta = el("div", { className: "tool-status", textContent: "lade..." });
   const list = el("div", { className: "todo-list" });
 
@@ -896,9 +1129,12 @@ async function renderTodos() {
   fallbackBtns.append(fallbackSave, fallbackCancel);
   fallbackRow.append(fallbackInput, fallbackBtns);
 
-  panelBody.append(meta, list, addForm, sourceArea, status, toolbar, fallbackRow);
+  panelBody.append(vaultHint, meta, list, addForm, sourceArea, status, toolbar, fallbackRow);
 
   const httpBase = await getHttpBase();
+  const vaultId = await getActiveVaultId(httpBase);
+  const vault = await getActiveVault(httpBase);
+  vaultHint.textContent = vault ? `Notes-Inbox: ${vault.name}` : "Kein Vault aktiv — Notes laufen global";
   let content = "";
   let saveTimer = null;
   let started = null;
@@ -962,7 +1198,7 @@ async function renderTodos() {
     if (sourceMode) content = sourceArea.value;
     setStatus("speichere...");
     try {
-      const res = await fetch(`${httpBase}/tools/notes/todos`, {
+      const res = await fetch(withVaultId(`${httpBase}/tools/notes/todos`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -1055,7 +1291,7 @@ async function renderTodos() {
     if (!target) { setStatus("Pfad fehlt", "error"); return; }
     fallbackSave.disabled = true;
     try {
-      const res = await fetch(`${httpBase}/tools/notes/todos/export`, {
+      const res = await fetch(withVaultId(`${httpBase}/tools/notes/todos/export`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: target, content }),
@@ -1075,7 +1311,7 @@ async function renderTodos() {
   });
 
   try {
-    const res = await fetch(`${httpBase}/tools/notes/todos`);
+    const res = await fetch(withVaultId(`${httpBase}/tools/notes/todos`, vaultId));
     const text = await res.text();
     let data = null;
     try { data = JSON.parse(text); } catch {}
@@ -1093,8 +1329,16 @@ async function renderTodos() {
 async function renderChat() {
   panelTitle.textContent = "Chat mit Vault";
 
-  function updateChatTitle(mode) {
-    panelTitle.textContent = mode === "page" ? "Chat mit Seite" : "Chat mit Vault";
+  const initialSource = pendingToolOptions?.sourceType && pendingToolOptions?.sourceRef
+    ? { type: pendingToolOptions.sourceType, ref: pendingToolOptions.sourceRef, title: pendingToolOptions.sourceTitle || "" }
+    : null;
+
+  function updateChatTitle(mode, sourceTitle) {
+    if (mode === "transcript") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Transcript";
+    else if (mode === "video") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Video";
+    else if (mode === "page") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Seite";
+    else if (mode === "vault_file") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Datei";
+    else panelTitle.textContent = "Chat mit Vault";
   }
 
   const httpBase = await getHttpBase();
@@ -1123,8 +1367,11 @@ async function renderChat() {
 
   let chatMode = "vault";
   let scrapeMode = "content"; // "content" | "full"
+  let strictPage = true;
   let scrapedPage = pendingToolOptions?.pageContent || null;
   let pageChatHistory = [];
+  let sourceChatHistory = [];
+  let activeSource = null; // {type: "transcript"|"video", ref: {...}, title: string}
 
   // --- Scrape-Mode Radio-Buttons ---
   const scrapeModeRow = el("div", { className: "scrape-mode-row", style: "display:none" });
@@ -1140,6 +1387,28 @@ async function renderChat() {
     return btn;
   }
   scrapeModeRow.append(makeScrapeRadio("content", "Nur Inhalt"), makeScrapeRadio("full", "Alles"));
+
+  // --- Strict-Page Toggle ---
+  const strictRow = el("div", { className: "scrape-mode-row", style: "display:none" });
+  const strictOnBtn  = el("button", { type: "button", className: "scrape-mode-btn active", textContent: "Nur Seite" });
+  const strictOffBtn = el("button", { type: "button", className: "scrape-mode-btn", textContent: "Seite + Wissen" });
+  strictOnBtn.title  = "Antwortet ausschließlich aus dem Seiteninhalt";
+  strictOffBtn.title = "Ergänzt mit allgemeinem Wissen, kennzeichnet es aber";
+  strictOnBtn.addEventListener("click", () => {
+    if (strictPage) return;
+    strictPage = true;
+    pageChatHistory = [];
+    strictOnBtn.classList.add("active");
+    strictOffBtn.classList.remove("active");
+  });
+  strictOffBtn.addEventListener("click", () => {
+    if (!strictPage) return;
+    strictPage = false;
+    pageChatHistory = [];
+    strictOffBtn.classList.add("active");
+    strictOnBtn.classList.remove("active");
+  });
+  strictRow.append(strictOnBtn, strictOffBtn);
 
   function setPageUrlRow(state, text) {
     if (state === "hide") { pageUrlRow.style.display = "none"; return; }
@@ -1182,6 +1451,7 @@ async function renderChat() {
     pageBtn.classList.remove("active");
     _chatPageModeScrape = null;
     scrapeModeRow.style.display = "none";
+    strictRow.style.display = "none";
     setPageUrlRow("hide");
     setStatus("");
     updateChatTitle("vault");
@@ -1193,12 +1463,51 @@ async function renderChat() {
     vaultBtn.classList.remove("active");
     pageChatHistory = [];
     scrapeModeRow.style.display = "";
+    strictRow.style.display = "";
     _chatPageModeScrape = scrapeCurrentPage;
     updateChatTitle("page");
     await scrapeCurrentPage();
   });
 
-  panelBody.append(header, modeRow, scrapeModeRow, pageUrlRow, meta, log, status, inputWrap, toolbar);
+  const webHint = el("div", { className: "chat-web-hint", textContent: "Hinweis: Internet-Recherche im Chat ist noch nicht aktiv (geplant für später)." });
+
+  const sourceBanner = el("div", { className: "chat-source-banner", style: "display:none" });
+
+  panelBody.append(header, modeRow, scrapeModeRow, strictRow, pageUrlRow, sourceBanner, meta, log, status, inputWrap, webHint, toolbar);
+
+  function updateWebHintVisibility() {
+    webHint.style.display = chatMode === "vault" ? "" : "none";
+  }
+  updateWebHintVisibility();
+  vaultBtn.addEventListener("click", updateWebHintVisibility);
+  pageBtn.addEventListener("click", updateWebHintVisibility);
+
+  function applySourceMode(src) {
+    chatMode = src.type;
+    activeSource = src;
+    sourceChatHistory = [];
+    _chatPageModeScrape = null;
+    header.style.display = "none";
+    modeRow.style.display = "none";
+    scrapeModeRow.style.display = "none";
+    strictRow.style.display = "none";
+    setPageUrlRow("hide");
+    sourceBanner.style.display = "";
+    if (src.type === "transcript") {
+      sourceBanner.textContent = `📜 Quelle: Transcript "${src.title || src.ref?.rel_path || ""}"`;
+    } else if (src.type === "video") {
+      sourceBanner.textContent = `🎬 Quelle: Video "${src.title || src.ref?.slug || ""}"`;
+    } else if (src.type === "vault_file") {
+      sourceBanner.textContent = `📄 Quelle: Datei ${src.title || src.ref?.rel_path || ""}`;
+    } else {
+      sourceBanner.textContent = `🌐 Quelle: ${src.title || "Seiteninhalt"}`;
+    }
+    updateChatTitle(src.type, src.title);
+    updateWebHintVisibility();
+    meta.textContent = "";
+    log.replaceChildren();
+    log.append(el("div", { className: "chat-empty", textContent: "Stell deine Frage zu diesem Inhalt." }));
+  }
 
   // Wenn über "Mit Seite chatten" geöffnet: direkt in Page-Modus springen
   if (scrapedPage?.markdown) {
@@ -1206,9 +1515,15 @@ async function renderChat() {
     pageBtn.classList.add("active");
     vaultBtn.classList.remove("active");
     scrapeModeRow.style.display = "";
+    strictRow.style.display = "";
     _chatPageModeScrape = scrapeCurrentPage;
     setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
     updateChatTitle("page");
+  }
+
+  // Wenn über "💬 Chat" auf Video oder Transcript geöffnet
+  if (initialSource) {
+    applySourceMode(initialSource);
   }
 
 
@@ -1292,8 +1607,12 @@ async function renderChat() {
       setStatus("Bitte zuerst einen Vault auswählen", "error");
       return;
     }
-    if (chatMode === "page" && !scrapedPage?.markdown) {
+    if (chatMode === "page" && !activeSource && !scrapedPage?.markdown) {
       setStatus("Seite wird noch geladen — kurz warten", "error");
+      return;
+    }
+    if ((chatMode === "transcript" || chatMode === "video" || chatMode === "vault_file") && !activeSource) {
+      setStatus("Keine Quelle ausgewählt", "error");
       return;
     }
     busy = true;
@@ -1312,11 +1631,43 @@ async function renderChat() {
     try {
       let res;
       if (chatMode === "page") {
-        const pageText = `Titel: ${scrapedPage.title}\nURL: ${scrapedPage.url}\n\n${scrapedPage.markdown}`;
-        res = await fetch(`${httpBase}/tools/chat/page/stream`, {
+        let sourceRef;
+        let historyForRequest;
+        let strict;
+        if (activeSource && activeSource.type === "page") {
+          // Came in via "Chat mit ..." button — fixed source content, no auto-rescrape.
+          sourceRef = activeSource.ref;
+          historyForRequest = sourceChatHistory;
+          strict = true;
+        } else {
+          // Came in via Mode-Buttons — live-scraped tab content.
+          const pageText = `Titel: ${scrapedPage.title}\nURL: ${scrapedPage.url}\n\n${scrapedPage.markdown}`;
+          sourceRef = { content: pageText.slice(0, 80000), title: scrapedPage.title };
+          historyForRequest = pageChatHistory;
+          strict = strictPage;
+        }
+        res = await fetch(`${httpBase}/tools/chat/source/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-          body: JSON.stringify({ message, page_content: pageText.slice(0, 12000), history: pageChatHistory }),
+          body: JSON.stringify({
+            source_type: "page",
+            source_ref: sourceRef,
+            message,
+            history: historyForRequest,
+            strict_source: strict,
+          }),
+        });
+      } else if (chatMode === "transcript" || chatMode === "video" || chatMode === "vault_file") {
+        res = await fetch(`${httpBase}/tools/chat/source/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({
+            source_type: chatMode,
+            source_ref: activeSource.ref,
+            message,
+            history: sourceChatHistory,
+            strict_source: true,
+          }),
         });
       } else {
         res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
@@ -1353,11 +1704,31 @@ async function renderChat() {
           } else {
             assistantBubble.textContent = "(keine Textantwort)";
           }
-          if (chatMode === "page" && data.messages) pageChatHistory = data.messages;
+          if (chatMode === "page" && data.messages) {
+            if (activeSource && activeSource.type === "page") sourceChatHistory = data.messages;
+            else pageChatHistory = data.messages;
+          }
+          if ((chatMode === "transcript" || chatMode === "video" || chatMode === "vault_file") && data.messages) sourceChatHistory = data.messages;
           const u = data.usage || {};
-          const consulted = data.consulted?.length ? ` · gelesen: ${data.consulted.join(", ")}` : "";
           const cached = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
-          setStatus(`fertig (${u.input_tokens || 0} in / ${u.output_tokens || 0} out${cached})${consulted}`, "success");
+          const baseText = `fertig (${u.input_tokens || 0} in / ${u.output_tokens || 0} out${cached})`;
+          status.replaceChildren();
+          status.className = "tool-status success";
+          status.append(document.createTextNode(baseText));
+          if (data.consulted?.length && chatMode === "vault" && currentVaultId) {
+            status.append(document.createTextNode(" · gelesen: "));
+            data.consulted.forEach((relPath, i) => {
+              if (i > 0) status.append(document.createTextNode(", "));
+              const a = el("a", { href: "#", textContent: relPath, className: "chat-citation" });
+              a.addEventListener("click", (e) => {
+                e.preventDefault();
+                openTool("vault_explorer", { initialFile: relPath, vaultId: currentVaultId });
+              });
+              status.append(a);
+            });
+          } else if (data.consulted?.length) {
+            status.append(document.createTextNode(` · gelesen: ${data.consulted.join(", ")}`));
+          }
         } else if (event === "error") {
           assistantBubble.classList.remove("streaming");
           assistantBubble.textContent = "Fehler: " + (data.message || "unbekannt");
@@ -1521,6 +1892,11 @@ async function renderChat() {
   });
 
   // Initial load: get vault list, populate dropdown, restore last selection
+  // Skip when chat was opened with a specific source (video/transcript) — no vault context needed.
+  if (activeSource) {
+    inputArea.focus();
+    return;
+  }
   try {
     const res = await fetch(`${httpBase}/vaults`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1538,6 +1914,208 @@ async function renderChat() {
     const startId = vaults.some((v) => v.id === selectedVaultId) ? selectedVaultId : vaults[0].id;
     vaultSelect.value = startId;
     await loadVaultChat(startId);
+  } catch (err) {
+    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+  }
+}
+
+async function renderVaultExplorer() {
+  panelTitle.textContent = "Vault-Explorer";
+
+  // pendingToolOptions wird in openTool() direkt nach renderer()-Aufruf
+  // auf null gesetzt — synchron lesen, bevor das erste await passiert.
+  const initialFile = pendingToolOptions?.initialFile || null;
+  const initialVaultId = pendingToolOptions?.vaultId || null;
+
+  const httpBase = await getHttpBase();
+
+  const header = el("div", { className: "chat-header" });
+  const vaultSelect = el("select", { className: "vault-picker" });
+  header.append(vaultSelect);
+
+  const breadcrumb = el("div", { className: "vault-breadcrumb" });
+  const listBox = el("div", { className: "vault-list" });
+  const viewerBox = el("div", { className: "vault-viewer", style: "display:none" });
+  const status = el("div", { className: "tool-status" });
+
+  panelBody.append(header, breadcrumb, listBox, viewerBox, status);
+
+  // Floating Vault-Chat Button — opens classic Karpathy chat for current vault
+  const fab = el("button", {
+    type: "button",
+    className: "vault-fab",
+    title: "Mit Vault chatten (Karpathy)",
+    textContent: "💬",
+  });
+  panelBody.append(fab);
+  fab.addEventListener("click", () => {
+    openTool("chat");
+  });
+
+  let currentVaultId = null;
+  let currentPath = "";
+  let currentFile = null;
+
+  function setStatus(text, level = "") {
+    status.textContent = text;
+    status.className = "tool-status" + (level ? " " + level : "");
+  }
+
+  function renderBreadcrumb() {
+    breadcrumb.replaceChildren();
+    if (currentFile) {
+      const back = el("a", { href: "#", textContent: "← zurück", className: "vault-back" });
+      back.addEventListener("click", (e) => { e.preventDefault(); currentFile = null; renderView(); });
+      breadcrumb.append(back);
+      const sep = el("span", { className: "vault-crumb-sep", textContent: " · " });
+      const fileLabel = el("span", { className: "vault-crumb-file", textContent: currentFile });
+      breadcrumb.append(sep, fileLabel);
+      return;
+    }
+    const root = el("a", { href: "#", textContent: "/", className: "vault-crumb" });
+    root.addEventListener("click", (e) => { e.preventDefault(); navigateTo(""); });
+    breadcrumb.append(root);
+    if (!currentPath) return;
+    const parts = currentPath.split("/").filter(Boolean);
+    let accum = "";
+    for (let i = 0; i < parts.length; i++) {
+      accum = accum ? `${accum}/${parts[i]}` : parts[i];
+      breadcrumb.append(el("span", { className: "vault-crumb-sep", textContent: " / " }));
+      if (i === parts.length - 1) {
+        breadcrumb.append(el("span", { className: "vault-crumb-current", textContent: parts[i] }));
+      } else {
+        const segPath = accum;
+        const a = el("a", { href: "#", textContent: parts[i], className: "vault-crumb" });
+        a.addEventListener("click", (e) => { e.preventDefault(); navigateTo(segPath); });
+        breadcrumb.append(a);
+      }
+    }
+  }
+
+  function basename(p) {
+    const idx = p.lastIndexOf("/");
+    return idx === -1 ? p : p.slice(idx + 1);
+  }
+
+  async function navigateTo(path) {
+    if (!currentVaultId) return;
+    currentPath = path || "";
+    currentFile = null;
+    await renderView();
+  }
+
+  async function openFile(relPath) {
+    if (!currentVaultId) return;
+    currentFile = relPath;
+    await renderView();
+  }
+
+  async function renderView() {
+    renderBreadcrumb();
+    if (currentFile) {
+      listBox.style.display = "none";
+      viewerBox.style.display = "";
+      viewerBox.replaceChildren();
+      setStatus("lade Datei...");
+      try {
+        const url = `${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const body = el("div", { className: "vault-file-body" });
+        body.innerHTML = renderMarkdown(data.content || "");
+        const chatBtn = el("button", {
+          type: "button",
+          className: "vault-file-chat-btn",
+          textContent: "💬 Mit dieser Datei chatten",
+        });
+        chatBtn.addEventListener("click", () => {
+          openTool("chat", {
+            sourceType: "vault_file",
+            sourceRef: { vault_id: currentVaultId, rel_path: currentFile },
+            sourceTitle: currentFile,
+          });
+        });
+        viewerBox.append(body, chatBtn);
+        setStatus("");
+      } catch (err) {
+        viewerBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
+        setStatus("Datei konnte nicht geladen werden", "error");
+      }
+      return;
+    }
+    viewerBox.style.display = "none";
+    listBox.style.display = "";
+    listBox.replaceChildren();
+    setStatus("lade Ordner...");
+    try {
+      const url = `${httpBase}/tools/vault_list/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentPath)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const folders = data.folders || [];
+      const files = data.files || [];
+      if (!folders.length && !files.length) {
+        listBox.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
+      }
+      for (const f of folders) {
+        const row = el("div", { className: "vault-entry vault-folder" });
+        row.append(el("span", { className: "vault-icon", textContent: "📁" }));
+        row.append(el("span", { className: "vault-name", textContent: basename(f) }));
+        row.addEventListener("click", () => navigateTo(f));
+        listBox.append(row);
+      }
+      for (const f of files) {
+        const row = el("div", { className: "vault-entry vault-file" });
+        row.append(el("span", { className: "vault-icon", textContent: "📄" }));
+        row.append(el("span", { className: "vault-name", textContent: basename(f) }));
+        row.addEventListener("click", () => openFile(f));
+        listBox.append(row);
+      }
+      setStatus("");
+    } catch (err) {
+      listBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
+      setStatus("Ordner konnte nicht geladen werden", "error");
+    }
+  }
+
+  vaultSelect.addEventListener("change", async () => {
+    currentVaultId = vaultSelect.value;
+    await chrome.storage.local.set({ selectedVaultId: currentVaultId });
+    currentPath = "";
+    currentFile = null;
+    await renderView();
+  });
+
+  // Initial vault load
+  try {
+    const res = await fetch(`${httpBase}/vaults`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const vaults = data.vaults || [];
+    if (!vaults.length) {
+      panelBody.replaceChildren();
+      const wrap = el("div", { className: "chat-empty-state" });
+      wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
+      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+      wrap.append(btn);
+      panelBody.append(wrap);
+      return;
+    }
+    vaultSelect.replaceChildren();
+    for (const v of vaults) vaultSelect.append(el("option", { value: v.id, textContent: v.name }));
+    const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+    const wantId = initialVaultId && vaults.some((v) => v.id === initialVaultId) ? initialVaultId : null;
+    currentVaultId = wantId
+      || (vaults.some((v) => v.id === selectedVaultId) ? selectedVaultId : vaults[0].id);
+    vaultSelect.value = currentVaultId;
+    if (initialFile) {
+      const parentIdx = initialFile.lastIndexOf("/");
+      currentPath = parentIdx === -1 ? "" : initialFile.slice(0, parentIdx);
+      currentFile = initialFile;
+    }
+    await renderView();
   } catch (err) {
     setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
   }
@@ -1641,6 +2219,12 @@ function inlineMd(s) {
   s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
   s = s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  // Obsidian wikilinks [[path|alias]] / [[path#heading]] / [[path]] → öffnen Datei im Vault-Explorer
+  s = s.replace(/\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_match, path, alias) => {
+    const display = (alias || path).trim();
+    const rel = path.trim().replace(/"/g, "&quot;");
+    return `<a href="#" class="wiki-link" data-rel="${rel}">${display}</a>`;
+  });
   // Links [text](url) — only allow http(s) for safety
   s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   // Auto-link bare URLs
@@ -1672,6 +2256,16 @@ async function getActiveVaultId(httpBase) {
   const v = await getActiveVault(httpBase);
   return v?.id || null;
 }
+
+// Hängt vault_id als Query-Param an eine URL an. Unterstützt URLs, die bereits
+// einen Query-String haben (z.B. /tools/playlists/<id>?saeule=...).
+function withVaultId(url, vaultId) {
+  if (!vaultId) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}vault_id=${encodeURIComponent(vaultId)}`;
+}
+
+const NOTES_TOOLS = new Set(["scratchpad", "todos", "bookmarks"]);
 
 function obsidianUri(vaultName, relPath) {
   // obsidian://open?vault=...&file=...   (URL-encode + drop .md if present)
@@ -1873,11 +2467,17 @@ async function renderPlaylistDetail(name, saeule) {
 
 function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it) {
   const card = el("div", { className: "playlist-item-card" });
-  card.append(el("div", { className: "playlist-item-title", textContent: it.title }));
+  const head = el("div", { className: "playlist-item-head" });
+  const thumb = makeYouTubeThumb(it.url);
+  if (thumb) head.append(thumb);
+  const headText = el("div", { className: "playlist-item-headtext" });
+  headText.append(el("div", { className: "playlist-item-title", textContent: it.title }));
   const meta = el("div", { className: "playlist-item-meta" });
   if (it.channel) meta.append(el("span", { textContent: it.channel }));
   if (it.added) meta.append(el("span", { textContent: it.added }));
-  card.append(meta);
+  headText.append(meta);
+  head.append(headText);
+  card.append(head);
 
   const links = el("div", { className: "playlist-item-links" });
   if (it.url) {
@@ -1890,6 +2490,15 @@ function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it)
   links.append(detailsBtn);
 
   if (it.page) {
+    const slug = it.page.split("/").pop();
+    const chatBtn = el("button", { type: "button", textContent: "💬 Chat", className: "small" });
+    chatBtn.addEventListener("click", () => openTool("chat", {
+      sourceType: "video",
+      sourceRef: { vault_id: vaultId, slug, saeule },
+      sourceTitle: it.title,
+    }));
+    links.append(chatBtn);
+
     const obsidianBtn = el("button", { type: "button", textContent: "✎ Obsidian", className: "small obsidian-button" });
     obsidianBtn.addEventListener("click", () => openInObsidian(vaultName, it.page + ".md"));
     links.append(obsidianBtn);
@@ -2207,6 +2816,7 @@ async function renderBookmarksTool() {
   panelTitle.textContent = "Bookmarks";
   panelBody.replaceChildren();
 
+  const vaultHint = el("div", { className: "notes-vault-hint" });
   const toolbar = el("div", { className: "playlist-toolbar" });
   const addBtn = el("button", { type: "button", textContent: "+ Bookmark hinzufügen" });
   const captureTabsBtn = el("button", {
@@ -2214,22 +2824,31 @@ async function renderBookmarksTool() {
     textContent: "📑 Markierte Tabs",
     title: "Alle im aktuellen Fenster mit Strg+Klick markierten Tabs als Bookmarks erfassen",
   });
-  toolbar.append(addBtn, captureTabsBtn);
+  const copyUrlsBtn = el("button", {
+    type: "button",
+    textContent: "📋 URLs kopieren",
+    title: "URLs der markierten Tabs in die Zwischenablage kopieren (z.B. für NotebookLM) — ohne als Bookmark zu speichern",
+  });
+  toolbar.append(addBtn, captureTabsBtn, copyUrlsBtn);
   const status = el("div", { className: "tool-status" });
   const searchWrap = el("div", { className: "bookmark-search" });
   const searchInput = el("input", { type: "search", placeholder: "Suche Titel, URL, #tag…", value: bookmarksState.search });
   searchWrap.append(searchInput);
   const tagCloud = el("div", { className: "tag-cloud" });
   const listWrap = el("div", { className: "bookmark-list" });
-  panelBody.append(toolbar, searchWrap, tagCloud, status, listWrap);
+  panelBody.append(vaultHint, toolbar, searchWrap, tagCloud, status, listWrap);
 
   const httpBase = await getHttpBase();
-  addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, () => renderBookmarksTool()));
-  captureTabsBtn.addEventListener("click", () => captureHighlightedTabs(httpBase, captureTabsBtn, () => renderBookmarksTool()));
+  const vaultId = await getActiveVaultId(httpBase);
+  const vault = await getActiveVault(httpBase);
+  vaultHint.textContent = vault ? `Notes-Inbox: ${vault.name}` : "Kein Vault aktiv — Notes laufen global";
+  addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, vaultId, () => renderBookmarksTool()));
+  captureTabsBtn.addEventListener("click", () => captureHighlightedTabs(httpBase, vaultId, captureTabsBtn, () => renderBookmarksTool()));
+  copyUrlsBtn.addEventListener("click", () => copyHighlightedTabUrls(copyUrlsBtn));
 
   status.textContent = "lade...";
   try {
-    const res = await fetch(`${httpBase}/tools/bookmarks`);
+    const res = await fetch(withVaultId(`${httpBase}/tools/bookmarks`, vaultId));
     if (!res.ok) {
       status.textContent = `Fehler ${res.status}`;
       status.className = "tool-status error";
@@ -2255,7 +2874,7 @@ async function renderBookmarksTool() {
       if (bookmarksState.activeTag) {
         filtered = filtered.filter((b) => b.themen && b.themen.includes(bookmarksState.activeTag));
       }
-      renderBookmarksList(httpBase, listWrap, filtered);
+      renderBookmarksList(httpBase, vaultId, listWrap, filtered);
     }
 
     // Tag-Wolke aufbauen aus allen items
@@ -2306,7 +2925,7 @@ function renderTagCloud(target, items, onTagClick) {
   }
 }
 
-function renderBookmarksList(httpBase, target, items) {
+function renderBookmarksList(httpBase, vaultId, target, items) {
   target.replaceChildren();
   if (!items.length) {
     target.append(el("div", { className: "empty", textContent: "(keine Bookmarks matchen den Filter)" }));
@@ -2330,21 +2949,24 @@ function renderBookmarksList(httpBase, target, items) {
     const sectionList = el("div", { className: "bookmark-list" });
     section.append(sectionList);
     for (const b of groups[key]) {
-      sectionList.append(renderBookmarkCard(httpBase, b));
+      sectionList.append(renderBookmarkCard(httpBase, vaultId, b));
     }
     target.append(section);
   }
 }
 
-function renderBookmarkCard(httpBase, b) {
+function renderBookmarkCard(httpBase, vaultId, b) {
   const card = el("div", { className: "bookmark-card" });
+  const thumb = makeYouTubeThumb(b.url);
+  if (thumb) card.append(thumb);
+  const body = el("div", { className: "bookmark-body" });
   const head = el("div", { className: "bookmark-head" });
   const titleLink = el("a", { textContent: b.title, href: b.url, target: "_blank" });
   titleLink.rel = "noopener noreferrer";
   head.append(titleLink);
   head.append(el("span", { className: "bookmark-date", textContent: b.date }));
-  card.append(head);
-  if (b.note) card.append(el("div", { className: "bookmark-note", textContent: b.note }));
+  body.append(head);
+  if (b.note) body.append(el("div", { className: "bookmark-note", textContent: b.note }));
   const meta = el("div", { className: "bookmark-meta" });
   const left = el("span");
   if (b.source) left.append(el("span", { textContent: `quelle: ${b.source}` }));
@@ -2355,13 +2977,13 @@ function renderBookmarkCard(httpBase, b) {
   meta.append(left);
   const actions = el("span", { className: "bookmark-actions" });
   const editBtn = el("button", { type: "button", textContent: "✎", className: "small", title: "Bearbeiten" });
-  editBtn.addEventListener("click", () => showEditBookmarkDialog(httpBase, b, () => renderBookmarksTool()));
+  editBtn.addEventListener("click", () => showEditBookmarkDialog(httpBase, vaultId, b, () => renderBookmarksTool()));
   actions.append(editBtn);
   const delBtn = el("button", { type: "button", textContent: "Löschen", className: "small" });
   delBtn.addEventListener("click", async () => {
     if (!confirm(`'${b.title}' löschen?`)) return;
     const matchValue = b.url || b.title;
-    const r = await fetch(`${httpBase}/tools/bookmarks/delete`, {
+    const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks/delete`, vaultId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ match: matchValue, date: b.date || null }),
@@ -2371,11 +2993,12 @@ function renderBookmarkCard(httpBase, b) {
   });
   actions.append(delBtn);
   meta.append(actions);
-  card.append(meta);
+  body.append(meta);
+  card.append(body);
   return card;
 }
 
-function showEditBookmarkDialog(httpBase, bookmark, onSaved) {
+function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
   dialog.append(el("h3", { textContent: "Bookmark bearbeiten" }));
@@ -2407,7 +3030,7 @@ function showEditBookmarkDialog(httpBase, bookmark, onSaved) {
       .filter((t) => /^[a-z][\w\-/]*$/.test(t));
     ok.disabled = true; status.textContent = "speichere...";
     try {
-      const r = await fetch(`${httpBase}/tools/bookmarks/edit`, {
+      const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks/edit`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2626,7 +3249,7 @@ async function bulkAddToPlaylist(httpBase, vaultId, playlistName, saeule, items,
   if (typeof renderPlaylistsTool === "function") renderPlaylistsTool();
 }
 
-async function captureHighlightedTabs(httpBase, button, onDone) {
+async function captureHighlightedTabs(httpBase, vaultId, button, onDone) {
   // Sidepanel-Klick triggert keinen Body-Click → Multi-Tab-Markierung bleibt
   // erhalten (im Gegensatz zum Page-Body-Rechtsklick, wo Chrome oft alle
   // außer dem aktiven Tab deselektiert).
@@ -2655,7 +3278,7 @@ async function captureHighlightedTabs(httpBase, button, onDone) {
   const failed = [];
   for (const t of httpTabs) {
     try {
-      const r = await fetch(`${httpBase}/tools/bookmarks`, {
+      const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2678,7 +3301,36 @@ async function captureHighlightedTabs(httpBase, button, onDone) {
   onDone && onDone();
 }
 
-function showAddBookmarkDialog(httpBase, onAdded) {
+async function copyHighlightedTabUrls(button) {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
+  } catch (err) {
+    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    return;
+  }
+  const httpTabs = tabs.filter((t) => t.url && /^https?:/.test(t.url));
+  if (!httpTabs.length) {
+    alert("Keine markierten Tabs mit http(s)-URL. Tipp: Strg+Klick im Tab-Strip mehrere Tabs markieren, dann hier klicken.");
+    return;
+  }
+  const text = httpTabs.map((t) => t.url).join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    alert("Clipboard-Fehler: " + (err.message || err));
+    return;
+  }
+  const original = button.textContent;
+  button.textContent = `✓ ${httpTabs.length} URL${httpTabs.length === 1 ? "" : "s"} kopiert`;
+  button.disabled = true;
+  setTimeout(() => {
+    button.textContent = original;
+    button.disabled = false;
+  }, 1800);
+}
+
+function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
   dialog.append(el("h3", { textContent: "Bookmark hinzufügen" }));
@@ -2706,7 +3358,7 @@ function showAddBookmarkDialog(httpBase, onAdded) {
       .filter((t) => /^[a-z][\w\-/]*$/.test(t));
     ok.disabled = true; status.textContent = "speichere...";
     try {
-      const r = await fetch(`${httpBase}/tools/bookmarks`, {
+      const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks`, vaultId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2741,10 +3393,51 @@ function el(tag, props = {}) {
   return node;
 }
 
+function extractYouTubeId(url) {
+  if (!url || typeof url !== "string") return null;
+  const m = url.match(/(?:v=|youtu\.be\/|\/embed\/|\/shorts\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+function makeYouTubeThumb(url) {
+  const id = extractYouTubeId(url);
+  if (!id) return null;
+  const img = el("img", { className: "yt-thumb", src: `https://img.youtube.com/vi/${id}/mqdefault.jpg`, alt: "" });
+  img.loading = "lazy";
+  img.onerror = () => img.classList.add("yt-thumb-error");
+  return img;
+}
+
 // ── Sprint 3: Web-Tools ──────────────────────────────────────────────────────
 
 function renderPageScrape() {
   panelTitle.textContent = "Page-Scrape";
+
+  let scrapeMode = "content";
+
+  // URL-Anzeige des aktiven Browser-Tabs (analog YouTube-Tab)
+  const urlRow = el("div", { className: "page-url-row" });
+  urlRow.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted,#888);margin-bottom:6px;";
+  const urlLabel = el("span", { textContent: "(kein Tab erkannt)" });
+  urlLabel.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+  const refreshUrlBtn = el("button", {
+    type: "button", textContent: "↻", title: "URL aus aktivem Tab übernehmen", className: "secondary",
+  });
+  refreshUrlBtn.style.cssText = "padding:2px 8px;flex:0 0 auto;";
+  urlRow.append(urlLabel, refreshUrlBtn);
+
+  const scrapeModeRow = el("div", { className: "scrape-mode-row" });
+  function makeScrapeRadio(value, label) {
+    const btn = el("button", { type: "button", className: "scrape-mode-btn" + (value === "content" ? " active" : ""), textContent: label });
+    btn.dataset.value = value;
+    btn.addEventListener("click", () => {
+      if (scrapeMode === value) return;
+      scrapeMode = value;
+      scrapeModeRow.querySelectorAll(".scrape-mode-btn").forEach(b => b.classList.toggle("active", b.dataset.value === value));
+    });
+    return btn;
+  }
+  scrapeModeRow.append(makeScrapeRadio("content", "Nur Inhalt"), makeScrapeRadio("full", "Alles"));
 
   const runBtn = el("button", { textContent: "Aktiven Tab scrapen" });
   const status = el("div", { className: "tool-status" });
@@ -2755,7 +3448,16 @@ function renderPageScrape() {
   let lastMarkdown = "";
   let lastUrl = "";
 
-  runBtn.addEventListener("click", async () => {
+  function updateUrlFromActiveTab() {
+    if (!chrome?.tabs?.query) return;
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      const u = tab?.url || "";
+      urlLabel.textContent = u || "(kein Tab erkannt)";
+      urlLabel.title = u;
+    });
+  }
+
+  async function runScrape() {
     runBtn.disabled = true;
     status.textContent = "scrapt...";
     status.className = "tool-status";
@@ -2766,7 +3468,7 @@ function renderPageScrape() {
       const res = await fetch(`${httpBase}/tools/page_scrape`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode: scrapeMode }),
       });
       const text = await res.text();
       let data = null;
@@ -2774,6 +3476,7 @@ function renderPageScrape() {
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       lastMarkdown = data.markdown || "";
       lastUrl = data.url || "";
+      if (lastUrl) { urlLabel.textContent = lastUrl; urlLabel.title = lastUrl; }
       output.value = lastMarkdown;
       status.textContent = `${data.title || ""} — ${data.wordCount || 0} Wörter`;
       status.className = "tool-status success";
@@ -2785,7 +3488,16 @@ function renderPageScrape() {
     } finally {
       runBtn.disabled = false;
     }
-  });
+  }
+
+  runBtn.addEventListener("click", runScrape);
+  refreshUrlBtn.addEventListener("click", updateUrlFromActiveTab);
+
+  // Auto: URL erkennen + einmal scrapen beim Öffnen des Tabs.
+  // Bei Browser-Tab-Wechsel wird NICHT neu gescrapt — User muss manuell drücken.
+  updateUrlFromActiveTab();
+  // Defer Scrape damit alle DOM-Elemente schon im Body sind (promoteTitle etc).
+  setTimeout(() => { runScrape(); }, 0);
 
   copyBtn.addEventListener("click", () => {
     if (output.value) navigator.clipboard.writeText(output.value);
@@ -2870,9 +3582,17 @@ function renderPageScrape() {
 
   const chatBtn = el("button", { type: "button", className: "secondary", textContent: "🌐 Mit Seite chatten" });
   chatBtn.style.display = "none";
-  chatBtn.addEventListener("click", () => openTool("chat", { pageContent: { title: promoteTitle.value || "", url: lastUrl, markdown: output.value } }));
+  chatBtn.addEventListener("click", () => {
+    const title = promoteTitle.value || "Page-Scrape";
+    const content = `Titel: ${title}\nURL: ${lastUrl}\n\n${output.value || ""}`;
+    openTool("chat", {
+      sourceType: "page",
+      sourceRef: { content, title },
+      sourceTitle: title,
+    });
+  });
 
-  panelBody.append(runBtn, status, chatBtn, output, copyBtn, promoteSection);
+  panelBody.append(urlRow, scrapeModeRow, runBtn, status, chatBtn, output, copyBtn, promoteSection);
 }
 
 function renderSeoCheck() {
@@ -3151,15 +3871,32 @@ function renderColorPicker() {
 function renderScreenshot() {
   panelTitle.textContent = "Screenshot + Annotation";
 
+  // ── Mode row ──────────────────────────────────────────────────────────────
+  let screenshotMode = "visible";
+  const modeRow = el("div", { className: "scrape-mode-row" });
+  [["visible", "Sichtbar"], ["area", "Bereich"], ["full", "Ganze Seite"]].forEach(([value, label]) => {
+    const btn = el("button", { type: "button",
+      className: "scrape-mode-btn" + (value === "visible" ? " active" : ""),
+      textContent: label });
+    btn.dataset.value = value;
+    btn.addEventListener("click", () => {
+      if (screenshotMode === value) return;
+      screenshotMode = value;
+      modeRow.querySelectorAll(".scrape-mode-btn").forEach(b =>
+        b.classList.toggle("active", b.dataset.value === value));
+    });
+    modeRow.append(btn);
+  });
+
   const runBtn = el("button", { textContent: "Screenshot erstellen" });
   const status = el("div", { className: "tool-status" });
 
-  // Annotation-Toolbar (versteckt bis Screenshot geladen)
+  // ── Annotation-Toolbar ────────────────────────────────────────────────────
   const toolbar = el("div", { className: "annot-toolbar" });
   toolbar.style.display = "none";
 
   const toolBtns = {};
-  const tools = [
+  const annotToolDefs = [
     { id: "pen",  label: "✏ Stift" },
     { id: "rect", label: "□ Rechteck" },
     { id: "arrow", label: "→ Pfeil" },
@@ -3167,11 +3904,12 @@ function renderScreenshot() {
   ];
   let activeTool = "pen";
 
-  tools.forEach(({ id, label }) => {
+  annotToolDefs.forEach(({ id, label }) => {
     const btn = el("button", { textContent: label });
     btn.classList.add("secondary", "annot-tool-btn");
     btn.dataset.tool = id;
     btn.addEventListener("click", () => {
+      if (cropMode) return;
       activeTool = id;
       Object.values(toolBtns).forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
@@ -3199,14 +3937,22 @@ function renderScreenshot() {
 
   const undoBtn = el("button", { textContent: "↩ Undo" });
   undoBtn.classList.add("secondary", "annot-tool-btn");
-
   toolbar.append(colorPicker, sizeSelect, undoBtn);
 
-  // Canvas
+  // ── Canvas ────────────────────────────────────────────────────────────────
   const canvas = document.createElement("canvas");
   canvas.className = "annot-canvas";
   canvas.style.display = "none";
+  const ctx = canvas.getContext("2d");
 
+  // ── Crop-Mode actions ─────────────────────────────────────────────────────
+  const cropActions = el("div");
+  cropActions.style.cssText = "display:none;gap:8px;margin-top:6px;flex-wrap:wrap;";
+  const confirmCropBtn = el("button", { textContent: "Ausschnitt bestätigen" });
+  const cancelCropBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
+  cropActions.append(confirmCropBtn, cancelCropBtn);
+
+  // ── Download/Copy actions ─────────────────────────────────────────────────
   const actions = el("div");
   actions.style.cssText = "display:none;gap:8px;margin-top:6px;";
   const copyBtn = el("button", { textContent: "Kopieren" });
@@ -3215,12 +3961,17 @@ function renderScreenshot() {
   dlBtn.classList.add("secondary");
   actions.append(copyBtn, dlBtn);
 
-  // Zeichnen-State
-  const ctx = canvas.getContext("2d");
+  // ── Drawing state ─────────────────────────────────────────────────────────
   const undoStack = [];
   let drawing = false;
   let startX = 0, startY = 0;
   let snapshot = null;
+
+  // ── Crop state ────────────────────────────────────────────────────────────
+  let cropMode = false;
+  let cropStart = null;
+  let cropRect = null;
+  let originalImageData = null;
 
   function saveUndo() {
     if (undoStack.length >= 20) undoStack.shift();
@@ -3247,8 +3998,60 @@ function renderScreenshot() {
     ctx.stroke();
   }
 
+  function activateCropMode() {
+    cropMode = true;
+    cropRect = null;
+    cropStart = null;
+    originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas.style.cursor = "crosshair";
+    toolbar.style.display = "none";
+    actions.style.display = "none";
+    cropActions.style.display = "flex";
+    status.textContent = "Bereich aufziehen, dann 'Ausschnitt bestätigen'";
+    status.className = "tool-status";
+  }
+
+  confirmCropBtn.addEventListener("click", () => {
+    if (!cropRect || cropRect.w < 4 || cropRect.h < 4) {
+      status.textContent = "Bitte erst einen Bereich aufziehen";
+      status.className = "tool-status error";
+      return;
+    }
+    const { x, y, w, h } = cropRect;
+    const cropped = ctx.getImageData(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    canvas.width = Math.round(w);
+    canvas.height = Math.round(h);
+    ctx.putImageData(cropped, 0, 0);
+    cropMode = false;
+    cropRect = null;
+    originalImageData = null;
+    canvas.style.cursor = "default";
+    cropActions.style.display = "none";
+    toolbar.style.display = "flex";
+    actions.style.display = "flex";
+    undoStack.length = 0;
+    status.textContent = "Ausschnitt gesetzt — Annotation möglich";
+    status.className = "tool-status success";
+  });
+
+  cancelCropBtn.addEventListener("click", () => {
+    if (originalImageData) ctx.putImageData(originalImageData, 0, 0);
+    cropMode = false;
+    cropRect = null;
+    originalImageData = null;
+    canvas.style.cursor = "default";
+    cropActions.style.display = "none";
+    toolbar.style.display = "flex";
+    actions.style.display = "flex";
+    status.textContent = "fertig — Annotation möglich";
+    status.className = "tool-status success";
+  });
+
+  // ── Canvas mouse events ───────────────────────────────────────────────────
   canvas.addEventListener("mousedown", (e) => {
     const pos = getPos(e);
+    if (cropMode) { cropStart = pos; cropRect = null; return; }
+
     startX = pos.x;
     startY = pos.y;
     drawing = true;
@@ -3267,9 +4070,7 @@ function renderScreenshot() {
       ctx.fillText(text, pos.x, pos.y);
       return;
     }
-
     saveUndo();
-
     if (activeTool === "pen") {
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
@@ -3279,21 +4080,36 @@ function renderScreenshot() {
   });
 
   canvas.addEventListener("mousemove", (e) => {
-    if (!drawing) return;
     const pos = getPos(e);
 
+    if (cropMode && cropStart) {
+      const x = Math.min(cropStart.x, pos.x);
+      const y = Math.min(cropStart.y, pos.y);
+      const w = Math.abs(pos.x - cropStart.x);
+      const h = Math.abs(pos.y - cropStart.y);
+      ctx.putImageData(originalImageData, 0, 0);
+      ctx.save();
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = "rgba(59,130,246,0.15)";
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+      cropRect = { x, y, w, h };
+      return;
+    }
+
+    if (!drawing) return;
     if (activeTool === "pen") {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
       return;
     }
-
-    // Vorschau für Rect + Arrow: vorherigen Snapshot zurückspielen
     ctx.putImageData(snapshot, 0, 0);
     ctx.strokeStyle = colorPicker.value;
     ctx.lineWidth = parseInt(sizeSelect.value, 10);
     ctx.lineCap = "round";
-
     if (activeTool === "rect") {
       ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
     } else if (activeTool === "arrow") {
@@ -3301,61 +4117,143 @@ function renderScreenshot() {
     }
   });
 
-  canvas.addEventListener("mouseup", (e) => {
+  canvas.addEventListener("mouseup", () => {
+    if (cropMode) return;
     if (!drawing) return;
     drawing = false;
-    if (activeTool === "pen") {
-      ctx.closePath();
-    }
-    // Rect + Arrow sind bereits im letzten mousemove gezeichnet — nichts weiter nötig
+    if (activeTool === "pen") ctx.closePath();
     snapshot = null;
   });
 
   canvas.addEventListener("mouseleave", () => {
-    if (drawing && activeTool === "pen") {
-      drawing = false;
-      ctx.closePath();
-    }
+    if (cropMode) return;
+    if (drawing && activeTool === "pen") { drawing = false; ctx.closePath(); }
   });
 
   undoBtn.addEventListener("click", () => {
-    if (!undoStack.length) return;
+    if (cropMode || !undoStack.length) return;
     ctx.putImageData(undoStack.pop(), 0, 0);
   });
 
-  // Screenshot laden
-  runBtn.addEventListener("click", async () => {
-    runBtn.disabled = true;
-    status.textContent = "erstelle Screenshot...";
-    status.className = "tool-status";
-    canvas.style.display = "none";
-    toolbar.style.display = "none";
-    actions.style.display = "none";
-    undoStack.length = 0;
-    try {
-      const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/screenshot`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function loadImageToCanvas(dataUrl) {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
         ctx.drawImage(img, 0, 0);
         canvas.style.display = "block";
+        undoStack.length = 0;
+        resolve();
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
+  function loadImg(dataUrl) {
+    return new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = dataUrl;
+    });
+  }
+
+  async function captureVisible() {
+    const httpBase = await getHttpBase();
+    const res = await fetch(`${httpBase}/tools/screenshot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch {}
+    if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+    return data.dataUrl;
+  }
+
+  function captureFullPage() {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "full_page_screenshot" }, (resp) => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        if (!resp?.ok) return reject(new Error(resp?.error || "Full-page capture fehlgeschlagen"));
+        resolve(resp);
+      });
+    });
+  }
+
+  function captureRegion() {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "capture_region" }, (resp) => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        if (!resp?.ok) return reject(new Error(resp?.error || "Region capture fehlgeschlagen"));
+        resolve(resp.dataUrl);
+      });
+    });
+  }
+
+  // ── Run button ────────────────────────────────────────────────────────────
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    cropMode = false;
+    cropRect = null;
+    originalImageData = null;
+    status.textContent = "erstelle Screenshot...";
+    status.className = "tool-status";
+    canvas.style.display = "none";
+    toolbar.style.display = "none";
+    cropActions.style.display = "none";
+    actions.style.display = "none";
+    undoStack.length = 0;
+
+    try {
+      if (screenshotMode === "full") {
+        status.textContent = "scrollt durch Seite...";
+        const resp = await captureFullPage();
+        const dpr = resp.dpr || 1;
+        const totalH = Math.round(resp.totalHeight * dpr);
+        const frameW = Math.round(resp.clientWidth * dpr);
+
+        const offscreen = document.createElement("canvas");
+        offscreen.width = frameW;
+        offscreen.height = totalH;
+        const octx = offscreen.getContext("2d");
+
+        for (const frame of resp.frames) {
+          const img = await loadImg(frame.dataUrl);
+          const destY = Math.round(frame.y * dpr);
+          const remaining = totalH - destY;
+          const copyH = Math.min(img.naturalHeight, remaining);
+          if (copyH > 0) octx.drawImage(img, 0, 0, img.naturalWidth, copyH, 0, destY, img.naturalWidth, copyH);
+        }
+
+        canvas.width = offscreen.width;
+        canvas.height = offscreen.height;
+        ctx.drawImage(offscreen, 0, 0);
+        canvas.style.display = "block";
+        toolbar.style.display = "flex";
+        actions.style.display = "flex";
+        status.textContent = `fertig — ${resp.frames.length} Abschnitte, ${resp.totalHeight}px Gesamthöhe`;
+        status.className = "tool-status success";
+      } else if (screenshotMode === "area") {
+        status.textContent = "Bereich auf der Seite aufziehen...";
+        const dataUrl = await captureRegion();
+        await loadImageToCanvas(dataUrl);
         toolbar.style.display = "flex";
         actions.style.display = "flex";
         status.textContent = "fertig — Annotation möglich";
         status.className = "tool-status success";
-      };
-      img.src = data.dataUrl;
+      } else {
+        const dataUrl = await captureVisible();
+        await loadImageToCanvas(dataUrl);
+        toolbar.style.display = "flex";
+        actions.style.display = "flex";
+        status.textContent = "fertig — Annotation möglich";
+        status.className = "tool-status success";
+      }
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
@@ -3380,11 +4278,11 @@ function renderScreenshot() {
   dlBtn.addEventListener("click", () => {
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
-    a.download = `screenshot-annotated-${Date.now()}.png`;
+    a.download = `screenshot-${screenshotMode}-${Date.now()}.png`;
     a.click();
   });
 
-  panelBody.append(runBtn, status, toolbar, canvas, actions);
+  panelBody.append(modeRow, runBtn, status, cropActions, toolbar, canvas, actions);
 }
 
 // ── URL-Extraktor ────────────────────────────────────────────────────────────
@@ -3557,6 +4455,366 @@ function renderUrlExtractor() {
   panelBody.append(filterRow, runBtn, status, formatTabs, output, copyBtn, promoteSection);
 }
 
+// ── Image-Generator (Gemini Nano Banana) ─────────────────────────────────────
+
+const IMAGE_GEN_MODELS = [
+  ["gemini-2.5-flash-image", "Nano Banana (2.5 Flash) — schnell"],
+  ["gemini-3.1-flash-image-preview", "Nano Banana 2 (3.1 Flash) — Qualität"],
+  ["gemini-3-pro-image-preview", "Nano Banana Pro (3 Pro) — 4K"],
+];
+const MAX_INPUT_IMAGES = 3;
+
+const imageGenState = {
+  // inputs: {base64, mime, name} fuer Uploads ODER {file, name} fuer Server-Pfade
+  inputs: [],
+  model: null,
+  lastOutputFile: null, // Server-relativer Pfad
+  gallery: [],          // Index vom Server
+};
+
+function imggenLabelForEntry(entry) {
+  const p = (entry.prompt || "").trim();
+  if (p) return p;
+  const base = (entry.file || "").split("/").pop().replace(/\.png$/, "");
+  const slug = base.replace(/^\d+-/, "").replace(/-/g, " ");
+  return slug || "(ohne Prompt)";
+}
+
+function fileToInput(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden"));
+    reader.onload = () => {
+      const result = reader.result || "";
+      const comma = result.indexOf(",");
+      const base64 = comma >= 0 ? result.slice(comma + 1) : result;
+      resolve({ name: file.name, mime: file.type || "image/png", base64 });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function renderImageGenerator() {
+  panelTitle.textContent = "Image-Generator";
+
+  const httpBase = await getHttpBase();
+  const imgUrl = (rel) => `${httpBase}/tools/image_generated/${rel}`;
+
+  // Modell aus Server-Settings holen (Default fallback)
+  try {
+    const res = await fetch(`${httpBase}/settings`);
+    const data = await res.json();
+    imageGenState.model = data.image_gen_model || IMAGE_GEN_MODELS[0][0];
+  } catch {
+    imageGenState.model = imageGenState.model || IMAGE_GEN_MODELS[0][0];
+  }
+
+  // Modell-Dropdown
+  const modelRow = el("div", { className: "imggen-row" });
+  modelRow.append(el("label", { className: "imggen-label", textContent: "Modell" }));
+  const modelSelect = el("select", { className: "imggen-model" });
+  for (const [value, label] of IMAGE_GEN_MODELS) {
+    const opt = new Option(label, value);
+    if (value === imageGenState.model) opt.selected = true;
+    modelSelect.append(opt);
+  }
+  modelSelect.addEventListener("change", () => {
+    imageGenState.model = modelSelect.value;
+  });
+  modelRow.append(modelSelect);
+
+  // Prompt
+  const promptArea = el("textarea", {
+    className: "imggen-prompt",
+    placeholder: "Was soll das Bild zeigen?\nBei Editing: 'mach den Hut blau', 'gleiche Person auf Motorrad'...",
+    rows: 3,
+  });
+
+  // Input-Thumbnails
+  const inputsStrip = el("div", { className: "imggen-inputs" });
+  function renderInputs() {
+    inputsStrip.replaceChildren();
+    if (!imageGenState.inputs.length) {
+      inputsStrip.append(el("span", { className: "imggen-inputs-empty", textContent: "Keine Input-Bilder. Optional bis zu " + MAX_INPUT_IMAGES + " hinzufügen." }));
+    }
+    imageGenState.inputs.forEach((img, idx) => {
+      const card = el("div", { className: "imggen-thumb" });
+      const i = el("img");
+      i.src = img.file ? imgUrl(img.file) : `data:${img.mime};base64,${img.base64}`;
+      i.title = img.name || "";
+      const x = el("button", { type: "button", className: "imggen-thumb-x", textContent: "×", title: "Entfernen" });
+      x.addEventListener("click", () => {
+        imageGenState.inputs.splice(idx, 1);
+        renderInputs();
+      });
+      card.append(i, x);
+      inputsStrip.append(card);
+    });
+  }
+
+  const inputControls = el("div", { className: "imggen-input-controls" });
+  const fileInput = el("input", { type: "file", accept: "image/*", multiple: true });
+  fileInput.style.display = "none";
+  const addBtn = el("button", { type: "button", className: "secondary", textContent: "+ Bild hinzufügen" });
+  addBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const files = Array.from(fileInput.files || []);
+    for (const f of files) {
+      if (imageGenState.inputs.length >= MAX_INPUT_IMAGES) break;
+      try {
+        imageGenState.inputs.push(await fileToInput(f));
+      } catch (err) {
+        status.textContent = "Bild laden fehlgeschlagen: " + (err.message || err);
+        status.className = "tool-status error";
+      }
+    }
+    fileInput.value = "";
+    renderInputs();
+  });
+
+  function pushInputFromGallery(entry, idx) {
+    if (imageGenState.inputs.length >= MAX_INPUT_IMAGES) {
+      status.textContent = `Maximal ${MAX_INPUT_IMAGES} Inputs erlaubt`;
+      status.className = "tool-status error";
+      return false;
+    }
+    imageGenState.inputs.push({
+      name: imggenLabelForEntry(entry).slice(0, 40),
+      file: entry.file,
+    });
+    renderInputs();
+    return true;
+  }
+
+  const continueBtn = el("button", { type: "button", className: "secondary", textContent: "↻ Letztes Ergebnis als Input" });
+  continueBtn.title = "Output des letzten Calls als Input weitergeben (Editing-Modus)";
+  continueBtn.addEventListener("click", () => {
+    if (!imageGenState.lastOutputFile) {
+      status.textContent = "Noch kein Ergebnis zum Weiterverwenden";
+      status.className = "tool-status error";
+      return;
+    }
+    if (pushInputFromGallery({ file: imageGenState.lastOutputFile, prompt: "letztes Ergebnis" })) {
+      status.textContent = "als Input übernommen";
+      status.className = "tool-status success";
+    }
+  });
+  inputControls.append(addBtn, continueBtn, fileInput);
+
+  const genBtn = el("button", { textContent: "Generieren" });
+  const status = el("div", { className: "tool-status" });
+
+  // Output
+  const outputWrap = el("div", { className: "imggen-output hidden" });
+  const outputImg = el("img", { className: "imggen-output-img" });
+  const outputActions = el("div", { className: "imggen-output-actions" });
+  const dlBtn = el("button", { type: "button", className: "secondary", textContent: "Download" });
+  const editBtn = el("button", { type: "button", className: "secondary", textContent: "Bearbeiten" });
+  editBtn.title = "Dieses Bild als Input für nächste Anweisung";
+  const resetBtn = el("button", { type: "button", className: "secondary", textContent: "Neu starten" });
+  outputActions.append(dlBtn, editBtn, resetBtn);
+  outputWrap.append(outputImg, outputActions);
+
+  // Galerie-Toolbar (Header + Ordner-öffnen + Reload)
+  const galleryHeader = el("div", { className: "imggen-history-title" });
+  const galleryLabel = el("span", { textContent: "Galerie" });
+  const openFolderBtn = el("button", { type: "button", className: "imggen-toolbar-btn", title: "Im Datei-Explorer öffnen", textContent: "📂 Ordner" });
+  const reloadBtn = el("button", { type: "button", className: "imggen-toolbar-btn", title: "Galerie neu laden", textContent: "↺" });
+  galleryHeader.append(galleryLabel, reloadBtn, openFolderBtn);
+
+  openFolderBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch(`${httpBase}/tools/image_gallery/open`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      status.textContent = "Ordner geöffnet: " + data.path;
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = "Ordner-Öffnen fehlgeschlagen: " + (err.message || err);
+      status.className = "tool-status error";
+    }
+  });
+
+  // Galerie aus Server-Index
+  const historyWrap = el("div", { className: "imggen-history" });
+  function renderHistory() {
+    historyWrap.replaceChildren();
+    historyWrap.append(galleryHeader);
+    if (!imageGenState.gallery.length) {
+      historyWrap.append(el("div", { className: "imggen-inputs-empty", textContent: "Noch keine Bilder. Generiere eins ↑" }));
+      return;
+    }
+    const grid = el("div", { className: "imggen-history-grid" });
+    imageGenState.gallery.forEach((entry, idx) => {
+      const card = el("div", { className: "imggen-history-card" });
+      const url = imgUrl(entry.file);
+      const label = imggenLabelForEntry(entry);
+
+      const img = el("img");
+      img.src = url;
+      img.title = label + "\n(Klick: Lightbox öffnen)";
+      img.addEventListener("click", () => {
+        const qs = new URLSearchParams({ file: entry.file, server: httpBase });
+        chrome.tabs.create({
+          url: chrome.runtime.getURL("lightbox/lightbox.html") + "?" + qs.toString(),
+        });
+      });
+
+      const p = el("div", { className: "imggen-history-prompt", textContent: label });
+      p.title = label;
+
+      const actions = el("div", { className: "imggen-history-actions" });
+      const dl = el("button", { type: "button", title: "Download", textContent: "⬇" });
+      dl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = entry.file.split("/").pop();
+        a.click();
+      });
+      const reuse = el("button", { type: "button", title: "Als Input weiterverwenden", textContent: "↻" });
+      reuse.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (pushInputFromGallery(entry, idx)) {
+          status.textContent = "als Input übernommen";
+          status.className = "tool-status success";
+        }
+      });
+      const del = el("button", { type: "button", title: "In Papierkorb verschieben", textContent: "×", className: "imggen-del" });
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Bild in den Papierkorb verschieben?\n" + entry.file)) return;
+        try {
+          const res = await fetch(`${httpBase}/tools/image_gallery/${entry.file}`, { method: "DELETE" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+          if (imageGenState.lastOutputFile === entry.file) {
+            imageGenState.lastOutputFile = null;
+            outputWrap.classList.add("hidden");
+          }
+          await loadGallery();
+        } catch (err) {
+          status.textContent = "Löschen fehlgeschlagen: " + (err.message || err);
+          status.className = "tool-status error";
+        }
+      });
+      actions.append(dl, reuse, del);
+
+      card.append(img, p, actions);
+      grid.append(card);
+    });
+    historyWrap.append(grid);
+  }
+
+  async function loadGallery() {
+    try {
+      const res = await fetch(`${httpBase}/tools/image_gallery`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      imageGenState.gallery = data.items || [];
+      renderHistory();
+    } catch (err) {
+      status.textContent = "Galerie laden fehlgeschlagen: " + (err.message || err);
+      status.className = "tool-status error";
+    }
+  }
+  reloadBtn.addEventListener("click", loadGallery);
+
+  dlBtn.addEventListener("click", () => {
+    if (!imageGenState.lastOutputFile) return;
+    const a = document.createElement("a");
+    a.href = imgUrl(imageGenState.lastOutputFile);
+    a.download = imageGenState.lastOutputFile.split("/").pop();
+    a.click();
+  });
+  editBtn.addEventListener("click", () => continueBtn.click());
+  resetBtn.addEventListener("click", () => {
+    imageGenState.inputs = [];
+    imageGenState.lastOutputFile = null;
+    outputWrap.classList.add("hidden");
+    promptArea.value = "";
+    status.textContent = "";
+    status.className = "tool-status";
+    renderInputs();
+  });
+
+  genBtn.addEventListener("click", async () => {
+    const prompt = promptArea.value.trim();
+    if (!prompt) {
+      status.textContent = "Prompt fehlt";
+      status.className = "tool-status error";
+      return;
+    }
+    genBtn.disabled = true;
+    status.textContent = imageGenState.inputs.length
+      ? `generiere mit ${imageGenState.inputs.length} Input-Bild(ern)...`
+      : "generiere...";
+    status.className = "tool-status";
+    try {
+      const inputImages = imageGenState.inputs.filter((x) => x.base64).map((x) => x.base64);
+      const inputFiles = imageGenState.inputs.filter((x) => x.file).map((x) => x.file);
+      const res = await fetch(`${httpBase}/tools/image_generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          input_images: inputImages,
+          input_files: inputFiles,
+          model: imageGenState.model,
+        }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || data?.error || text || `HTTP ${res.status}`);
+      if (!data?.ok) throw new Error(data?.error || "Fehler beim Generieren");
+
+      imageGenState.lastOutputFile = data.image_path;
+      outputImg.src = imgUrl(data.image_path) + "?t=" + Date.now();
+      outputWrap.classList.remove("hidden");
+      await loadGallery();
+      status.textContent = `fertig (${data.model})`;
+      status.className = "tool-status success";
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      genBtn.disabled = false;
+    }
+  });
+
+  panelBody.append(modelRow, promptArea, inputsStrip, inputControls, genBtn, status, outputWrap, historyWrap);
+  renderInputs();
+  renderHistory();
+  await loadGallery();
+
+  async function consumeImageGenPick() {
+    const { imgGenPick } = await chrome.storage.local.get("imgGenPick");
+    if (!imgGenPick || !imgGenPick.file) return;
+    // stale pick (>5min) ignorieren
+    if (imgGenPick.ts && Date.now() - imgGenPick.ts > 5 * 60 * 1000) {
+      chrome.storage.local.remove("imgGenPick");
+      return;
+    }
+    chrome.storage.local.remove("imgGenPick");
+    if (pushInputFromGallery({ file: imgGenPick.file, prompt: "aus Lightbox" })) {
+      status.textContent = "aus Lightbox als Input übernommen";
+      status.className = "tool-status success";
+    }
+  }
+  await consumeImageGenPick();
+
+  // Listener fuer den Fall, dass Sidepanel+Tool schon offen sind, waehrend
+  // die Lightbox "Bearbeiten" anstoesst.
+  const pickListener = (changes, area) => {
+    if (area === "local" && changes.imgGenPick && changes.imgGenPick.newValue) {
+      consumeImageGenPick();
+    }
+  };
+  chrome.storage.onChanged.addListener(pickListener);
+  currentToolCleanup = () => chrome.storage.onChanged.removeListener(pickListener);
+}
+
 // ── Guten-Morgen-Briefing ────────────────────────────────────────────────────
 
 async function showBriefingPanel() {
@@ -3667,13 +4925,21 @@ async function checkPendingBrainPick() {
   await showBrainModal(brainPick);
 }
 
-async function showBrainModal({ url, tabId }) {
+async function showBrainModal({ url, tabId, prefetched }) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "brain-modal" });
   dialog.append(el("h3", { textContent: "Video ins Brain speichern" }));
+  const thumb = makeYouTubeThumb(url);
+  if (thumb) {
+    thumb.classList.add("yt-thumb-large");
+    dialog.append(thumb);
+  }
   dialog.append(el("div", { className: "brain-modal-meta", textContent: url }));
 
-  const status = el("div", { className: "tool-status", textContent: "Transcript wird extrahiert..." });
+  const status = el("div", {
+    className: "tool-status",
+    textContent: prefetched ? "Tags werden vorgeschlagen..." : "Transcript wird extrahiert...",
+  });
   dialog.append(status);
 
   const cancelBtn = el("button", { type: "button", textContent: "Abbrechen", className: "secondary" });
@@ -3691,23 +4957,52 @@ async function showBrainModal({ url, tabId }) {
     return;
   }
 
-  // Lade Säulen + Transcript parallel
+  // Lade Säulen + (auto_brain ODER nur auto_tag bei prefetched) parallel
   let brainData = null;
   let saeulenList = [];
   try {
-    const [brainRes, saeulenRes] = await Promise.all([
-      fetch(`${httpBase}/tools/auto_brain`, {
+    let dataPromise;
+    if (prefetched) {
+      // Transcript+Title schon da → nur Tag-Suggestion holen
+      dataPromise = fetch(`${httpBase}/tools/auto_tag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: prefetched.transcript,
+          title: prefetched.title || url,
+          vault_id: vaultId,
+        }),
+      }).then(async (r) => {
+        const t = await r.text();
+        let j = null;
+        try { j = JSON.parse(t); } catch {}
+        if (!r.ok) throw new Error(j?.detail || t || `HTTP ${r.status}`);
+        return {
+          transcript: prefetched.transcript,
+          title: prefetched.title || url,
+          url,
+          suggestion: j.data || j,
+        };
+      });
+    } else {
+      // Klassischer Pfad: auto_brain holt Transcript + Tags
+      dataPromise = fetch(`${httpBase}/tools/auto_brain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, vault_id: vaultId, tab_id: tabId }),
-      }),
+      }).then(async (r) => {
+        const t = await r.text();
+        let j = null;
+        try { j = JSON.parse(t); } catch {}
+        if (!r.ok) throw new Error(j?.detail || t || `HTTP ${r.status}`);
+        return j.data || j;
+      });
+    }
+    const [bd, saeulenRes] = await Promise.all([
+      dataPromise,
       fetch(`${httpBase}/vaults/${vaultId}/saeulen`),
     ]);
-    const brainText = await brainRes.text();
-    let brainJson = null;
-    try { brainJson = JSON.parse(brainText); } catch {}
-    if (!brainRes.ok) throw new Error(brainJson?.detail || brainText || `HTTP ${brainRes.status}`);
-    brainData = brainJson.data || brainJson;
+    brainData = bd;
     if (saeulenRes.ok) {
       const sd = await saeulenRes.json().catch(() => ({}));
       saeulenList = sd.saeulen || [];

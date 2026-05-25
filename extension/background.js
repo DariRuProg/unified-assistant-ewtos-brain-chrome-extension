@@ -12,6 +12,8 @@ import { runSeoCheck } from "./tools/seo_check.js";
 import { runImageAnalyse } from "./tools/image_analyse.js";
 import { runColorPicker } from "./tools/color_picker.js";
 import { runScreenshot } from "./tools/screenshot.js";
+import { runUrlExtractor } from "./tools/url_extractor.js";
+import { runAutoBrain } from "./tools/auto_brain.js";
 
 const DEFAULT_SERVER_URL = "ws://localhost:9988/ws";
 const DEFAULT_HTTP_BASE = "http://localhost:9988";
@@ -34,6 +36,8 @@ const TOOL_HANDLERS = {
   image_analyse: runImageAnalyse,
   color_picker: runColorPicker,
   screenshot: runScreenshot,
+  url_extractor: runUrlExtractor,
+  auto_brain: runAutoBrain,
 };
 
 const CONTEXT_MENU_IDS = {
@@ -41,6 +45,7 @@ const CONTEXT_MENU_IDS = {
   selection: "ewtos_selection",
   youtube: "ewtos_youtube",
   multitab: "ewtos_multitab",
+  brain: "ewtos_brain",
 };
 
 function setupContextMenus() {
@@ -70,14 +75,23 @@ function setupContextMenus() {
       // Tastenkürzel (siehe manifest.json:commands + chrome.commands).
       contexts: ["page"],
     });
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_IDS.brain,
+      title: "EwtosBrain: Ins Brain speichern",
+      contexts: ["page"],
+      documentUrlPatterns: ["*://*.youtube.com/watch*"],
+    });
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.alarms.create(KEEPALIVE_NAME, { periodInMinutes: 0.5 });
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   setupContextMenus();
   connect();
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("setup/wizard.html") });
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -109,8 +123,136 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (msg?.type === "full_page_screenshot") {
+    const MAX_FRAMES = 15;
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) throw new Error("Kein aktiver Tab");
+
+        const [{ result: dims }] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => ({
+            scrollY: window.scrollY,
+            scrollHeight: document.documentElement.scrollHeight,
+            clientHeight: window.innerHeight,
+            clientWidth: window.innerWidth,
+            dpr: window.devicePixelRatio || 1,
+          }),
+        });
+
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => window.scrollTo(0, 0),
+        });
+        await new Promise(r => setTimeout(r, 200));
+
+        const frames = [];
+        let y = 0;
+        while (y < dims.scrollHeight && frames.length < MAX_FRAMES) {
+          const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: "png" });
+          frames.push({ dataUrl, y });
+          y += dims.clientHeight;
+          if (y < dims.scrollHeight) {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: (sy) => window.scrollTo(0, sy),
+              args: [y],
+            });
+            await new Promise(r => setTimeout(r, 600));
+          }
+        }
+
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (sy) => window.scrollTo(0, sy),
+          args: [dims.scrollY],
+        });
+
+        sendResponse({
+          ok: true,
+          frames,
+          totalHeight: dims.scrollHeight,
+          clientHeight: dims.clientHeight,
+          clientWidth: dims.clientWidth,
+          dpr: dims.dpr,
+          truncated: dims.scrollHeight > dims.clientHeight * MAX_FRAMES,
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "capture_region") {
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) throw new Error("Kein aktiver Tab");
+
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["tools/screenshot_overlay.js"],
+        });
+
+        const [{ result: dpr }] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => window.devicePixelRatio || 1,
+        });
+
+        const rect = await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            chrome.runtime.onMessage.removeListener(handler);
+            reject(new Error("Timeout: kein Bereich gewählt"));
+          }, 60000);
+
+          function handler(m, sender) {
+            if (sender.tab?.id !== tab.id) return;
+            if (m?.type === "region_selected") {
+              clearTimeout(timer);
+              chrome.runtime.onMessage.removeListener(handler);
+              resolve(m.rect);
+            } else if (m?.type === "region_cancelled") {
+              clearTimeout(timer);
+              chrome.runtime.onMessage.removeListener(handler);
+              reject(new Error("Abgebrochen"));
+            }
+          }
+          chrome.runtime.onMessage.addListener(handler);
+        });
+
+        await new Promise(r => setTimeout(r, 80));
+        const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: "png" });
+        const croppedUrl = await cropToRegion(dataUrl, rect, dpr);
+        sendResponse({ ok: true, dataUrl: croppedUrl });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
   return false;
 });
+
+async function cropToRegion(dataUrl, rect, dpr) {
+  const resp = await fetch(dataUrl);
+  const blob = await resp.blob();
+  const bitmap = await createImageBitmap(blob);
+  const sx = Math.round(rect.x * dpr);
+  const sy = Math.round(rect.y * dpr);
+  const sw = Math.max(1, Math.round(rect.w * dpr));
+  const sh = Math.max(1, Math.round(rect.h * dpr));
+  const offscreen = new OffscreenCanvas(sw, sh);
+  const ctx = offscreen.getContext("2d");
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  bitmap.close();
+  const outBlob = await offscreen.convertToBlob({ type: "image/png" });
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(outBlob);
+  });
+}
 
 async function runAutoPull({ httpBase, vaultId, slug, url, withTimestamps }) {
   notify("Transcript", "ziehe Transcript…");
@@ -383,6 +525,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         );
       } else {
         notify("Multi-Tab", `${tabs.length} URLs gespeichert + in Clipboard`);
+      }
+    } else if (info.menuItemId === CONTEXT_MENU_IDS.brain) {
+      const url = tab?.url;
+      if (!url) throw new Error("Keine URL erfassbar");
+      await chrome.storage.local.set({ brainPick: { url, tabId: tab?.id, ts: Date.now() } });
+      if (tab?.windowId) {
+        chrome.sidePanel.open({ windowId: tab.windowId }).catch((err) => {
+          console.warn("[EwtosBrain] sidePanel.open failed:", err?.message || err);
+        });
       }
     } else if (info.menuItemId === CONTEXT_MENU_IDS.youtube) {
       // MV3: chrome.sidePanel.open MUSS synchron im User-Gesture-Frame

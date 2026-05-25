@@ -43,6 +43,7 @@
       background: var(--bg-card);
       color: var(--text);
     }
+    input[type="checkbox"], input[type="radio"] { width: auto; padding: 0; border: none; background: none; }
     textarea {
       min-height: 140px;
       resize: vertical;
@@ -185,6 +186,13 @@
     .dot-ember   { background: #fbbf24; }
 
     .provider-field.hidden { display: none; }
+
+    .source-tags { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+    .source-tag {
+      font-size: 10px; padding: 2px 6px; border-radius: 3px;
+      background: var(--bg-subtle, #f3f4f6); color: var(--text-muted, #6b7280);
+      border: 1px solid var(--border, #e5e7eb);
+    }
   </style>
 </head>
 <body>
@@ -204,6 +212,30 @@
     <label for="notesPath">Notizen-Pfad (Scratchpad)</label>
     <div class="hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung.</div>
     <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
+  </div>
+
+  <h2>External Services</h2>
+  <div class="hint" style="margin-bottom: 12px;">
+    API-Keys für externe Dienste. Werden serverseitig in <code>server/.env</code> oder <code>settings.json</code> gespeichert (Env hat Vorrang).
+  </div>
+
+  <div class="field external-service-card">
+    <label for="geminiApiKey">Google Gemini API-Key</label>
+    <div class="hint">
+      Wird vom Image-Generator (Nano Banana) und später vom Briefing-Tool genutzt. Key holen unter
+      <code>aistudio.google.com/apikey</code>. <span id="geminiApiKeyStatus" style="font-weight: 600;"></span>
+    </div>
+    <input id="geminiApiKey" type="password" placeholder="AIza..." autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="imageGenModel">Image-Generator Default-Modell</label>
+    <div class="hint">Welches Gemini-Modell der Image-Generator beim Start vorschlägt. In der Tool-UI weiter umschaltbar.</div>
+    <select id="imageGenModel">
+      <option value="gemini-2.5-flash-image">Nano Banana (2.5 Flash) — schnell, ~0.039$/Bild</option>
+      <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (3.1 Flash) — bessere Qualität</option>
+      <option value="gemini-3-pro-image-preview">Nano Banana Pro (3 Pro) — 4K</option>
+    </select>
   </div>
 
   <h2>Chat — LLM-Provider</h2>
@@ -263,6 +295,37 @@
   <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
   <span id="saved" class="saved" hidden></span>
 
+  <h2>Guten-Morgen-Briefing</h2>
+  <div class="hint" style="margin-bottom: 12px;">Konfiguriere welche Inhalte dein tägliches Briefing enthält.</div>
+
+  <div id="briefing-profiles-list"></div>
+
+  <div id="briefing-new-form" style="display:none; border: 1px dashed var(--border-input); border-radius: 6px; padding: 14px; margin-top: 12px; background: var(--bg);">
+    <div class="field">
+      <label for="briefing-new-name">Profil-Name</label>
+      <input type="text" id="briefing-new-name" placeholder="z.B. Morgen-Briefing">
+    </div>
+    <div class="field">
+      <label>Inhalte</label>
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="wetter" checked> Wetter</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="todos" checked> Offene Todos</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="fristen" checked> Fristen &amp; Deadlines</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="lernstreak" checked> Lernstreak</label>
+      </div>
+    </div>
+    <div class="field" id="briefing-standorte-field">
+      <label for="briefing-new-standorte">Wetter-Standorte <span class="hint" style="display:inline; font-weight:normal;">(kommagetrennt)</span></label>
+      <input type="text" id="briefing-new-standorte" placeholder="Paderborn, Kavala">
+    </div>
+    <div class="vault-actions">
+      <button type="button" id="briefing-save-new">Profil speichern</button>
+      <button type="button" id="briefing-cancel-new" class="secondary">Abbrechen</button>
+    </div>
+  </div>
+
+  <button type="button" id="briefing-add-btn" class="secondary" style="margin-top: 12px;">+ Neues Profil</button>
+
   <h2>Erscheinungsbild</h2>
 
   <div class="field">
@@ -295,33 +358,7 @@
 
   <div id="vaults-container"></div>
 
-  <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault verbinden</button>
-
-  <div id="add-vault-form" class="hidden">
-    <div class="field">
-      <label for="newVaultName">Name</label>
-      <input id="newVaultName" type="text" placeholder="z.B. Karpathy-Wiki" />
-    </div>
-    <div class="field">
-      <label for="newVaultPath">Pfad</label>
-      <div class="hint">Ordner mit den <code>.md</code>-Dateien (oder Vault-Root — Server findet auch <code>&lt;pfad&gt;/wiki/</code>).</div>
-      <input id="newVaultPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\Self-Feeding-Wiki-...\wiki" />
-    </div>
-    <div class="vault-actions">
-      <button id="newVaultGenerate" type="button">System-Prompt aus CLAUDE.md generieren</button>
-      <button id="newVaultCopyInstr" type="button" class="secondary">Anweisung kopieren</button>
-    </div>
-    <div class="field" style="margin-top: 14px;">
-      <label for="newVaultPrompt">System-Prompt (optional Override)</label>
-      <div class="hint">Leer lassen ist meist die beste Wahl — der Bot nutzt dann automatisch die <code>CLAUDE.md</code> deines Vaults als Anleitung. Nur ausfüllen wenn du die CLAUDE.md überschreiben willst.</div>
-      <textarea id="newVaultPrompt" placeholder=""></textarea>
-    </div>
-    <div class="vault-actions">
-      <button id="newVaultSave" type="button">Vault speichern</button>
-      <button id="newVaultCancel" type="button" class="secondary">Abbrechen</button>
-    </div>
-    <div id="newVaultStatus" class="vault-status"></div>
-  </div>
+  <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault hinzufügen</button>
 
   <script src="options.js"></script>
 </body>

@@ -145,7 +145,10 @@ def _format_item_block(item: dict) -> str:
 
 def _list_playlists_for_saeule(vault_id: str, saeule: str) -> list[dict]:
     """Listet Playlists einer einzelnen Säule (interner Helper)."""
-    root = _vault_root(vault_id)
+    vault = settings.get_vault(vault_id)
+    if not vault:
+        raise ValueError(f"Vault {vault_id} nicht gefunden")
+    root = Path(vault["path"])
     pdir = root / playlist_dir_rel(saeule)
     if not pdir.exists():
         return []
@@ -185,7 +188,10 @@ def list_playlists(vault_id: str, saeule: str | None = None) -> list[dict]:
 
 def get_playlist(vault_id: str, name: str, saeule: str | None = None) -> dict:
     s = saeulen.validate_saeule(saeule)
-    p = _playlist_path(vault_id, name, s)
+    vault = settings.get_vault(vault_id)
+    if not vault:
+        raise ValueError(f"Vault {vault_id} nicht gefunden")
+    p = Path(vault["path"]) / playlist_dir_rel(s) / f"{_slugify(name)}.md"
     if not p.exists():
         raise ValueError(f"Playlist '{name}' nicht gefunden in Säule '{s}'")
     text = p.read_text(encoding="utf-8")

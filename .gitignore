@@ -25,6 +25,7 @@ config.local.py
 server/settings.json
 server/chat.json
 server/chat-*.json
+server/generated_images/
 
 # Claude Code local state
 .claude/

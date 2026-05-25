@@ -1,0 +1,1175 @@
+<!-- EwtosBrain Setup Wizard Mockup — ewtos.com -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EwtosBrain — Setup Wizard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Custom Properties ──────────────────────────────────────── */
+    :root {
+      --bg:           #0f1117;
+      --surface:      #1a1d27;
+      --surface-2:    #22263a;
+      --surface-3:    #2a2f47;
+      --border:       #2e3248;
+      --border-focus: #6c63ff;
+      --accent:       #6c63ff;
+      --accent-hover: #7c73ff;
+      --accent-soft:  rgba(108, 99, 255, 0.15);
+      --text:         #e8eaf2;
+      --text-muted:   #8b90a8;
+      --text-dim:     #5c6080;
+      --success:      #3ecf8e;
+      --success-soft: rgba(62, 207, 142, 0.12);
+      --error:        #f87171;
+      --error-soft:   rgba(248, 113, 113, 0.12);
+      --warning-soft: rgba(251, 191, 36, 0.12);
+      --warning:      #fbbf24;
+      --radius:       10px;
+      --radius-sm:    6px;
+      --transition:   220ms cubic-bezier(0.4, 0, 0.2, 1);
+      --shadow:       0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Base ───────────────────────────────────────────────────── */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    /* ── Card ───────────────────────────────────────────────────── */
+    .wizard-card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    /* ── Progress Bar ───────────────────────────────────────────── */
+    .progress-header {
+      padding: 20px 28px 0;
+      background: var(--surface);
+    }
+
+    .step-track {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 20px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      flex: 1;
+    }
+
+    .step-item:last-child { flex: 0; }
+
+    .step-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-dot.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    .step-dot.done {
+      background: var(--success);
+      border-color: var(--success);
+      color: #fff;
+    }
+
+    .step-dot.done::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 10px;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(45deg) translate(-1px, -1px);
+    }
+
+    .step-dot.done span { display: none; }
+
+    .step-connector {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      transition: background var(--transition);
+    }
+
+    .step-connector.done { background: var(--success); }
+    .step-connector.active { background: var(--accent); }
+
+    .step-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: -12px;
+      margin-bottom: 4px;
+      padding: 0 0;
+    }
+
+    .step-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 500;
+      text-align: center;
+      width: 28px;
+      white-space: nowrap;
+      overflow: hidden;
+      transition: color var(--transition);
+    }
+
+    .step-label.active { color: var(--accent); }
+    .step-label.done   { color: var(--success); }
+
+    .progress-bar-wrap {
+      height: 2px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+      border-radius: 2px;
+      transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ── Step Content ───────────────────────────────────────────── */
+    .step-content-wrap {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .step {
+      display: none;
+      padding: 28px 28px 24px;
+      animation: stepIn 280ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+
+    .step.active { display: block; }
+
+    @keyframes stepIn {
+      from { opacity: 0; transform: translateX(18px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes stepInBack {
+      from { opacity: 0; transform: translateX(-18px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .step.back-anim { animation-name: stepInBack; }
+
+    /* ── Typography ─────────────────────────────────────────────── */
+    .step-headline {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      letter-spacing: -0.3px;
+    }
+
+    .step-subtext {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    /* ── Brain Logo ─────────────────────────────────────────────── */
+    .logo-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .logo-icon {
+      width: 72px;
+      height: 72px;
+      background: var(--accent-soft);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      border: 1px solid rgba(108, 99, 255, 0.3);
+    }
+
+    .logo-wordmark {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .logo-wordmark span { color: var(--accent); }
+
+    /* ── Feature Pills ──────────────────────────────────────────── */
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .pill {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .pill.accent {
+      background: var(--accent-soft);
+      border-color: rgba(108, 99, 255, 0.35);
+      color: var(--accent-hover);
+    }
+
+    /* ── Info Boxes ─────────────────────────────────────────────── */
+    .info-box {
+      background: var(--warning-soft);
+      border: 1px solid rgba(251, 191, 36, 0.25);
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      font-size: 12.5px;
+      color: var(--warning);
+      line-height: 1.55;
+      margin-bottom: 20px;
+    }
+
+    .info-box.neutral {
+      background: var(--surface-2);
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+
+    .info-box.success {
+      background: var(--success-soft);
+      border-color: rgba(62, 207, 142, 0.3);
+      color: var(--success);
+    }
+
+    .info-box strong {
+      color: inherit;
+      font-weight: 600;
+    }
+
+    /* ── Form Controls ──────────────────────────────────────────── */
+    .field-group {
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .field-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 12px;
+      font-size: 13.5px;
+      font-family: inherit;
+      color: var(--text);
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+
+    .field-input::placeholder { color: var(--text-dim); }
+
+    .field-input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    select.field-input {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b90a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+
+    .field-hint {
+      font-size: 11.5px;
+      color: var(--text-dim);
+      margin-top: 5px;
+      line-height: 1.5;
+    }
+
+    /* ── Connection Test ────────────────────────────────────────── */
+    .conn-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .conn-row .field-input { flex: 1; }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      min-height: 40px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+      transition: background var(--transition);
+    }
+
+    .status-dot.connecting { background: var(--warning); animation: pulse 1s infinite; }
+    .status-dot.ok         { background: var(--success); }
+    .status-dot.error      { background: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .status-text.ok    { color: var(--success); }
+    .status-text.error { color: var(--error); }
+
+    /* ── Provider Cards ─────────────────────────────────────────── */
+    .provider-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .provider-card {
+      background: var(--surface-2);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 12px;
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+      position: relative;
+    }
+
+    .provider-card:hover {
+      border-color: var(--border-focus);
+      background: var(--surface-3);
+    }
+
+    .provider-card.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .provider-card-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+    .provider-card-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .provider-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--success-soft);
+      border: 1px solid rgba(62, 207, 142, 0.3);
+      color: var(--success);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 100px;
+    }
+
+    .provider-badge.rec {
+      background: var(--accent-soft);
+      border-color: rgba(108, 99, 255, 0.35);
+      color: var(--accent-hover);
+    }
+
+    /* ── Provider Fields ────────────────────────────────────────── */
+    .provider-field-wrap { margin-bottom: 14px; }
+
+    .api-key-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .api-key-row .field-input { flex: 1; }
+
+    .link-sm {
+      font-size: 11.5px;
+      color: var(--accent);
+      text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .link-sm:hover { text-decoration: underline; }
+
+    /* ── Checkbox ───────────────────────────────────────────────── */
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface-2);
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-top: 1px;
+      transition: background var(--transition), border-color var(--transition);
+      position: relative;
+    }
+
+    .checkbox-row input[type="checkbox"]:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .checkbox-row input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute;
+      top: 1px;
+      left: 3px;
+      width: 6px;
+      height: 9px;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(45deg);
+    }
+
+    .checkbox-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .tooltip-trigger {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-align: center;
+      line-height: 12px;
+      cursor: help;
+      vertical-align: middle;
+      margin-left: 4px;
+      position: relative;
+    }
+
+    .tooltip-trigger:hover .tooltip-popup {
+      display: block;
+    }
+
+    .tooltip-popup {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 220px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      z-index: 10;
+      white-space: normal;
+      box-shadow: var(--shadow);
+    }
+
+    /* ── Success Screen ─────────────────────────────────────────── */
+    .success-icon-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .checkmark-circle {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--success-soft);
+      border: 2px solid rgba(62, 207, 142, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .checkmark-svg {
+      width: 36px;
+      height: 36px;
+    }
+
+    .checkmark-path {
+      stroke-dasharray: 50;
+      stroke-dashoffset: 50;
+      animation: drawCheck 500ms 150ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes drawCheck {
+      to { stroke-dashoffset: 0; }
+    }
+
+    .quick-start-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .quick-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+    }
+
+    .quick-card:hover {
+      border-color: var(--accent);
+      background: var(--surface-3);
+    }
+
+    .quick-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(108, 99, 255, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .quick-card-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+
+    .quick-card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Buttons ────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: background var(--transition), opacity var(--transition), box-shadow var(--transition);
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 12px rgba(108,99,255,0.35); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--surface-3); color: var(--text); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--accent);
+      padding: 9px 4px;
+    }
+
+    .btn-ghost:hover { color: var(--accent-hover); }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-outline:hover { border-color: var(--border-focus); color: var(--text); }
+
+    .btn-sm {
+      padding: 7px 13px;
+      font-size: 12.5px;
+    }
+
+    /* ── Footer Nav ─────────────────────────────────────────────── */
+    .step-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 28px 24px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .step-footer .btn-ghost { margin-left: auto; font-size: 12.5px; }
+
+    .footer-spacer { flex: 1; }
+
+    /* ── Divider ────────────────────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    /* ── Print ──────────────────────────────────────────────────── */
+    @media print {
+      body { background: #fff; color: #000; }
+      .wizard-card { box-shadow: none; border: 1px solid #ccc; max-width: 100%; }
+      .step { display: block !important; page-break-inside: avoid; border-top: 2px solid #eee; }
+      .step-footer { display: none; }
+      .progress-header { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wizard-card">
+
+  <!-- Progress Header -->
+  <div class="progress-header">
+    <div class="step-track">
+      <div class="step-item">
+        <div class="step-dot active" id="dot-1"><span>1</span></div>
+      </div>
+      <div class="step-connector" id="conn-1"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-2"><span>2</span></div>
+      </div>
+      <div class="step-connector" id="conn-2"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-3"><span>3</span></div>
+      </div>
+      <div class="step-connector" id="conn-3"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-4"><span>4</span></div>
+      </div>
+      <div class="step-connector" id="conn-4"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-5"><span>5</span></div>
+      </div>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-fill" style="width: 10%"></div>
+    </div>
+  </div>
+
+  <!-- Step Content Area -->
+  <div class="step-content-wrap">
+
+    <!-- ── Step 1: Willkommen ──────────────────────────── -->
+    <div class="step active" id="step-1">
+
+      <div class="logo-wrap">
+        <div class="logo-icon">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 6C13.37 6 8 11.37 8 18c0 3.5 1.47 6.67 3.84 8.94V30a2 2 0 002 2h12.32a2 2 0 002-2v-3.06C30.53 24.67 32 21.5 32 18c0-6.63-5.37-12-12-12z" fill="rgba(108,99,255,0.25)" stroke="#6c63ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 19c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v4z" fill="#6c63ff" opacity="0.6"/>
+            <path d="M17 14v-2M20 14v-3M23 14v-2" stroke="#7c73ff" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M16 22h8M17.5 25h5" stroke="#6c63ff" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+          </svg>
+        </div>
+        <div class="logo-wordmark">Ewtos<span>Brain</span></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h1 class="step-headline">Willkommen bei EwtosBrain</h1>
+        <p class="step-subtext">Dein KI-Assistent fur tagliche Arbeit — mit Vault-Wissen, YouTube-Research und Multi-LLM-Unterstutzung.</p>
+      </div>
+
+      <div class="pill-row" style="justify-content: center; margin-bottom: 24px;">
+        <div class="pill accent">YouTube Transcripts</div>
+        <div class="pill accent">Vault Chat</div>
+        <div class="pill accent">Lokale KI (Ollama)</div>
+      </div>
+
+      <div class="info-box">
+        <strong>Voraussetzung:</strong> Du benotigst einen laufenden Python-Server.
+        Anleitung findest du in der README des Projekts.
+      </div>
+
+    </div>
+
+    <!-- ── Step 2: Server verbinden ────────────────────── -->
+    <div class="step" id="step-2">
+
+      <h2 class="step-headline">Server verbinden</h2>
+      <p class="step-subtext">EwtosBrain benotigt einen lokalen Python-Server. Starte <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px;font-size:12px;color:var(--accent);">start-server.bat</code> im Projektordner.</p>
+
+      <div class="field-group">
+        <label class="field-label" for="server-url">Server-URL</label>
+        <div class="conn-row">
+          <input class="field-input" type="text" id="server-url" value="ws://localhost:9988/ws" placeholder="ws://localhost:9988/ws">
+          <button class="btn btn-secondary btn-sm" id="btn-test-conn" onclick="testConnection()">Verbindung testen</button>
+        </div>
+        <p class="field-hint">Standardport: 9988. Nur andern wenn du den Server auf einem anderen Port oder Remote-Host betreibst.</p>
+      </div>
+
+      <div class="status-row" id="conn-status-row">
+        <div class="status-dot" id="conn-dot"></div>
+        <span class="status-text" id="conn-text">Noch nicht verbunden</span>
+      </div>
+
+    </div>
+
+    <!-- ── Step 3: LLM-Provider ─────────────────────────── -->
+    <div class="step" id="step-3">
+
+      <h2 class="step-headline">KI-Anbieter wahlen</h2>
+      <p class="step-subtext">Wahle den Sprachmodell-Anbieter der fur deine Anforderungen passt.</p>
+
+      <div class="provider-grid">
+        <div class="provider-card selected" data-provider="anthropic" onclick="selectProvider('anthropic')">
+          <div class="provider-badge rec">Empfohlen</div>
+          <div class="provider-card-name">Anthropic Claude</div>
+          <div class="provider-card-desc">Beste Tool-Use-Qualitat, Cloud-basiert</div>
+        </div>
+        <div class="provider-card" data-provider="openai" onclick="selectProvider('openai')">
+          <div class="provider-card-name">OpenAI GPT</div>
+          <div class="provider-card-desc">GPT-4o, weit verbreitet, Cloud-basiert</div>
+        </div>
+        <div class="provider-card" data-provider="ollama" onclick="selectProvider('ollama')">
+          <div class="provider-badge">Lokal</div>
+          <div class="provider-card-name">Ollama</div>
+          <div class="provider-card-desc">100% lokal, kostenlos, DSGVO-sicher</div>
+        </div>
+        <div class="provider-card" data-provider="mistral" onclick="selectProvider('mistral')">
+          <div class="provider-card-name">Mistral</div>
+          <div class="provider-card-desc">Europaischer Anbieter, Cloud-basiert</div>
+        </div>
+      </div>
+
+      <!-- Dynamic fields -->
+      <div id="provider-fields-cloud" class="provider-field-wrap">
+        <div class="field-group">
+          <label class="field-label" for="api-key">API-Key</label>
+          <div class="api-key-row">
+            <input class="field-input" type="password" id="api-key" placeholder="sk-ant-...">
+            <a class="link-sm" href="#" id="key-gen-link" target="_blank">Key generieren</a>
+          </div>
+        </div>
+      </div>
+
+      <div id="provider-fields-ollama" class="provider-field-wrap" style="display:none;">
+        <div class="field-group">
+          <label class="field-label" for="ollama-url">Ollama-URL</label>
+          <input class="field-input" type="text" id="ollama-url" value="http://localhost:11434" placeholder="http://localhost:11434">
+          <p class="field-hint">Kein API-Key notig. Ollama muss lokal laufen.</p>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="model-select">Modell</label>
+        <select class="field-input" id="model-select">
+          <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Standard)</option>
+          <option value="claude-opus-4-5">claude-opus-4-5</option>
+          <option value="claude-haiku-3-5">claude-haiku-3-5 (Schnell)</option>
+        </select>
+      </div>
+
+    </div>
+
+    <!-- ── Step 4: Vault verbinden ─────────────────────── -->
+    <div class="step" id="step-4">
+
+      <h2 class="step-headline">Vault verknupfen</h2>
+      <p class="step-subtext">Ein Vault ist dein Obsidian-Ordner oder ein beliebiger Ordner mit Markdown-Dateien. EwtosBrain nutzt ihn als Wissensbasis fur den Chat.</p>
+
+      <div class="field-group">
+        <label class="field-label" for="vault-name">Vault-Name</label>
+        <input class="field-input" type="text" id="vault-name" placeholder="z.B. Mein Wiki">
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="vault-path">Vault-Pfad</label>
+        <input class="field-input" type="text" id="vault-path" placeholder="z.B. E:\Obsidian\Mein-Vault">
+        <p class="field-hint">Absoluter Pfad zum Ordner. Der Server muss Lesezugriff auf diesen Pfad haben.</p>
+      </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="vault-write">
+        <span class="checkbox-label">
+          Schreib-Zugriff auf <code style="background:var(--surface-3);padding:1px 5px;border-radius:3px;font-size:11px;">raw/</code> erlauben
+          <span class="tooltip-trigger">?
+            <span class="tooltip-popup">Erlaubt EwtosBrain, Notizen und Transcript-Importe in den <code>raw/</code>-Unterordner deines Vaults zu schreiben. Keine anderen Ordner werden beschrieben.</span>
+          </span>
+        </span>
+      </label>
+
+      <div class="info-box neutral">
+        <strong>Kein Vault?</strong> Du kannst das auch spater in den Einstellungen nachholen. YouTube-Transcripts und Tools funktionieren auch ohne Vault.
+      </div>
+
+    </div>
+
+    <!-- ── Step 5: Bereit ───────────────────────────────── -->
+    <div class="step" id="step-5">
+
+      <div class="success-icon-wrap">
+        <div class="checkmark-circle">
+          <svg class="checkmark-svg" viewBox="0 0 36 36" fill="none">
+            <path class="checkmark-path"
+              d="M8 18l7 7 13-13"
+              stroke="#3ecf8e"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <h2 class="step-headline" style="text-align:center;margin-bottom:6px;">Alles bereit!</h2>
+      <p class="step-subtext" style="text-align:center;margin-bottom:20px;">EwtosBrain ist eingerichtet. Womit mochtest du starten?</p>
+
+      <div class="quick-start-grid">
+        <div class="quick-card">
+          <div class="quick-card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c73ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+          </div>
+          <div>
+            <div class="quick-card-title">YouTube Transcript</div>
+            <div class="quick-card-desc">URL einfugen und Transcript extrahieren</div>
+          </div>
+        </div>
+        <div class="quick-card">
+          <div class="quick-card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c73ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="quick-card-title">Vault Chat</div>
+            <div class="quick-card-desc">Frag deinen Vault nach Wissen</div>
+          </div>
+        </div>
+        <div class="quick-card">
+          <div class="quick-card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c73ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="quick-card-title">Notizen</div>
+            <div class="quick-card-desc">Gedanken schnell festhalten</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- end step-content-wrap -->
+
+  <!-- Footer Navigation -->
+  <div class="step-footer" id="step-footer">
+    <button class="btn btn-secondary btn-sm" id="btn-back" onclick="navigate(-1)" style="display:none;">Zuruck</button>
+    <div class="footer-spacer"></div>
+    <button class="btn btn-ghost btn-sm" id="btn-skip" onclick="navigate(1)" style="display:none;">Uberspringen</button>
+    <button class="btn btn-primary btn-sm" id="btn-next" onclick="navigate(1)">Los geht's</button>
+  </div>
+
+</div><!-- end wizard-card -->
+
+<script>
+  // ewtos.com — EwtosBrain Setup Wizard Mockup
+
+  const TOTAL = 5;
+  let current = 1;
+  let connOk = false;
+  let direction = 1;
+
+  const providerModels = {
+    anthropic: [
+      { value: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5 (Standard)' },
+      { value: 'claude-opus-4-5',   label: 'claude-opus-4-5' },
+      { value: 'claude-haiku-3-5',  label: 'claude-haiku-3-5 (Schnell)' },
+    ],
+    openai: [
+      { value: 'gpt-4o',       label: 'gpt-4o (Standard)' },
+      { value: 'gpt-4o-mini',  label: 'gpt-4o-mini (Schnell)' },
+      { value: 'gpt-4-turbo',  label: 'gpt-4-turbo' },
+    ],
+    ollama: [
+      { value: 'llama3',        label: 'llama3 (Standard)' },
+      { value: 'mistral',       label: 'mistral' },
+      { value: 'codellama',     label: 'codellama' },
+      { value: 'phi3',          label: 'phi3' },
+    ],
+    mistral: [
+      { value: 'mistral-small', label: 'mistral-small (Standard)' },
+      { value: 'mistral-medium', label: 'mistral-medium' },
+      { value: 'mistral-large', label: 'mistral-large' },
+    ],
+  };
+
+  const keyLinks = {
+    anthropic: 'https://console.anthropic.com/settings/keys',
+    openai:    'https://platform.openai.com/api-keys',
+    mistral:   'https://console.mistral.ai/api-keys/',
+  };
+
+  function updateProgress(step) {
+    const pct = ((step - 1) / (TOTAL - 1)) * 90 + 10;
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    for (let i = 1; i <= TOTAL; i++) {
+      const dot  = document.getElementById('dot-' + i);
+      const conn = document.getElementById('conn-' + i);
+
+      dot.className = 'step-dot';
+      if (i < step)  dot.classList.add('done');
+      if (i === step) dot.classList.add('active');
+
+      if (conn) {
+        conn.className = 'step-connector';
+        if (i < step)  conn.classList.add('done');
+        if (i === step && step < TOTAL) conn.classList.add('active');
+      }
+    }
+  }
+
+  function updateFooter(step) {
+    const btnBack = document.getElementById('btn-back');
+    const btnNext = document.getElementById('btn-next');
+    const btnSkip = document.getElementById('btn-skip');
+
+    btnBack.style.display = step > 1 ? 'inline-flex' : 'none';
+    btnSkip.style.display  = step === 4 ? 'inline-flex' : 'none';
+
+    if (step === 1) {
+      btnNext.textContent = "Los geht's";
+      btnNext.disabled = false;
+    } else if (step === 2) {
+      btnNext.textContent = 'Weiter';
+      btnNext.disabled = !connOk;
+    } else if (step === 5) {
+      document.getElementById('step-footer').style.display = 'none';
+      // render action buttons inside step 5
+      const wrap = document.getElementById('step-5');
+      if (!document.getElementById('footer-actions-5')) {
+        const div = document.createElement('div');
+        div.id = 'footer-actions-5';
+        div.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;';
+        div.innerHTML = `
+          <button class="btn btn-primary" onclick="alert('Extension ist bereits geöffnet — dies ist ein Mockup.')">Extension offnen</button>
+          <button class="btn btn-outline" onclick="alert('Einstellungen — im Mockup nicht aktiv.')">Einstellungen offnen</button>
+        `;
+        wrap.appendChild(div);
+      }
+    } else {
+      btnNext.textContent = 'Weiter';
+      btnNext.disabled = false;
+    }
+  }
+
+  function navigate(dir) {
+    direction = dir;
+    const next = current + dir;
+    if (next < 1 || next > TOTAL) return;
+
+    const currentEl = document.getElementById('step-' + current);
+    const nextEl    = document.getElementById('step-' + next);
+
+    currentEl.classList.remove('active');
+    nextEl.classList.remove('back-anim');
+    if (dir < 0) nextEl.classList.add('back-anim');
+    nextEl.classList.add('active');
+
+    current = next;
+    updateProgress(current);
+    updateFooter(current);
+
+    // Re-trigger checkmark animation on step 5
+    if (current === 5) {
+      const path = document.querySelector('.checkmark-path');
+      path.style.animation = 'none';
+      path.offsetHeight; // reflow
+      path.style.animation = '';
+    }
+  }
+
+  // ── Connection Test Simulation ──
+  function testConnection() {
+    const btn    = document.getElementById('btn-test-conn');
+    const dot    = document.getElementById('conn-dot');
+    const text   = document.getElementById('conn-text');
+    const btnNext = document.getElementById('btn-next');
+
+    btn.disabled = true;
+    btn.textContent = 'Verbinde...';
+    dot.className   = 'status-dot connecting';
+    text.className  = 'status-text';
+    text.textContent = 'Verbinde...';
+    connOk = false;
+    btnNext.disabled = true;
+
+    setTimeout(() => {
+      const ok = Math.random() > 0.2; // 80% success in mockup
+      if (ok) {
+        dot.className    = 'status-dot ok';
+        text.className   = 'status-text ok';
+        text.textContent = 'Verbunden — Server erreichbar';
+        connOk = true;
+        btnNext.disabled = false;
+      } else {
+        dot.className    = 'status-dot error';
+        text.className   = 'status-text error';
+        text.textContent = 'Verbindung fehlgeschlagen. Ist der Server gestartet?';
+        connOk = false;
+        btnNext.disabled = true;
+      }
+      btn.disabled    = false;
+      btn.textContent = 'Nochmal testen';
+    }, 1500);
+  }
+
+  // ── Provider Selection ──
+  function selectProvider(provider) {
+    document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+    document.querySelector('[data-provider="' + provider + '"]').classList.add('selected');
+
+    const cloudFields  = document.getElementById('provider-fields-cloud');
+    const ollamaFields = document.getElementById('provider-fields-ollama');
+    const modelSel     = document.getElementById('model-select');
+    const keyLink      = document.getElementById('key-gen-link');
+    const apiKeyInput  = document.getElementById('api-key');
+
+    if (provider === 'ollama') {
+      cloudFields.style.display  = 'none';
+      ollamaFields.style.display = 'block';
+    } else {
+      cloudFields.style.display  = 'block';
+      ollamaFields.style.display = 'none';
+      apiKeyInput.placeholder = provider === 'anthropic' ? 'sk-ant-...'
+                               : provider === 'openai'   ? 'sk-...'
+                               : 'api key...';
+      keyLink.href = keyLinks[provider] || '#';
+    }
+
+    // Update model dropdown
+    const models = providerModels[provider] || [];
+    modelSel.innerHTML = models.map(m =>
+      '<option value="' + m.value + '">' + m.label + '</option>'
+    ).join('');
+  }
+
+  // ── Init ──
+  updateProgress(1);
+  updateFooter(1);
+</script>
+
+</body>
+</html>

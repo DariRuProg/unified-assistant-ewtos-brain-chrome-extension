@@ -24,22 +24,61 @@ function scrapePageContent(mode) {
   try {
     const isFull = mode === "full";
 
-    // --- Root selection ---
-    const root = isFull
-      ? document.body
-      : (document.querySelector("article, main, [role='main'], .entry-content, .post-content, .article-body, .article-content, #content, #main-content")
-         || document.body);
+    // --- Root selection (content mode only) ---
+    // Text-density heuristic: find the deepest DOM node that still contains
+    // ≥30% of total body text and isn't a known chrome element.
+    // Inspired by Readability.js — no fixed selector list needed.
+    function findContentRoot() {
+      const body = document.body;
+      const totalLen = body.textContent.trim().length;
+      if (totalLen < 150) return body;
 
+      const SKIP_TAGS = new Set(["script","style","noscript","nav","header","footer","aside","dialog","form"]);
+      // matches class/id tokens that indicate non-content chrome
+      const SKIP_RE = /\b(nav(igation)?|header|masthead|footer|sidebar|side[_-]?bar|menu(bar)?|ad(vert(isement)?)?|cookie|popup|modal|overlay|social|share|comment|widget|promo|sponsor|related|recommend|breadcrumb|pagination|pager|search-?form|tag-?cloud)\b/i;
+
+      function isSkipped(el) {
+        if (SKIP_TAGS.has(el.tagName.toLowerCase())) return true;
+        const token = (el.className || "") + " " + (el.id || "");
+        return SKIP_RE.test(token);
+      }
+
+      // DFS: return the deepest qualifying element (≥30% of body text, not skipped).
+      // When multiple children qualify, pick the one with the most text.
+      const threshold = Math.max(150, totalLen * 0.30);
+
+      function deepest(el) {
+        if (isSkipped(el)) return null;
+        if (el.textContent.trim().length < threshold) return null;
+
+        let best = null;
+        let bestLen = 0;
+        for (const child of el.children) {
+          const found = deepest(child);
+          if (found) {
+            const fLen = found.textContent.trim().length;
+            if (fLen > bestLen) { bestLen = fLen; best = found; }
+          }
+        }
+        return best || el;
+      }
+
+      const result = deepest(body);
+      // Only use result if it's more specific than body itself
+      return (result && result !== body) ? result : body;
+    }
+
+    const root = isFull ? document.body : findContentRoot();
     const clone = root.cloneNode(true);
 
     // Always strip
     clone.querySelectorAll("script, style, noscript, iframe, svg, canvas").forEach(el => el.remove());
 
-    // Content-mode: strip chrome (navigation, header, footer, sidebars, overlays)
+    // Content-mode: strip remaining chrome that wasn't caught by root selection
     if (!isFull) {
       clone.querySelectorAll("nav, footer, header, aside, dialog").forEach(el => el.remove());
       clone.querySelectorAll(
-        '[class*="cookie"],[id*="cookie"],[class*="banner"],[id*="banner"],' +
+        '[class*="cookie"],[id*="cookie"],' +
         '[class*="popup"],[id*="popup"],[class*="modal"],[id*="modal"],' +
         '[class*="sidebar"],[id*="sidebar"],[class*="newsletter"],[class*="subscribe"],' +
         '[class*="overlay"],[id*="overlay"],[aria-hidden="true"]'

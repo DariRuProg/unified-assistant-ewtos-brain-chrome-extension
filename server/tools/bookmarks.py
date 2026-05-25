@@ -84,8 +84,8 @@ def _format_themen(themen: list[str] | None) -> str:
     return (" " + " ".join(parts)) if parts else ""
 
 
-def list_bookmarks() -> list[dict]:
-    data = notes_file.load("bookmarks")
+def list_bookmarks(vault_id: str | None = None) -> list[dict]:
+    data = notes_file.load("bookmarks", vault_id)
     items: list[dict] = []
     for line in data["content"].splitlines():
         m = BOOKMARK_RE.match(line)
@@ -109,6 +109,7 @@ def add_bookmark(
     note: str | None = None,
     source: str = "manual",
     themen: list[str] | None = None,
+    vault_id: str | None = None,
 ) -> dict:
     url = (url or "").strip()
     if not url:
@@ -126,10 +127,10 @@ def add_bookmark(
     if source and source != "manual":
         line += f" _(quelle: {source})_"
     line += _format_themen(themen)
-    data = notes_file.load("bookmarks")
+    data = notes_file.load("bookmarks", vault_id)
     body = data["content"].rstrip()
     new_content = (body + "\n" + line + "\n") if body else (line + "\n")
-    notes_file.save("bookmarks", new_content)
+    notes_file.save("bookmarks", new_content, vault_id)
     return {"added": title, "url": url, "source": source, "themen": themen or []}
 
 
@@ -139,6 +140,7 @@ def update_bookmark(
     title: str | None = None,
     note: str | None = None,
     themen: list[str] | None = None,
+    vault_id: str | None = None,
 ) -> dict:
     """Editiert einen Bookmark per Substring-Match (URL/Titel) + optionalem Datum-Filter.
 
@@ -150,7 +152,7 @@ def update_bookmark(
     if not needle:
         raise ValueError("match darf nicht leer sein")
     date_filter = (date or "").strip() or None
-    data = notes_file.load("bookmarks")
+    data = notes_file.load("bookmarks", vault_id)
     lines = data["content"].splitlines()
     matches: list[int] = []
     for idx, line in enumerate(lines):
@@ -182,11 +184,11 @@ def update_bookmark(
     new_line += _format_themen(new_themen)
     lines[idx] = new_line
     body = "\n".join(lines).rstrip()
-    notes_file.save("bookmarks", body + "\n" if body else "")
+    notes_file.save("bookmarks", body + "\n" if body else "", vault_id)
     return {"updated": new_title, "themen": new_themen or []}
 
 
-def delete_bookmark(match: str, date: str | None = None) -> dict:
+def delete_bookmark(match: str, date: str | None = None, vault_id: str | None = None) -> dict:
     """Löscht einen Bookmark per Substring-Match auf Titel/URL.
 
     Wenn `date` (YYYY-MM-DD) gesetzt ist, wird zusätzlich auf das Datum
@@ -202,7 +204,7 @@ def delete_bookmark(match: str, date: str | None = None) -> dict:
     if not needle:
         raise ValueError("match darf nicht leer sein")
     date_filter = (date or "").strip() or None
-    data = notes_file.load("bookmarks")
+    data = notes_file.load("bookmarks", vault_id)
     lines = data["content"].splitlines()
     matches: list[tuple[int, str, str]] = []  # (idx, full_line, title)
     for idx, line in enumerate(lines):
@@ -224,5 +226,5 @@ def delete_bookmark(match: str, date: str | None = None) -> dict:
     idx, _, title = matches[0]
     del lines[idx]
     body = "\n".join(lines).rstrip()
-    notes_file.save("bookmarks", body + "\n" if body else "")
+    notes_file.save("bookmarks", body + "\n" if body else "", vault_id)
     return {"deleted": title}

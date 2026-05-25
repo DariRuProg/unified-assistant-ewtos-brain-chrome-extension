@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import settings
 from tools import notes_file
@@ -152,7 +153,7 @@ def promote_to_raw(
 
     # Resolve content + source-side marker
     if source == "scratchpad":
-        data = notes_file.read_scratchpad()
+        data = notes_file.read_scratchpad(vault_id=vault_id)
         result = _extract_scratchpad_block(data["content"], identifier)
         if not result:
             raise ValueError(f"Kein Scratchpad-Block gefunden für '{identifier}'")
@@ -160,7 +161,7 @@ def promote_to_raw(
         promoted_body = body
         slug = filename_slug or _slugify(title or body[:80])
     else:  # todos
-        data = notes_file.load("todos")
+        data = notes_file.load("todos", vault_id=vault_id)
         match = _find_todo(data["content"], identifier)
         if not match:
             raise ValueError(f"Kein Todo gefunden, das '{identifier}' enthält")
@@ -213,12 +214,12 @@ def promote_to_raw(
     # Source-side markers
     if source == "scratchpad":
         new_scratch = _mark_scratchpad_block(data["content"], header, raw_rel)
-        notes_file.save("scratchpad", new_scratch)
+        notes_file.save("scratchpad", new_scratch, vault_id=vault_id)
     else:
         lines = data["content"].splitlines()
         lines[idx] = _mark_todo_promoted(lines[idx], raw_rel)
         body = "\n".join(lines).rstrip()
-        notes_file.save("todos", body + "\n" if body else "")
+        notes_file.save("todos", body + "\n" if body else "", vault_id=vault_id)
 
     return {
         "promoted": True,
@@ -226,5 +227,137 @@ def promote_to_raw(
         "vault": vault["name"],
         "raw_path": raw_rel,
         "absolute_path": str(raw_file),
+        "ingest_hint": f"In Claude Code: 'ingeste {raw_rel}' für Wiki-Ingest",
+    }
+
+
+def save_raw_content(
+    vault_id: str,
+    title: str,
+    content: str,
+    target_subfolder: str,
+    description: str | None = None,
+    filename_slug: str | None = None,
+) -> dict[str, Any]:
+    """Save arbitrary content to vault/raw/<subfolder>/<date>-<slug>.md.
+
+    Permissions: requires `write_raw` on the target vault.
+    """
+    vault = settings.get_vault(vault_id)
+    if not vault:
+        raise ValueError(f"Vault {vault_id} nicht gefunden")
+    if not settings.vault_permission(vault_id, "write_raw"):
+        raise PermissionError(
+            f"Kein Schreibrecht auf raw/ im Vault '{vault['name']}'. "
+            f"In den Einstellungen aktivieren: 'EwtosBrain darf in raw/ schreiben'."
+        )
+
+    subfolder = _validate_subfolder(target_subfolder)
+    today = date.today().isoformat()
+    slug = filename_slug or _slugify(title or "inhalt")
+
+    vault_root = Path(vault["path"])
+    raw_dir = vault_root / "raw" / subfolder
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{today}-{slug}.md"
+    raw_file = raw_dir / filename
+
+    if raw_file.exists():
+        counter = 2
+        while True:
+            candidate = raw_dir / f"{today}-{slug}-{counter}.md"
+            if not candidate.exists():
+                raw_file = candidate
+                break
+            counter += 1
+
+    frontmatter_lines = [
+        "---",
+        f"datum: {today}",
+        f"titel: {title.strip()}",
+    ]
+    if description:
+        frontmatter_lines.append(f"beschreibung: {description.strip()}")
+    frontmatter_lines.append("---")
+    frontmatter = "\n".join(frontmatter_lines)
+
+    body_parts = [f"# {title.strip()}"]
+    if description:
+        body_parts.append(description.strip())
+    body_parts.append(content.strip())
+    body_text = "\n\n".join(p for p in body_parts if p)
+
+    raw_file.write_text(f"{frontmatter}\n\n{body_text}\n", encoding="utf-8")
+
+    raw_rel = f"raw/{subfolder}/{raw_file.name}"
+    return {
+        "raw_path": raw_rel,
+        "vault": vault["name"],
+        "ingest_hint": f"In Claude Code: 'ingeste {raw_rel}' für Wiki-Ingest",
+    }
+
+
+def save_video_to_raw(
+    vault_id: str,
+    url: str,
+    title: str,
+    transcript: str,
+    saeule: str,
+    playlist_name: str,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Save a video transcript to vault/raw/<saeule>/<date>-<slug>.md.
+
+    Permissions: requires `write_raw` on the target vault.
+    Returns {raw_path, slug, vault}.
+    """
+    vault = settings.get_vault(vault_id)
+    if not vault:
+        raise ValueError(f"Vault {vault_id} nicht gefunden")
+    if not settings.vault_permission(vault_id, "write_raw"):
+        raise PermissionError(
+            f"Kein Schreibrecht auf raw/ im Vault '{vault['name']}'. "
+            f"In den Einstellungen aktivieren: 'EwtosBrain darf in raw/ schreiben'."
+        )
+
+    today = date.today().isoformat()
+    slug = _slugify(title or url)
+
+    vault_root = Path(vault["path"])
+    raw_dir = vault_root / "raw" / saeule
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{today}-{slug}.md"
+    raw_file = raw_dir / filename
+    if raw_file.exists():
+        counter = 2
+        while True:
+            candidate = raw_dir / f"{today}-{slug}-{counter}.md"
+            if not candidate.exists():
+                raw_file = candidate
+                break
+            counter += 1
+
+    tag_list = tags or []
+    frontmatter_lines = [
+        "---",
+        f"datum: {today}",
+        f"quelle: {url}",
+        f"titel: {title.strip() if title else ''}",
+        f"saeule: {saeule}",
+        f"target_playlist: {playlist_name.strip() if playlist_name else ''}",
+        f"tags: [{', '.join(tag_list)}]",
+        "typ: video",
+        "---",
+    ]
+    frontmatter = "\n".join(frontmatter_lines)
+
+    body = f"# {title.strip() if title else url}\n\n{transcript.strip()}\n" if transcript else f"# {title.strip() if title else url}\n"
+    raw_file.write_text(f"{frontmatter}\n\n{body}", encoding="utf-8")
+
+    raw_rel = f"raw/{saeule}/{raw_file.name}"
+    return {
+        "raw_path": raw_rel,
+        "slug": raw_file.stem,
+        "vault": vault["name"],
         "ingest_hint": f"In Claude Code: 'ingeste {raw_rel}' für Wiki-Ingest",
     }

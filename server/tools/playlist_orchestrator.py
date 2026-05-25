@@ -22,6 +22,7 @@ from typing import Any
 
 import settings
 from tools import playlists, saeulen, transcript_writer, videos
+from tools import youtube_transcript_fallback
 
 log = logging.getLogger(__name__)
 
@@ -147,38 +148,48 @@ async def _run(
         if not has_transcript:
             log.info("Orchestrator [%d/%d]: pull %s", idx + 1, len(items), title[:60])
 
+            # 1. Server-API zuerst (schneller, robuster)
+            text = ""
+            server_error: str | None = None
             try:
-                pull_result = await asyncio.wait_for(
-                    bridge.call("youtube_transcript", {"url": url, "with_timestamps": with_timestamps}),
-                    timeout=TRANSCRIPT_PULL_TIMEOUT_SECONDS,
+                fb = youtube_transcript_fallback.fetch_transcript(
+                    url, with_timestamps=with_timestamps,
                 )
-            except asyncio.TimeoutError:
-                result["failed"].append({
-                    "title": title, "url": url,
-                    "error": f"timeout nach {TRANSCRIPT_PULL_TIMEOUT_SECONDS}s",
-                })
-                continue
-            except RuntimeError as e:
-                msg = str(e)
-                if "disconnected" in msg.lower() or "reconnected" in msg.lower():
-                    result["aborted"] = True
-                    result["abort_reason"] = f"bridge_disconnected: {msg}"
-                    return result
-                result["failed"].append({"title": title, "url": url, "error": msg})
-                continue
-            except Exception as e:
-                result["failed"].append({"title": title, "url": url, "error": str(e)})
-                continue
+                text = (fb.get("transcript") or "").strip()
+            except Exception as fb_err:
+                server_error = str(fb_err)
 
-            if not pull_result.get("ok"):
-                result["failed"].append({
-                    "title": title, "url": url,
-                    "error": f"extension: {pull_result.get('error', 'unbekannt')}",
-                })
-                continue
-            text = (pull_result.get("data") or {}).get("transcript") or ""
-            if not text.strip():
-                result["failed"].append({"title": title, "url": url, "error": "leeres Transcript"})
+            # 2. Browser-Pfad als Fallback
+            if not text:
+                log.info("Orchestrator: Browser-Fallback fuer %s (server: %s)", title[:60], server_error)
+                try:
+                    pull_result = await asyncio.wait_for(
+                        bridge.call("youtube_transcript", {"url": url, "with_timestamps": with_timestamps}),
+                        timeout=TRANSCRIPT_PULL_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    result["failed"].append({
+                        "title": title, "url": url,
+                        "error": f"server: {server_error} | browser: timeout nach {TRANSCRIPT_PULL_TIMEOUT_SECONDS}s",
+                    })
+                    continue
+                except RuntimeError as e:
+                    msg = str(e)
+                    if "disconnected" in msg.lower() or "reconnected" in msg.lower():
+                        result["aborted"] = True
+                        result["abort_reason"] = f"bridge_disconnected: {msg}"
+                        return result
+                    result["failed"].append({"title": title, "url": url, "error": f"server: {server_error} | browser: {msg}"})
+                    continue
+                except Exception as e:
+                    result["failed"].append({"title": title, "url": url, "error": f"server: {server_error} | browser: {e}"})
+                    continue
+
+                if pull_result.get("ok"):
+                    text = ((pull_result.get("data") or {}).get("transcript") or "").strip()
+
+            if not text:
+                result["failed"].append({"title": title, "url": url, "error": f"server: {server_error} | browser: leeres Transcript"})
                 continue
 
             try:

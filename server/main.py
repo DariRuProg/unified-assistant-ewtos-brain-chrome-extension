@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -25,10 +25,12 @@ from tools import notes_file, wiki_reader
 from tools import playlists as playlists_tool
 from tools import playlist_orchestrator
 from tools import summary_writer, transcript_writer
+from tools import youtube_transcript_fallback
 from tools import briefing as briefing_tool
 from tools import auto_tagger
 from tools import raw_promoter
 from tools import saeulen as saeulen_tool
+from tools import image_generator as image_generator_tool
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -144,14 +146,52 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
 class YouTubeTranscriptRequest(BaseModel):
     url: str
+    with_timestamps: bool = False
 
 
 @app.post("/tools/youtube_transcript")
 async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
-    result = await bridge.call("youtube_transcript", {"url": req.url})
-    if not result.get("ok"):
-        raise HTTPException(500, result.get("error", "Tool call failed"))
-    return result.get("data", {})
+    """Hybrid-Pull: erst Server-API (youtube-transcript-api), Browser als Fallback.
+
+    Reihenfolge bewusst: API-Pfad ist schneller und robuster gegen YouTube-DOM-
+    Aenderungen. Browser-Scrape nur, wenn die API IP-blockt o.ae. Antwort enthaelt
+    'source': 'server_api' | 'extension' (+ 'server_error' wenn Browser einsprang).
+    """
+    server_error: str | None = None
+    try:
+        data = youtube_transcript_fallback.fetch_transcript(
+            req.url, with_timestamps=req.with_timestamps,
+        )
+        data["url"] = req.url
+        data["source"] = "server_api"
+        return data
+    except (ValueError, ImportError) as e:
+        server_error = str(e)
+        log.info("Server-API fail, versuche Browser-Fallback: %s", server_error)
+
+    if bridge.connected:
+        try:
+            result = await bridge.call(
+                "youtube_transcript",
+                {"url": req.url, "with_timestamps": req.with_timestamps},
+            )
+            if result.get("ok"):
+                data = result.get("data") or {}
+                text = (data.get("transcript") or "").strip()
+                if text:
+                    data["source"] = "extension"
+                    data["server_error"] = server_error
+                    return data
+                browser_error = "leeres Transcript vom Browser-Scrape"
+            else:
+                browser_error = result.get("error") or "Browser-Scrape fehlgeschlagen"
+        except HTTPException:
+            raise
+        except Exception as e:
+            browser_error = str(e)
+        raise HTTPException(500, f"API: {server_error} | Browser: {browser_error}")
+
+    raise HTTPException(500, f"API: {server_error} (Extension nicht verbunden — kein Browser-Fallback verfuegbar)")
 
 
 class PageScrapeRequest(BaseModel):
@@ -211,6 +251,58 @@ async def url_extractor_endpoint(req: UrlExtractorRequest) -> dict[str, Any]:
     return result.get("data", {})
 
 
+# --- Image-Generator (Gemini Nano Banana) --------------------------------
+
+class ImageGenRequest(BaseModel):
+    prompt: str
+    input_images: list[str] = []  # base64-Strings oder data-URLs
+    input_files: list[str] = []   # relative Pfade in generated_images/
+    model: str | None = None      # None -> Setting/Default
+
+
+@app.post("/tools/image_generate")
+def image_generate_endpoint(req: ImageGenRequest) -> dict[str, Any]:
+    return image_generator_tool.generate_image(
+        prompt=req.prompt,
+        input_images=req.input_images,
+        input_files=req.input_files,
+        model=req.model,
+    )
+
+
+@app.get("/tools/image_gallery")
+def image_gallery_list() -> dict[str, Any]:
+    return {"items": image_generator_tool.list_index()}
+
+
+@app.delete("/tools/image_gallery/{rel_path:path}")
+def image_gallery_delete(rel_path: str) -> dict[str, Any]:
+    try:
+        return image_generator_tool.delete_entry(rel_path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/image_gallery/open")
+def image_gallery_open() -> dict[str, Any]:
+    try:
+        return image_generator_tool.open_output_folder()
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/tools/image_generated/{rel_path:path}")
+def image_generated_serve(rel_path: str):
+    from fastapi.responses import Response
+    try:
+        data, mime = image_generator_tool.read_generated_file(rel_path)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return Response(content=data, media_type=mime)
+
+
 class NotesSaveRequest(BaseModel):
     content: str
 
@@ -221,17 +313,19 @@ class NotesExportRequest(BaseModel):
 
 
 @app.get("/tools/notes/{kind}")
-def notes_load(kind: str) -> dict[str, Any]:
+def notes_load(kind: str, vault_id: str | None = Query(None)) -> dict[str, Any]:
     try:
-        return notes_file.load(kind)
+        return notes_file.load(kind, vault_id=vault_id)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
 
 @app.post("/tools/notes/{kind}")
-def notes_save(kind: str, req: NotesSaveRequest) -> dict[str, Any]:
+def notes_save(
+    kind: str, req: NotesSaveRequest, vault_id: str | None = Query(None),
+) -> dict[str, Any]:
     try:
-        return notes_file.save(kind, req.content)
+        return notes_file.save(kind, req.content, vault_id=vault_id)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
@@ -249,9 +343,11 @@ class NotesAppendRequest(BaseModel):
 
 
 @app.post("/tools/notes/scratchpad/append")
-def notes_scratchpad_append(req: NotesAppendRequest) -> dict[str, Any]:
+def notes_scratchpad_append(
+    req: NotesAppendRequest, vault_id: str | None = Query(None),
+) -> dict[str, Any]:
     try:
-        return notes_file.append_scratchpad(req.text)
+        return notes_file.append_scratchpad(req.text, vault_id=vault_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -280,34 +376,42 @@ class BookmarkUpdateRequest(BaseModel):
 
 
 @app.get("/tools/bookmarks")
-def bookmarks_list() -> dict[str, Any]:
-    return {"items": bookmarks_tool.list_bookmarks()}
+def bookmarks_list(vault_id: str | None = Query(None)) -> dict[str, Any]:
+    return {"items": bookmarks_tool.list_bookmarks(vault_id=vault_id)}
 
 
 @app.post("/tools/bookmarks")
-def bookmarks_add(req: BookmarkAddRequest) -> dict[str, Any]:
+def bookmarks_add(
+    req: BookmarkAddRequest, vault_id: str | None = Query(None),
+) -> dict[str, Any]:
     try:
         return bookmarks_tool.add_bookmark(
-            req.url, req.title, req.note, req.source or "manual", themen=req.themen,
+            req.url, req.title, req.note, req.source or "manual",
+            themen=req.themen, vault_id=vault_id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/tools/bookmarks/edit")
-def bookmarks_edit(req: BookmarkUpdateRequest) -> dict[str, Any]:
+def bookmarks_edit(
+    req: BookmarkUpdateRequest, vault_id: str | None = Query(None),
+) -> dict[str, Any]:
     try:
         return bookmarks_tool.update_bookmark(
-            req.match, date=req.date, title=req.title, note=req.note, themen=req.themen,
+            req.match, date=req.date, title=req.title, note=req.note,
+            themen=req.themen, vault_id=vault_id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/tools/bookmarks/delete")
-def bookmarks_delete(req: BookmarkDeleteRequest) -> dict[str, Any]:
+def bookmarks_delete(
+    req: BookmarkDeleteRequest, vault_id: str | None = Query(None),
+) -> dict[str, Any]:
     try:
-        return bookmarks_tool.delete_bookmark(req.match, req.date)
+        return bookmarks_tool.delete_bookmark(req.match, req.date, vault_id=vault_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -631,6 +735,22 @@ def vault_file_read(vault_id: str, rel_path: str) -> dict[str, Any]:
         raise HTTPException(400, str(e))
 
 
+@app.get("/tools/vault_list/{vault_id}")
+def vault_list_folder(vault_id: str, rel_path: str = "") -> dict[str, Any]:
+    """Listet Ordner und .md-Dateien an einem Pfad im Vault. rel_path leer
+    = Vault-Root (bzw. wiki/-Unterordner falls vorhanden, siehe wiki_reader.resolve_dir)."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        listing = wiki_reader.list_folder(v["path"], rel_path)
+        return {"vault_id": vault_id, **listing}
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/tools/videos/{vault_id}/{slug}/transcript")
 def videos_save_transcript(
     vault_id: str,
@@ -668,6 +788,8 @@ class SettingsUpdate(BaseModel):
     openai_api_key: str | None = None
     ollama_base_url: str | None = None
     mistral_api_key: str | None = None
+    gemini_api_key: str | None = None
+    image_gen_model: str | None = None
 
 
 def _public_settings() -> dict[str, Any]:
@@ -682,6 +804,8 @@ def _public_settings() -> dict[str, Any]:
         "openai_api_key_set": bool(s.get("openai_api_key")),
         "ollama_base_url": s.get("ollama_base_url") or "http://localhost:11434",
         "mistral_api_key_set": bool(s.get("mistral_api_key")),
+        "gemini_api_key_set": bool(s.get("gemini_api_key")),
+        "image_gen_model": s.get("image_gen_model") or "gemini-2.5-flash-image",
     }
 
 
@@ -702,6 +826,7 @@ class VaultCreate(BaseModel):
     name: str
     path: str
     system_prompt: str | None = ""
+    use_local_notes: bool | None = None
 
 
 class VaultUpdate(BaseModel):
@@ -709,6 +834,7 @@ class VaultUpdate(BaseModel):
     path: str | None = None
     system_prompt: str | None = None
     permissions: dict[str, bool] | None = None
+    use_local_notes: bool | None = None
 
 
 class GeneratePromptRequest(BaseModel):
@@ -736,7 +862,10 @@ def vaults_create(req: VaultCreate) -> dict[str, Any]:
         raise HTTPException(400, "Name darf nicht leer sein")
     if not req.path.strip():
         raise HTTPException(400, "Pfad darf nicht leer sein")
-    return settings.add_vault(req.name, req.path, req.system_prompt or "")
+    return settings.add_vault(
+        req.name, req.path, req.system_prompt or "",
+        use_local_notes=req.use_local_notes,
+    )
 
 
 # Static POST routes BEFORE /vaults/{vault_id} to avoid path-param matching.
@@ -800,7 +929,12 @@ def vaults_delete(vault_id: str) -> dict[str, Any]:
 
 @app.post("/vaults/{vault_id}/scaffold")
 def vaults_scaffold(vault_id: str) -> dict[str, Any]:
-    """Create standard Karpathy vault structure. Non-destructive — skips existing files."""
+    """Create standard Karpathy + PARA vault structure. Non-destructive — skips existing files.
+
+    Pipeline-Achse (Karpathy) top-level: inbox/ → raw/ → wiki/.
+    PARA-Achse innerhalb wiki/: projects/, areas/, resources/, archive/.
+    Schreibt eine agents.md (LLM-agnostisch) + index.md-Hierarchie.
+    """
     v = settings.get_vault(vault_id)
     if not v:
         raise HTTPException(404, "Vault nicht gefunden")
@@ -811,16 +945,220 @@ def vaults_scaffold(vault_id: str) -> dict[str, Any]:
     today = date.today().isoformat()
     vault_name = v["name"]
 
+    agents_md = f"""# {vault_name} — agents.md
+
+Dieser Vault folgt der **Karpathy-Pipeline** (inbox → raw → wiki) kombiniert mit **PARA innerhalb `wiki/`** (Projects / Areas / Resources / Archive).
+
+> Diese Datei ist die LLM-agnostische Schema-Beschreibung für jeden Agenten (Claude, ChatGPT, Gemini, lokale Modelle).
+
+## Struktur
+
+```
+vault/
+├─ agents.md           ← dieses File
+├─ index.md            ← Home-MOC
+├─ log.md              ← append-only Audit
+│
+├─ inbox/              # PARA-Inbox — App-Workspace (Scratchpad, Todos)
+│   ├─ scratchpad.md
+│   └─ todos.md
+│
+├─ raw/                # immutable Quellen
+│   ├─ youtube/<channel>/<slug>.md
+│   ├─ transcripts/<datum>-<slug>.md
+│   ├─ artikel/<slug>.md
+│   ├─ eigene-notizen/<slug>.md
+│   ├─ kunden-input/<kunde>/<slug>.md
+│   └─ chat-archive/<datum>-<slug>.md
+│
+├─ wiki/               # LLM-kuratiert, PARA
+│   ├─ index.md
+│   ├─ projects/       # P — endliche Vorhaben
+│   ├─ areas/          # A — Dauer-Themen
+│   ├─ resources/      # R — Wissens-Assets (creators, videos, playlists)
+│   │   ├─ creators/
+│   │   ├─ videos/
+│   │   └─ playlists/
+│   └─ archive/        # Z — abgeschlossen
+│
+└─ journal/            # optional, Daily Notes
+```
+
+## Schreibrechte
+
+EwtosBrain darf **standardmäßig nur** in `inbox/` schreiben. Schreib-Zugriff auf `raw/` und Playlists ist pro Vault einzeln in den Settings freizugeben. Permission-Keys:
+
+- `write_raw` → `promote_to_raw` in die Whitelist-Pfade unter `raw/`
+- `write_playlists` → Playlist-CRUD in `wiki/resources/playlists/`
+
+## Operationen (Karpathy-Methode)
+
+- **🟢 Ingest:** raw/ → Master-Page in `wiki/resources/videos/` + Creator-Update + trending + index + log
+- **🔵 Query:** index → Bucket-Index → Seite → Antwort mit Wikilinks
+- **🟡 Check:** Stichproben auf Frontmatter, Wikilinks, Tool-Verlinkung
+- **🔴 Lint:** Voll-Scan auf Widersprüche, Orphans, kaputte Links
+
+## Konventionen
+
+- Dateinamen: Kleinbuchstaben, Bindestriche
+- Datum: ISO 8601 (`YYYY-MM-DD`)
+- Tags: Englisch, Kleinbuchstaben
+- Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`
+
+## Frontmatter (Beispiele)
+
+Video-Master-Page:
+```yaml
+---
+typ: video
+bucket: resources
+topic: ai
+titel: <text>
+status: aktiv
+quelle_url: https://...
+youtuber: <handle>
+transcript: raw/transcripts/YYYY-MM-DD-<slug>.md
+---
+```
+
+Project-Page:
+```yaml
+---
+typ: project
+bucket: projects
+status: aktiv
+deadline: YYYY-MM-DD
+---
+```
+"""
+
+    index_md = f"""---
+typ: index
+aktualisiert: {today}
+---
+
+# {vault_name}
+
+Home-MOC für diesen Vault. Siehe [[agents.md]] für die Schema-Beschreibung.
+
+## Buckets (PARA)
+
+- [[wiki/projects/index|🎯 Projects]] — endliche Vorhaben mit Deadline
+- [[wiki/areas/index|🔁 Areas]] — Dauer-Themen ohne Endtermin
+- [[wiki/resources/index|📚 Resources]] — Wissens-Assets
+- [[wiki/archive/index|🗄 Archive]] — abgeschlossen
+
+## Workspace
+
+- [[inbox/scratchpad|📝 Scratchpad]] — schnelle Notizen
+- [[inbox/todos|✅ Todos]] — offene Aufgaben
+- [[log|📜 Log]] — Audit-Trail
+"""
+
+    log_md = f"""---
+typ: log
+---
+
+## {today} — Vault erstellt
+
+Vault wurde mit dem EwtosBrain Setup-Wizard erstellt (Karpathy + PARA-Schema).
+"""
+
+    wiki_index = f"""---
+typ: index
+aktualisiert: {today}
+---
+
+# Wiki — Übersicht
+
+Die vier PARA-Buckets dieses Vaults.
+
+- [[projects/index|🎯 Projects]]
+- [[areas/index|🔁 Areas]]
+- [[resources/index|📚 Resources]]
+- [[archive/index|🗄 Archive]]
+"""
+
+    bucket_index = lambda label, emoji, desc: f"""---
+typ: bucket-index
+bucket: {label}
+aktualisiert: {today}
+---
+
+# {emoji} {label.capitalize()}
+
+{desc}
+
+```dataview
+TABLE status, zuletzt
+FROM "wiki/{label}"
+WHERE typ != "bucket-index"
+SORT zuletzt DESC
+```
+"""
+
+    resources_index = f"""---
+typ: bucket-index
+bucket: resources
+aktualisiert: {today}
+---
+
+# 📚 Resources
+
+Wissens-Assets, querverlinkbar. Untergliederung nach Asset-Typ.
+
+- [[creators/index|🎙 Creators]]
+- [[videos/index|🎬 Videos]]
+- [[playlists/index|🎵 Playlists]]
+"""
+
+    sub_index = lambda label, emoji: f"""---
+typ: sub-index
+bucket: resources
+kategorie: {label}
+aktualisiert: {today}
+---
+
+# {emoji} {label.capitalize()}
+
+```dataview
+TABLE titel, zuletzt
+FROM "wiki/resources/{label}"
+WHERE typ != "sub-index"
+SORT zuletzt DESC
+```
+"""
+
     templates = {
-        "CLAUDE.md": f"# {vault_name}\n\nDieser Vault folgt der Karpathy-Methode.\n\n## Struktur\n\n- `raw/` — Rohdaten und Quellen\n- `wiki/` — Kuratierte Wissensseiten\n- `notes/` — Persönliche Notizen\n",
-        "notes/todos.md": "---\ntyp: todos\n---\n\n",
-        "notes/scratchpad.md": f"---\ntyp: scratchpad\n---\n\n## {today}\n\n",
-        "wiki/index.md": f"---\ntyp: index\naktualisiert: {today}\n---\n\n# Index\n\n",
-        "wiki/log.md": f"---\ntyp: log\n---\n\n## {today} — Vault erstellt\n\nVault wurde mit EwtosBrain Setup-Wizard erstellt.\n",
+        "agents.md": agents_md,
+        "index.md": index_md,
+        "log.md": log_md,
+        "inbox/todos.md": "---\ntyp: todos\n---\n\n",
+        "inbox/scratchpad.md": f"---\ntyp: scratchpad\n---\n\n## {today}\n\n",
+        "wiki/index.md": wiki_index,
+        "wiki/projects/index.md": bucket_index("projects", "🎯", "Endliche Vorhaben mit Deadline."),
+        "wiki/areas/index.md": bucket_index("areas", "🔁", "Dauer-Themen ohne Endtermin (Branchen, Trends, Lernen)."),
+        "wiki/resources/index.md": resources_index,
+        "wiki/resources/creators/index.md": sub_index("creators", "🎙"),
+        "wiki/resources/videos/index.md": sub_index("videos", "🎬"),
+        "wiki/resources/playlists/index.md": sub_index("playlists", "🎵"),
+        "wiki/archive/index.md": bucket_index("archive", "🗄", "Abgeschlossene Projekte und alte Playlists."),
     }
 
-    created = []
-    skipped = []
+    # Empty placeholder dirs (created via .gitkeep so Obsidian sieht sie)
+    empty_dirs = [
+        "raw/youtube",
+        "raw/transcripts",
+        "raw/artikel",
+        "raw/eigene-notizen",
+        "raw/kunden-input",
+        "raw/chat-archive",
+        "raw/assets",
+        "journal",
+    ]
+
+    created: list[str] = []
+    skipped: list[str] = []
     for rel, content in templates.items():
         target = vault_path / rel
         if target.exists():
@@ -830,10 +1168,11 @@ def vaults_scaffold(vault_id: str) -> dict[str, Any]:
         target.write_text(content, encoding="utf-8")
         created.append(rel)
 
-    raw_dir = vault_path / "raw"
-    if not raw_dir.exists():
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        created.append("raw/")
+    for rel in empty_dirs:
+        target = vault_path / rel
+        if not target.exists():
+            target.mkdir(parents=True, exist_ok=True)
+            created.append(rel + "/")
 
     return {"ok": True, "created": created, "skipped": skipped}
 
@@ -849,14 +1188,45 @@ class PageChatRequest(BaseModel):
     message: str
     page_content: str
     history: list[dict] = []
+    strict_page: bool = True
 
 
-# Static route declared before {vault_id} routes so "page" is not matched as vault_id.
+class SourceChatRequest(BaseModel):
+    source_type: str  # "page" | "transcript" | "video"
+    source_ref: dict
+    message: str
+    history: list[dict] = []
+    strict_source: bool = True
+
+
+# Static routes declared before {vault_id} routes so "page"/"source" aren't matched as vault_id.
 @app.post("/tools/chat/page/stream")
 def chat_page_stream(req: PageChatRequest) -> StreamingResponse:
-    """SSE stream: chat about a scraped page — no vault needed."""
+    """SSE stream: chat about a scraped page — no vault needed. (Legacy, delegates to source-stream.)"""
     return StreamingResponse(
-        chat.send_page_stream(req.page_content, req.message, req.history),
+        chat.send_source_stream(
+            "page",
+            {"content": req.page_content},
+            req.message,
+            req.history,
+            strict_source=req.strict_page,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/tools/chat/source/stream")
+def chat_source_stream(req: SourceChatRequest) -> StreamingResponse:
+    """SSE stream: chat about a single source (page / transcript / video). No vault tools, no persistence."""
+    return StreamingResponse(
+        chat.send_source_stream(
+            req.source_type,
+            req.source_ref,
+            req.message,
+            req.history,
+            strict_source=req.strict_source,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

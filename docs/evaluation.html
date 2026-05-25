@@ -1,0 +1,1736 @@
+<!-- EwtosBrain Evaluation & Strategie — ewtos.com | Mai 2026 -->
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EwtosBrain — Strategie & Evaluation | Mai 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* =============================================
+       TOKENS & RESET
+    ============================================= */
+    :root {
+      --accent: #6c63ff;
+      --accent-dim: rgba(108, 99, 255, 0.12);
+      --accent-glow: rgba(108, 99, 255, 0.25);
+
+      --bg: #fafaf9;
+      --bg-card: #ffffff;
+      --bg-hover: #f4f3ff;
+      --surface: #f0eff8;
+
+      --text-primary: #1a1825;
+      --text-secondary: #5a566e;
+      --text-muted: #9a96ad;
+      --text-inverse: #ffffff;
+
+      --border: #e4e2f0;
+      --border-strong: #c8c4e0;
+
+      --sidebar-width: 220px;
+      --content-max: 900px;
+      --pad: 40px;
+
+      --shadow-sm: 0 1px 3px rgba(26, 24, 37, 0.06), 0 1px 2px rgba(26, 24, 37, 0.04);
+      --shadow-md: 0 4px 16px rgba(26, 24, 37, 0.08), 0 2px 6px rgba(26, 24, 37, 0.05);
+      --shadow-accent: 0 4px 24px rgba(108, 99, 255, 0.18);
+
+      --callout-info-bg: #eef2ff;
+      --callout-info-border: #818cf8;
+      --callout-info-text: #3730a3;
+
+      --callout-strength-bg: #ecfdf5;
+      --callout-strength-border: #34d399;
+      --callout-strength-text: #065f46;
+
+      --callout-gap-bg: #fff7ed;
+      --callout-gap-border: #fb923c;
+      --callout-gap-text: #9a3412;
+
+      --radius: 8px;
+      --radius-lg: 14px;
+
+      --font-display: 'Instrument Serif', Georgia, serif;
+      --font-body: 'Inter', system-ui, sans-serif;
+      --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+
+      --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    [data-theme="dark"] {
+      --bg: #111018;
+      --bg-card: #1c1a2e;
+      --bg-hover: #231f3a;
+      --surface: #1c1a2e;
+
+      --text-primary: #eae8f5;
+      --text-secondary: #a09bb8;
+      --text-muted: #5e5a75;
+      --text-inverse: #111018;
+
+      --border: #2c2840;
+      --border-strong: #3d3760;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+
+      --callout-info-bg: #1e2040;
+      --callout-info-border: #6366f1;
+      --callout-info-text: #a5b4fc;
+
+      --callout-strength-bg: #052e16;
+      --callout-strength-border: #22c55e;
+      --callout-strength-text: #86efac;
+
+      --callout-gap-bg: #2d1a0a;
+      --callout-gap-border: #f97316;
+      --callout-gap-text: #fdba74;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-weight: 400;
+      line-height: 1.7;
+      transition: background-color var(--transition), color var(--transition);
+    }
+
+    /* =============================================
+       LAYOUT
+    ============================================= */
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* =============================================
+       SIDEBAR
+    ============================================= */
+    .sidebar {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 32px 16px 32px 24px;
+      border-right: 1px solid var(--border);
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-brand {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sidebar nav a {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      transition: all var(--transition);
+      line-height: 1.4;
+    }
+
+    .sidebar nav a:hover {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .sidebar nav a.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+      font-weight: 500;
+    }
+
+    .sidebar nav .nav-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 12px 10px 4px;
+      pointer-events: none;
+    }
+
+    /* Dark mode toggle in sidebar */
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+
+    /* =============================================
+       DARK MODE TOGGLE
+    ============================================= */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      border: none;
+      background: transparent;
+      width: 100%;
+      font-family: var(--font-body);
+      transition: all var(--transition);
+    }
+
+    .theme-toggle:hover {
+      color: var(--text-primary);
+      background: var(--surface);
+    }
+
+    .toggle-track {
+      width: 32px;
+      height: 18px;
+      background: var(--border-strong);
+      border-radius: 100px;
+      position: relative;
+      transition: background var(--transition);
+      flex-shrink: 0;
+    }
+
+    [data-theme="dark"] .toggle-track {
+      background: var(--accent);
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: white;
+      border-radius: 50%;
+      transition: transform var(--transition);
+      box-shadow: var(--shadow-sm);
+    }
+
+    [data-theme="dark"] .toggle-thumb {
+      transform: translateX(14px);
+    }
+
+    /* =============================================
+       MAIN CONTENT
+    ============================================= */
+    .main {
+      flex: 1;
+      min-width: 0;
+      padding: 60px var(--pad);
+      max-width: calc(var(--content-max) + var(--pad) * 2);
+    }
+
+    /* =============================================
+       HEADER / TITELSEITE
+    ============================================= */
+    .doc-header {
+      margin-bottom: 72px;
+      padding-bottom: 48px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .doc-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .doc-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      padding: 4px 10px;
+      border-radius: 100px;
+    }
+
+    .doc-date {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .doc-title {
+      font-family: var(--font-display);
+      font-size: clamp(42px, 6vw, 64px);
+      font-weight: 400;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+
+    .doc-title span {
+      color: var(--accent);
+    }
+
+    .doc-subtitle {
+      font-size: 18px;
+      font-weight: 300;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .doc-description {
+      font-size: 15px;
+      color: var(--text-secondary);
+      max-width: 620px;
+      line-height: 1.75;
+      border-left: 3px solid var(--accent);
+      padding-left: 20px;
+    }
+
+    .doc-author {
+      margin-top: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .doc-author a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* =============================================
+       SECTION
+    ============================================= */
+    .section {
+      margin-bottom: 72px;
+      scroll-margin-top: 32px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-number {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      padding-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .section h2 {
+      font-family: var(--font-display);
+      font-size: clamp(24px, 3.5vw, 34px);
+      font-weight: 400;
+      line-height: 1.2;
+      color: var(--text-primary);
+    }
+
+    .section h3 {
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      margin-top: 28px;
+    }
+
+    .section p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      max-width: 680px;
+    }
+
+    /* =============================================
+       TABLES
+    ============================================= */
+    .table-wrapper {
+      overflow-x: auto;
+      margin: 24px 0;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    thead {
+      background: var(--surface);
+    }
+
+    thead th {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 12px 16px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover td {
+      background: var(--bg-hover);
+    }
+
+    tbody tr.highlight-row td {
+      background: var(--accent-dim);
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    tbody tr.highlight-row td:first-child {
+      border-left: 3px solid var(--accent);
+      padding-left: 13px;
+    }
+
+    .check {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .cross {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* =============================================
+       CALLOUTS
+    ============================================= */
+    .callout {
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin: 20px 0;
+      border-left: 4px solid;
+      font-size: 14px;
+    }
+
+    .callout-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      opacity: 0.75;
+    }
+
+    .callout p {
+      max-width: none;
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .callout-info {
+      background: var(--callout-info-bg);
+      border-color: var(--callout-info-border);
+      color: var(--callout-info-text);
+    }
+
+    .callout-strength {
+      background: var(--callout-strength-bg);
+      border-color: var(--callout-strength-border);
+      color: var(--callout-strength-text);
+    }
+
+    .callout-gap {
+      background: var(--callout-gap-bg);
+      border-color: var(--callout-gap-border);
+      color: var(--callout-gap-text);
+    }
+
+    /* =============================================
+       PAIN POINT CARDS
+    ============================================= */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin: 24px 0;
+    }
+
+    .pain-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow var(--transition), transform var(--transition);
+    }
+
+    .pain-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .pain-card-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .pain-card h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .pain-item {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13.5px;
+    }
+
+    .pain-item-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .icon-problem {
+      background: var(--callout-gap-bg);
+      color: var(--callout-gap-border);
+    }
+
+    .icon-solution {
+      background: var(--callout-strength-bg);
+      color: var(--callout-strength-border);
+    }
+
+    /* =============================================
+       SWOT
+    ============================================= */
+    .swot-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .swot-quadrant {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .swot-header {
+      padding: 14px 20px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background var(--transition);
+    }
+
+    .swot-header:hover {
+      opacity: 0.9;
+    }
+
+    .swot-chevron {
+      font-size: 12px;
+      transition: transform var(--transition);
+    }
+
+    .swot-quadrant.open .swot-chevron {
+      transform: rotate(180deg);
+    }
+
+    .swot-body {
+      padding: 16px 20px;
+      display: none;
+      border-top: 1px solid var(--border);
+    }
+
+    .swot-quadrant.open .swot-body {
+      display: block;
+    }
+
+    .swot-body ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .swot-body li {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .swot-body li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.4;
+    }
+
+    .swot-s .swot-header { background: #ecfdf5; color: #065f46; }
+    .swot-w .swot-header { background: #fff7ed; color: #9a3412; }
+    .swot-o .swot-header { background: #eef2ff; color: #3730a3; }
+    .swot-t .swot-header { background: #fef2f2; color: #991b1b; }
+
+    [data-theme="dark"] .swot-s .swot-header { background: #052e16; color: #86efac; }
+    [data-theme="dark"] .swot-w .swot-header { background: #2d1a0a; color: #fdba74; }
+    [data-theme="dark"] .swot-o .swot-header { background: #1e2040; color: #a5b4fc; }
+    [data-theme="dark"] .swot-t .swot-header { background: #2d0e0e; color: #fca5a5; }
+
+    /* =============================================
+       ROADMAP TIMELINE
+    ============================================= */
+    .roadmap {
+      position: relative;
+      padding-left: 32px;
+      margin: 24px 0;
+    }
+
+    .roadmap::before {
+      content: '';
+      position: absolute;
+      left: 9px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .roadmap-item {
+      position: relative;
+      margin-bottom: 24px;
+      padding: 18px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: box-shadow var(--transition);
+    }
+
+    .roadmap-item:hover {
+      box-shadow: var(--shadow-sm);
+    }
+
+    .roadmap-dot {
+      position: absolute;
+      left: -37px;
+      top: 22px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--bg);
+    }
+
+    .roadmap-item.done .roadmap-dot {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-dim);
+    }
+
+    .roadmap-item.in-progress .roadmap-dot {
+      background: #f97316;
+      border-color: #f97316;
+      box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+    }
+
+    .roadmap-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .roadmap-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .roadmap-status {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 100px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .status-done {
+      background: var(--callout-strength-bg);
+      color: var(--callout-strength-text);
+    }
+
+    .status-progress {
+      background: var(--callout-gap-bg);
+      color: var(--callout-gap-text);
+    }
+
+    .status-planned {
+      background: var(--surface);
+      color: var(--text-muted);
+    }
+
+    .roadmap-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* =============================================
+       SETUP WIZARD STEPPER
+    ============================================= */
+    .stepper {
+      margin: 28px 0;
+    }
+
+    .step {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 17px;
+      top: 40px;
+      bottom: -8px;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .step-number {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-content {
+      padding: 6px 0 24px;
+    }
+
+    .step-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .step-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* =============================================
+       CHECKLIST
+    ============================================= */
+    .checklist {
+      list-style: none;
+      margin: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      transition: background var(--transition), border-color var(--transition);
+    }
+
+    .checklist li:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent-glow);
+    }
+
+    .checklist-box {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border-strong);
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* =============================================
+       MARKET INTRO
+    ============================================= */
+    .market-intro {
+      font-size: 15px;
+      color: var(--text-secondary);
+      font-style: italic;
+      margin-bottom: 8px;
+    }
+
+    /* =============================================
+       GENERIC LIST
+    ============================================= */
+    .styled-ul {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .styled-ul li {
+      font-size: 14px;
+      color: var(--text-secondary);
+      padding-left: 16px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .styled-ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* =============================================
+       PRINT STYLES
+    ============================================= */
+    @media print {
+      .sidebar { display: none !important; }
+
+      .main {
+        max-width: 100%;
+        padding: 20px;
+      }
+
+      body {
+        font-size: 12pt;
+        color: #000;
+        background: #fff;
+      }
+
+      .doc-header {
+        margin-bottom: 40px;
+        page-break-after: avoid;
+      }
+
+      .section {
+        page-break-inside: avoid;
+        margin-bottom: 40px;
+      }
+
+      .section h2 {
+        page-break-after: avoid;
+      }
+
+      .table-wrapper {
+        page-break-inside: avoid;
+        border: 1px solid #ccc;
+        box-shadow: none;
+      }
+
+      .callout {
+        border: 1px solid #ccc;
+        background: #f9f9f9 !important;
+        color: #000 !important;
+      }
+
+      .swot-body {
+        display: block !important;
+      }
+
+      .swot-header {
+        background: #f0f0f0 !important;
+        color: #000 !important;
+      }
+
+      .pain-card {
+        border: 1px solid #ccc;
+        box-shadow: none;
+        break-inside: avoid;
+      }
+
+      .roadmap-item {
+        break-inside: avoid;
+        border: 1px solid #ccc;
+        box-shadow: none;
+      }
+
+      a { color: inherit; text-decoration: none; }
+
+      .theme-toggle { display: none; }
+
+      .doc-title { font-size: 28pt; }
+    }
+
+    /* =============================================
+       RESPONSIVE — MOBILE
+    ============================================= */
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+
+      .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 20px 24px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .sidebar-brand { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+
+      .sidebar nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .sidebar nav .nav-label { display: none; }
+
+      .sidebar-footer { padding-top: 0; border-top: none; margin-top: 0; }
+
+      .main { padding: 32px 20px; }
+
+      .swot-grid { grid-template-columns: 1fr; }
+
+      .card-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">EwtosBrain</div>
+
+      <nav id="nav-links">
+        <span class="nav-label">Dokument</span>
+        <a href="#header" data-section="header">Uberblick</a>
+
+        <span class="nav-label">Analyse</span>
+        <a href="#section-1" data-section="section-1">1 — Aktueller Stand</a>
+        <a href="#section-2" data-section="section-2">2 — Marktanalyse</a>
+        <a href="#section-3" data-section="section-3">3 — Zielgruppen</a>
+        <a href="#section-4" data-section="section-4">4 — SWOT</a>
+
+        <span class="nav-label">Strategie</span>
+        <a href="#section-5" data-section="section-5">5 — Vermarktung</a>
+        <a href="#section-6" data-section="section-6">6 — Setup-Wizard</a>
+        <a href="#section-7" data-section="section-7">7 — Roadmap</a>
+        <a href="#section-8" data-section="section-8">8 — Action Items</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="theme-toggle" id="theme-toggle" aria-label="Dark Mode umschalten">
+          <div class="toggle-track">
+            <div class="toggle-thumb"></div>
+          </div>
+          <span id="theme-label">Dark Mode</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+      <!-- HEADER / TITELSEITE -->
+      <header class="doc-header" id="header">
+        <div class="doc-meta">
+          <span class="doc-badge">Strategiepapier</span>
+          <span class="doc-date">Stand: Mai 2026</span>
+        </div>
+        <h1 class="doc-title"><span>EwtosBrain</span></h1>
+        <p class="doc-subtitle">Chrome Extension + KI-Server &mdash; Strategie &amp; Evaluation</p>
+        <p class="doc-description">
+          Einheitlicher KI-Assistent fur tagliche Arbeit. Verbindet YouTube-Research, Obsidian-Vault-Chat und Multi-LLM-Support in einer Chrome Extension — mit eigenem Python-Server als Gehirn und optionaler Claude-Code-Integration uber das MCP-Protokoll.
+        </p>
+        <p class="doc-author">Autor: <a href="https://ewtos.com">ewtos.com</a> &nbsp;|&nbsp; Mai 2026</p>
+      </header>
+
+      <!-- SECTION 1 — AKTUELLER STAND -->
+      <section class="section" id="section-1">
+        <div class="section-header">
+          <span class="section-number">01</span>
+          <h2>Aktueller Stand &mdash; Was ist implementiert?</h2>
+        </div>
+
+        <h3>Vollstandig implementiert (end-to-end funktionsfahig)</h3>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Was der Nutzer sieht</th>
+                <th>Technisch</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Sidepanel UI</strong></td>
+                <td>Tab-Navigation (Vault/Web/Code), Dark Mode, Connection-Status</td>
+                <td>Chrome MV3, WebSocket-Bridge</td>
+              </tr>
+              <tr>
+                <td><strong>YouTube Transcript</strong></td>
+                <td>URL eingeben, Transcript extrahieren</td>
+                <td>DOM-Injection via Content Script</td>
+              </tr>
+              <tr>
+                <td><strong>Bookmark Manager</strong></td>
+                <td>3 Modi: Rechtsklick, Multi-Tab-Shortcut, Text-als-Notiz</td>
+                <td>HTTP POST an /tools/bookmarks</td>
+              </tr>
+              <tr>
+                <td><strong>Notes &amp; Scratchpad</strong></td>
+                <td>Textarea mit Auto-Save, Datei-Import, Export</td>
+                <td>Debounced POST an Server</td>
+              </tr>
+              <tr>
+                <td><strong>Todos</strong></td>
+                <td>Checkbox-Toggle, Falligkeitsdatum, Overdue-Counter</td>
+                <td>notes/todos.md</td>
+              </tr>
+              <tr>
+                <td><strong>Playlist Manager</strong></td>
+                <td>Rechtsklick YouTube, Playlist wahlen, Master-Page anlegen + Auto-Summary</td>
+                <td>wiki/ Markdown-Files + Claude API</td>
+              </tr>
+              <tr>
+                <td><strong>Vault Chat</strong></td>
+                <td>Streaming-Chat, Claude navigiert Vault via Tool-Use</td>
+                <td>SSE-Streaming, Anthropic API</td>
+              </tr>
+              <tr>
+                <td><strong>Multi-LLM Backend</strong></td>
+                <td>Anthropic, OpenAI, Ollama, Mistral konfigurierbar</td>
+                <td>llm_providers/ Abstraktion</td>
+              </tr>
+              <tr>
+                <td><strong>MCP-Integration</strong></td>
+                <td>Claude Code kann Extension-Tools direkt nutzen</td>
+                <td>mcp_server.py (Stdio)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Noch nicht implementiert (im UI als &ldquo;bald&rdquo; markiert)</h3>
+
+        <ul class="styled-ul">
+          <li>Page-Scrape &mdash; Markdown-Export einer kompletten Webseite</li>
+          <li>SEO-Check &mdash; h1&ndash;h6-Struktur, meta description, canonical, title</li>
+          <li>Image-Analyse &mdash; alt-Text, dimensions, filesize</li>
+          <li>Color-Picker &mdash; Farbpipette aus dem DOM</li>
+          <li>Screenshot + Annotation &mdash; Canvas-Drawing mit Pfeilen, Formen, Markierungen</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-label">Architektur</div>
+          <p>Chrome Extension (MV3) &larr;WebSocket&rarr; Python FastAPI-Server &larr;&rarr; LLM-Backends / Obsidian Vault. Server = Gehirn, Extension = Gesicht. Alle Chat-States, Tool-Definitionen und Vault-Logik leben am Server.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 2 — MARKTANALYSE -->
+      <section class="section" id="section-2">
+        <div class="section-header">
+          <span class="section-number">02</span>
+          <h2>Marktanalyse &mdash; Wettbewerber</h2>
+        </div>
+
+        <p class="market-intro">Kein direkter Konkurrent fur diese Feature-Kombination gefunden (Stand Mai 2026).</p>
+
+        <p>Der Markt fur KI-Browser-Extensions ist fragmentiert: Einzelne Tools decken je eine Dimension gut ab, aber keine Losung kombiniert alle funf relevanten Dimensionen in einem zusammenhangenden Produkt.</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Sidepanel Chat</th>
+                <th>YT Transcript</th>
+                <th>Vault / Obsidian</th>
+                <th>Lokales LLM</th>
+                <th>MCP</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Sider AI</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+              </tr>
+              <tr>
+                <td>Glasp</td>
+                <td class="cross">Nein</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+              </tr>
+              <tr>
+                <td>Obsidian Web Clipper</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+              </tr>
+              <tr>
+                <td>Lumos / Ollama Client</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+              </tr>
+              <tr>
+                <td>WRITER Enterprise</td>
+                <td class="check">Ja</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+                <td class="cross">Nein</td>
+              </tr>
+              <tr class="highlight-row">
+                <td><strong>EwtosBrain</strong></td>
+                <td class="check"><strong>Ja</strong></td>
+                <td class="check"><strong>Ja</strong></td>
+                <td class="check"><strong>Ja</strong></td>
+                <td class="check"><strong>Ja</strong></td>
+                <td class="check"><strong>Ja</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Identifizierte Marktlucken</h3>
+
+        <div class="callout callout-strength">
+          <div class="callout-label">Marktlucke 1</div>
+          <p>Keine einheitliche Losung kombiniert alle funf Dimensionen: Chat, YouTube-Verarbeitung, Vault-Sync, lokale LLM-Unterstutzung und MCP-Integration.</p>
+        </div>
+
+        <div class="callout callout-strength">
+          <div class="callout-label">Marktlucke 2</div>
+          <p>Local-first-Betrieb mit Ollama ist stark unterversorgt. DSGVO-Anforderungen in Europa schaffen wachsende Nachfrage nach Losungen ohne Cloud-Abhangigkeit.</p>
+        </div>
+
+        <div class="callout callout-strength">
+          <div class="callout-label">Marktlucke 3</div>
+          <p>MCP-Integration existiert in keiner vergleichbaren Chrome Extension. Das Protokoll etabliert sich als Standard fur KI-Tool-Integration &mdash; First-Mover-Vorteil.</p>
+        </div>
+
+        <div class="callout callout-strength">
+          <div class="callout-label">Marktlucke 4</div>
+          <p>Agentur- und Power-User-Workflows (SEO-Check, Page-Scrape, Screenshot-Annotation) werden in keinem bestehenden Tool konsequent abgebildet.</p>
+        </div>
+
+        <div class="callout callout-strength">
+          <div class="callout-label">Marktlucke 5</div>
+          <p>Die YouTube-zu-Vault-Pipeline erfordert bei allen Wettbewerbern mehrere manuelle Schritte. EwtosBrain schliesst diesen Loop in einem Klick.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 3 — ZIELGRUPPEN -->
+      <section class="section" id="section-3">
+        <div class="section-header">
+          <span class="section-number">03</span>
+          <h2>Zielgruppen</h2>
+        </div>
+
+        <h3>Primaire Zielgruppe (heute)</h3>
+        <ul class="styled-ul">
+          <li>Obsidian-Nutzer, die YouTube systematisch als Wissensquelle nutzen</li>
+          <li>Solo-Entwickler und Freelancer mit Karpathy-Style-Vault</li>
+          <li>Claude-Code-Power-User, die ihren Vault direkt durchsuchen wollen</li>
+        </ul>
+
+        <h3>Sekundare Zielgruppe (nach Sprint 3)</h3>
+        <ul class="styled-ul">
+          <li>Webentwickler und Agenturen: SEO-Check, Page-Scrape, Screenshot-Annotation</li>
+          <li>Content-Marketer: YouTube-Research, Vault-Pipeline, Content-Generierung</li>
+        </ul>
+
+        <h3>Problem vs. Losung pro Zielgruppe</h3>
+
+        <div class="card-grid">
+          <div class="pain-card">
+            <div class="pain-card-label">Zielgruppe A</div>
+            <h4>Obsidian Power-User</h4>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>YouTube-Videos manuell zusammenfassen und in den Vault kopieren</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Kein direkter Chat mit Vault-Inhalten ohne komplexes Setup</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Transcript extrahieren, Playlist anlegen, Master-Page mit Summary: ein Rechtsklick</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Vault-Chat direkt im Sidepanel, Claude navigiert Vault nach Karpathy-Methode</span>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="pain-card-label">Zielgruppe B</div>
+            <h4>Claude Code Power-User</h4>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Claude Code hat keinen nativen Zugriff auf Browser-Aktionen oder laufende Extension-Daten</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Vault-Daten sind nur uber das Dateisystem erreichbar, keine strukturierte API</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>MCP-Integration gibt Claude Code direkten Zugriff auf alle Extension-Tools</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Granulare Notes-Tools: list_todos, add_todo, update_todo, read_scratchpad</span>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="pain-card-label">Zielgruppe C</div>
+            <h4>Webentwickler / Agenturen</h4>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>SEO-Analyse, Page-Scrape und Screenshot-Annotation erfordern separate Tools</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Kein einheitliches Tool fur Kundenprasentationen und Webseiten-Audits</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Nach Sprint 3: SEO-Check, Image-Analyse, Color-Picker und Screenshot in einem Tool</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Page-Scrape liefert sauberes Markdown ohne nav/footer/Cookie-Banner</span>
+            </div>
+          </div>
+
+          <div class="pain-card">
+            <div class="pain-card-label">Zielgruppe D</div>
+            <h4>Content-Marketer</h4>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Research aus YouTube erfordert manuelle Zusammenfassungen, Notizen und Content-Planung</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-problem">&#x2212;</div>
+              <span>Keine Pipeline von Video-Research zu strukturierten Content-Briefings</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>YouTube-Transcript direkt als Vault-Quelle speichern, LLM generiert Summary automatisch</span>
+            </div>
+            <div class="pain-item">
+              <div class="pain-item-icon icon-solution">&#x2713;</div>
+              <span>Vault-Chat als Research-Partner: Fragen uber mehrere Videos gleichzeitig beantworten</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4 — SWOT -->
+      <section class="section" id="section-4">
+        <div class="section-header">
+          <span class="section-number">04</span>
+          <h2>Starken &amp; Schwachen</h2>
+        </div>
+
+        <p>Klick auf einen Quadranten, um Details aufzuklappen.</p>
+
+        <div class="swot-grid">
+          <!-- STARKEN -->
+          <div class="swot-quadrant swot-s open">
+            <div class="swot-header" onclick="toggleSwot(this)">
+              Starken (Strengths)
+              <span class="swot-chevron">&#x25BE;</span>
+            </div>
+            <div class="swot-body">
+              <ul>
+                <li>Einzige Losung mit dieser Feature-Kombination auf dem Markt</li>
+                <li>MCP-Integration als Alleinstellungsmerkmal unter Chrome Extensions</li>
+                <li>Privacy-Option durch Ollama &mdash; DSGVO-konform ohne Cloud</li>
+                <li>Vault-Chat nach Karpathy-Methode ohne RAG-Overhead</li>
+                <li>Erweiterbare Server-Architektur: neue Tools zentral hinzufugen</li>
+                <li>Dual-Rolle: eigenstandige App und MCP-Tool-Box fur Claude Code</li>
+                <li>Granulares Permission-Modell fur Vault-Schreibzugriffe</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SCHWACHEN -->
+          <div class="swot-quadrant swot-w open">
+            <div class="swot-header" onclick="toggleSwot(this)">
+              Schwachen (Weaknesses)
+              <span class="swot-chevron">&#x25BE;</span>
+            </div>
+            <div class="swot-body">
+              <ul>
+                <li>Komplexes Setup: Python, venv, .env, Server starten</li>
+                <li>Keine Standalone-Nutzung ohne laufenden Server</li>
+                <li>Sprint 3 Browser-Tools fehlen noch (SEO, Scrape, Screenshot)</li>
+                <li>Kein Cloud-Hosting oder Docker-Image verfugbar</li>
+                <li>Kein einfaches Onboarding fur technisch weniger versierte Nutzer</li>
+                <li>Abhangigkeit von externen LLM-API-Keys fur Vollbetrieb</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- CHANCEN -->
+          <div class="swot-quadrant swot-o">
+            <div class="swot-header" onclick="toggleSwot(this)">
+              Chancen (Opportunities)
+              <span class="swot-chevron">&#x25BE;</span>
+            </div>
+            <div class="swot-body">
+              <ul>
+                <li>Obsidian-Community ist technikaffin und adoptionsfreudig</li>
+                <li>Local-LLM-Markt wachst durch DSGVO-Druck in Europa</li>
+                <li>MCP wird zum Standard fur KI-Tool-Integration</li>
+                <li>B2B-Agentur-Nische nach Sprint 3 erschliessbar</li>
+                <li>Open-Source-Veroffentlichung kann organisch Community aufbauen</li>
+                <li>Keine starke etablierte Konkurrenz in dieser Feature-Kombination</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- RISIKEN -->
+          <div class="swot-quadrant swot-t">
+            <div class="swot-header" onclick="toggleSwot(this)">
+              Risiken (Threats)
+              <span class="swot-chevron">&#x25BE;</span>
+            </div>
+            <div class="swot-body">
+              <ul>
+                <li>Chrome-Policy-Anderungen konnen Extension-APIs einschranken (MV3-Entwicklung)</li>
+                <li>Grosse Player wie Sider AI konnten Vault-Integration nachbauen</li>
+                <li>Python-Server-Abhangigkeit schreckt Non-Developer ab</li>
+                <li>LLM-API-Kosten konnen bei intensiver Nutzung fur Nutzer unuberschaubar werden</li>
+                <li>YouTube konnte DOM-Struktur andern und Transcript-Tool brechen</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 5 — VERMARKTUNG -->
+      <section class="section" id="section-5">
+        <div class="section-header">
+          <span class="section-number">05</span>
+          <h2>Vermarktungsstrategie</h2>
+        </div>
+
+        <h3>Phase 1 &mdash; Community Launch (nach Sprint 3 moglich)</h3>
+        <ul class="styled-ul">
+          <li>ProductHunt Launch mit Demo-GIF und aussagekraftigem Tagline</li>
+          <li>Reddit: r/ObsidianMD, r/LocalLLaMA, r/ClaudeAI</li>
+          <li>GitHub als Open-Source mit guter README, Quickstart und Demo-Video</li>
+          <li>Ziel: erste 100 Nutzer gewinnen, Feedback fur Sprint 4 sammeln</li>
+        </ul>
+
+        <h3>Phase 2 &mdash; Content Marketing</h3>
+        <ul class="styled-ul">
+          <li>YouTube-Demo: &ldquo;YouTube-Video, Transcript, Vault, Chat in 3 Klicks&rdquo;</li>
+          <li>Blogpost auf ewtos.com: &ldquo;Wie ich meinen Obsidian-Vault mit Claude connecte&rdquo;</li>
+          <li>Twitter/X: Short-Clips der einzelnen Features, besonders MCP-Integration</li>
+        </ul>
+
+        <h3>Phase 3 &mdash; Monetarisierung</h3>
+        <ul class="styled-ul">
+          <li>Freemium: Extension kostenlos, Nutzer bringen eigenen API-Key</li>
+          <li>Paid: Hosted Server ohne Python-Setup, monatliche Gebuh</li>
+          <li>B2B: Agentur-Lizenz mit Team-Features (Shared Vault, mehrere Nutzer)</li>
+        </ul>
+
+        <h3>Preismodell-Optionen</h3>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Zielgruppe</th>
+                <th>Preis</th>
+                <th>Inhalt</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Free</strong></td>
+                <td>Entwickler, Early Adopter</td>
+                <td>Kostenlos</td>
+                <td>Extension + eigener Server + eigener API-Key</td>
+              </tr>
+              <tr>
+                <td><strong>Solo</strong></td>
+                <td>Freelancer</td>
+                <td>~9 EUR/Monat</td>
+                <td>Hosted Server, Setup-Wizard, E-Mail-Support</td>
+              </tr>
+              <tr>
+                <td><strong>Team</strong></td>
+                <td>Agenturen</td>
+                <td>~29 EUR/Monat</td>
+                <td>Mehrere Nutzer, Shared Vault, Priority Support</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-label">Hinweis</div>
+          <p>Das Preismodell ist noch nicht finalisiert. Empfehlung: zuerst mit Free-Tier Community aufbauen, dann Paid-Tiers basierend auf Nutzer-Feedback definieren. Stripe-Integration ist fur Sprint 4 geplant.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 6 — SETUP WIZARD -->
+      <section class="section" id="section-6">
+        <div class="section-header">
+          <span class="section-number">06</span>
+          <h2>Setup-Wizard &mdash; Konzept</h2>
+        </div>
+
+        <p>Um die Onboarding-Hurde zu senken, wird ein Setup-Wizard als erster Bildschirm eingebaut. Er fuhrt neue Nutzer Schritt fur Schritt durch die Konfiguration &mdash; ohne Anfassen der Einstellungsseite. Der Wizard ist als eigene Chrome Extension Page implementiert (<code>extension/setup/wizard.html</code>) und wird beim Erststart automatisch geoffnet.</p>
+
+        <h3>Wizard-Schritte</h3>
+
+        <div class="stepper">
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <div class="step-title">Willkommen</div>
+              <div class="step-desc">Kurze Einfuhrung was EwtosBrain ist und was fur den Betrieb benotigt wird: Python, pip, API-Key. Checklist mit verlinkten Anleitungen fur Nutzer die noch nichts installiert haben.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <div class="step-title">Server verbinden</div>
+              <div class="step-desc">WebSocket-URL eingeben (Standard: ws://localhost:8765). Live-Verbindungstest mit visuellem Feedback. Falls Fehler: direkter Link zur Installations-Anleitung.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <div class="step-title">LLM-Provider</div>
+              <div class="step-desc">Dropdown: Anthropic, OpenAI, Ollama oder Mistral wahlen. Je nach Auswahl werden bedingte Felder eingeblendet: API-Key (Anthropic/OpenAI/Mistral) oder Server-URL (Ollama). Testanfrage an den Provider um Validierung zu bestatigen.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <div class="step-title">Vault verknupfen</div>
+              <div class="step-desc">Obsidian-Vault-Pfad eingeben, Vault-Namen vergeben, optionale Schreibrechte per Checkbox aktivieren. Server validiert ob der Pfad existiert und lesbar ist.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <div class="step-title">Bereit</div>
+              <div class="step-desc">Zusammenfassung der Konfiguration, direkte Links zu den Features. Hinweis: Setup kann jederzeit in den Einstellungen angepasst werden.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-label">Hinweis</div>
+          <p>Der interaktive Prototyp des Wizards ist unter <code>docs/wizard-mockup.html</code> verfugbar. Der Wizard wird in <code>extension/setup/wizard.html</code> implementiert. <code>background.js</code> pruft beim Start ob das Setup abgeschlossen ist und offnet die Wizard-Page bei Erstinstallation automatisch.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 7 — ROADMAP -->
+      <section class="section" id="section-7">
+        <div class="section-header">
+          <span class="section-number">07</span>
+          <h2>Roadmap</h2>
+        </div>
+
+        <div class="roadmap">
+          <div class="roadmap-item done">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Sprint 1</span>
+              <span class="roadmap-status status-done">Fertig</span>
+            </div>
+            <div class="roadmap-desc">Server-Skeleton (FastAPI), Extension-Shell (Chrome MV3), YouTube-Transcript end-to-end. Erster vollstandiger Tool-Durchlauf als Pipeline-Test.</div>
+          </div>
+
+          <div class="roadmap-item done">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Sprint 2</span>
+              <span class="roadmap-status status-done">Fertig</span>
+            </div>
+            <div class="roadmap-desc">Note-Taker (schreibt nach raw/), Vault-Chat nach Karpathy-Methode, MCP-Layer fur Claude Code (mcp_server.py, Stdio-Transport). Bookmark Manager, Playlist Manager.</div>
+          </div>
+
+          <div class="roadmap-item done">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Phase 6 &mdash; Multi-LLM</span>
+              <span class="roadmap-status status-done">Fertig</span>
+            </div>
+            <div class="roadmap-desc">Multi-LLM-Backend: Anthropic, OpenAI, Ollama, Mistral. llm_providers/-Abstraktion, LLMBackend-Interface, Factory-Pattern. Provider-Dropdown in Options-UI. API-Keys per .env.</div>
+          </div>
+
+          <div class="roadmap-item in-progress">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Sprint 3 &mdash; Browser-Tools</span>
+              <span class="roadmap-status status-progress">In Arbeit</span>
+            </div>
+            <div class="roadmap-desc">Page-Scrape (Markdown-Export), SEO-Check (h1&ndash;h6, meta, canonical), Image-Analyse (alt, dimensions, filesize), Color-Picker, Screenshot + Canvas-Annotation.</div>
+          </div>
+
+          <div class="roadmap-item">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Setup-Wizard</span>
+              <span class="roadmap-status status-planned">Geplant</span>
+            </div>
+            <div class="roadmap-desc">Onboarding-Flow als eigene Extension-Page. Schritt-fur-Schritt-Konfiguration von Server, LLM-Provider und Vault. Erststart-Erkennung in background.js.</div>
+          </div>
+
+          <div class="roadmap-item">
+            <div class="roadmap-dot"></div>
+            <div class="roadmap-item-header">
+              <span class="roadmap-title">Sprint 4</span>
+              <span class="roadmap-status status-planned">Geplant</span>
+            </div>
+            <div class="roadmap-desc">REST-API-Authentifizierung, Cloud-Deployment (Railway/Render), Stripe-Integration fur Paid-Tiers. Docker-Image. Landing Page auf ewtos.com.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 8 — ACTION ITEMS -->
+      <section class="section" id="section-8">
+        <div class="section-header">
+          <span class="section-number">08</span>
+          <h2>Nachste Schritte</h2>
+        </div>
+
+        <h3>Sofort &mdash; Sprint 3 abschliessen</h3>
+        <ul class="checklist">
+          <li><div class="checklist-box"></div>Page-Scrape implementieren (Markdown-Export ohne nav/footer/Cookie-Banner)</li>
+          <li><div class="checklist-box"></div>SEO-Check implementieren (h1&ndash;h6-Struktur, meta description, canonical, title)</li>
+          <li><div class="checklist-box"></div>Image-Analyse implementieren (alt-Text, title, dimensions, file-size)</li>
+          <li><div class="checklist-box"></div>Color-Picker implementieren (Farbpipette aus DOM)</li>
+          <li><div class="checklist-box"></div>Screenshot + Canvas-Annotation (Pfeile, Formen, Markierungen)</li>
+        </ul>
+
+        <h3>Kurz &mdash; Vor Launch</h3>
+        <ul class="checklist">
+          <li><div class="checklist-box"></div>Setup-Wizard implementieren (Prototyp in docs/wizard-mockup.html vorhanden)</li>
+          <li><div class="checklist-box"></div>README mit Demo-GIF und Quickstart</li>
+          <li><div class="checklist-box"></div>Docker-Image oder Installer-Script fur einfacheres Setup</li>
+          <li><div class="checklist-box"></div>Landing Page auf ewtos.com erstellen</li>
+        </ul>
+
+        <h3>Mittel &mdash; Nach erstem Launch</h3>
+        <ul class="checklist">
+          <li><div class="checklist-box"></div>Hosted-Server-Option aufbauen (kein Python-Setup notig fur Endnutzer)</li>
+          <li><div class="checklist-box"></div>ProductHunt Launch vorbereiten und durchfuhren</li>
+          <li><div class="checklist-box"></div>Preismodell finalisieren und Stripe-Integration implementieren</li>
+        </ul>
+
+        <div class="callout callout-gap">
+          <div class="callout-label">Kritische Lucke</div>
+          <p>Das komplexe Setup (Python + venv + .env + Server starten) ist die grosste Adoption-Hurde. Setup-Wizard und Docker-Image haben oberste Prioritat vor dem Launch, weil alle anderen Marketing-Massnahmen ohne ein einfaches Onboarding verpuffen.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // Dark Mode Toggle
+    (function () {
+      const root = document.documentElement;
+      const toggle = document.getElementById('theme-toggle');
+      const label = document.getElementById('theme-label');
+
+      function setTheme(dark) {
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
+        label.textContent = dark ? 'Light Mode' : 'Dark Mode';
+        try { localStorage.setItem('ewtosbrain-theme', dark ? 'dark' : 'light'); } catch (e) {}
+      }
+
+      // Load saved preference
+      let saved = null;
+      try { saved = localStorage.getItem('ewtosbrain-theme'); } catch (e) {}
+      if (saved === 'dark') {
+        setTheme(true);
+      } else if (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        setTheme(true);
+      }
+
+      toggle.addEventListener('click', function () {
+        const isDark = root.getAttribute('data-theme') === 'dark';
+        setTheme(!isDark);
+      });
+    })();
+
+    // SWOT Toggle
+    function toggleSwot(header) {
+      const quadrant = header.closest('.swot-quadrant');
+      quadrant.classList.toggle('open');
+    }
+
+    // Active Nav Link on Scroll
+    (function () {
+      const sections = document.querySelectorAll('.section, .doc-header');
+      const links = document.querySelectorAll('#nav-links a[data-section]');
+
+      if (!sections.length || !links.length) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const id = entry.target.id;
+              links.forEach((link) => {
+                link.classList.toggle('active', link.dataset.section === id);
+              });
+            }
+          });
+        },
+        { rootMargin: '-20% 0px -70% 0px' }
+      );
+
+      sections.forEach((s) => observer.observe(s));
+    })();
+  </script>
+</body>
+</html>

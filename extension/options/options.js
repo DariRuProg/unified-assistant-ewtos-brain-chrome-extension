@@ -35,13 +35,14 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "imageGenModel"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
   maxUserTurns: "max_user_turns",
   llmProvider: "llm_provider",
   llmModel: "llm_model",
   ollamaBaseUrl: "ollama_base_url",
+  imageGenModel: "image_gen_model",
 };
 
 // Provider-spezifische Modell-Hints + Datalist-Werte
@@ -173,14 +174,6 @@ async function loadVaults() {
   } catch { return []; }
 }
 
-async function createVault({ name, path, system_prompt }) {
-  return jfetch("/vaults", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, path, system_prompt }),
-  });
-}
-
 async function updateVault(id, patch) {
   return jfetch(`/vaults/${id}`, {
     method: "POST",
@@ -274,7 +267,13 @@ function renderVaultCard(vault) {
   const writePlaylistsText = el("span", { textContent: "EwtosBrain darf Playlists in wiki/ki/playlists/ verwalten" });
   writePlaylistsLabel.append(writePlaylistsCheckbox, writePlaylistsText);
 
-  permsField.append(permsHint, writeRawLabel, writePlaylistsLabel);
+  const localNotesLabel = el("label", { className: "checkbox-row" });
+  const localNotesCheckbox = el("input", { type: "checkbox" });
+  localNotesCheckbox.checked = !!vault.use_local_notes;
+  const localNotesText = el("span", { textContent: "Eigene Notes-Inbox in diesem Vault (Scratchpad/Todos/Bookmarks in <vault>/notes/)" });
+  localNotesLabel.append(localNotesCheckbox, localNotesText);
+
+  permsField.append(permsHint, writeRawLabel, writePlaylistsLabel, localNotesLabel);
 
   const actions = el("div", { className: "vault-actions" });
   const genBtn = el("button", { type: "button", textContent: "Neu generieren" });
@@ -343,6 +342,7 @@ function renderVaultCard(vault) {
           write_raw: writeRawCheckbox.checked,
           write_playlists: writePlaylistsCheckbox.checked,
         },
+        use_local_notes: localNotesCheckbox.checked,
       });
       titleStrong.textContent = updated.name;
       pathSummary.textContent = updated.path;
@@ -371,85 +371,101 @@ function renderVaultCard(vault) {
   return card;
 }
 
-// ----- New-vault form -----
+// ----- Add new vault: open wizard in dedicated tab -----
 
-const addToggleBtn = document.getElementById("add-vault-toggle");
-const addForm = document.getElementById("add-vault-form");
-const newName = document.getElementById("newVaultName");
-const newPath = document.getElementById("newVaultPath");
-const newPrompt = document.getElementById("newVaultPrompt");
-const newGenBtn = document.getElementById("newVaultGenerate");
-const newCopyBtn = document.getElementById("newVaultCopyInstr");
-const newSaveBtn = document.getElementById("newVaultSave");
-const newCancelBtn = document.getElementById("newVaultCancel");
-const newStatus = document.getElementById("newVaultStatus");
+document.getElementById("add-vault-toggle").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("setup/wizard.html?mode=add-vault") });
+});
 
-function setNewStatus(msg, level = "") {
-  newStatus.textContent = msg;
-  newStatus.className = "vault-status" + (level ? " " + level : "");
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "vault-added") refreshVaults();
+});
+
+// ----- Briefing profiles -----
+
+async function loadBriefingProfiles() {
+  const base = await getHttpBase();
+  try {
+    const res = await fetch(`${base}/tools/briefing/profiles`);
+    const json = await res.json();
+    renderBriefingProfiles((json.data || json).profiles || []);
+  } catch {
+    document.getElementById("briefing-profiles-list").textContent = "Server nicht erreichbar";
+  }
 }
 
-function resetNewForm() {
-  newName.value = "";
-  newPath.value = "";
-  newPrompt.value = "";
-  setNewStatus("");
+function renderBriefingProfiles(profiles) {
+  const list = document.getElementById("briefing-profiles-list");
+  list.replaceChildren();
+  if (!profiles.length) {
+    list.append(el("div", { className: "empty-vaults", textContent: "Keine Profile vorhanden." }));
+    return;
+  }
+  const sourceLabels = { wetter: "Wetter", todos: "Todos", fristen: "Fristen", lernstreak: "Lernstreak" };
+  for (const p of profiles) {
+    const card = el("div", { className: "vault-card" });
+
+    const header = el("div", { className: "vault-header", style: "cursor: default;" });
+    const title = el("div", { className: "vault-title" });
+    title.append(el("strong", { textContent: p.name }));
+
+    const sourceTags = el("div", { className: "source-tags" });
+    for (const s of (p.sources || [])) {
+      sourceTags.append(el("span", { className: "source-tag", textContent: sourceLabels[s] || s }));
+    }
+    title.append(sourceTags);
+
+    if (p.sources?.includes("wetter") && p.standorte?.length) {
+      title.append(el("div", { className: "vault-path-summary", textContent: p.standorte.join(", ") }));
+    }
+
+    const deleteBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
+    deleteBtn.disabled = p.id === "default";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Profil "${p.name}" löschen?`)) return;
+      const base = await getHttpBase();
+      await fetch(`${base}/tools/briefing/profiles/${p.id}`, { method: "DELETE" });
+      loadBriefingProfiles();
+    });
+
+    header.append(title, deleteBtn);
+    card.append(header);
+    list.append(card);
+  }
 }
 
-addToggleBtn.addEventListener("click", () => {
-  addForm.classList.toggle("hidden");
-  if (!addForm.classList.contains("hidden")) newName.focus();
+document.getElementById("briefing-add-btn")?.addEventListener("click", () => {
+  document.getElementById("briefing-new-form").style.display = "block";
+  document.getElementById("briefing-add-btn").style.display = "none";
 });
 
-newCancelBtn.addEventListener("click", () => {
-  addForm.classList.add("hidden");
-  resetNewForm();
+document.getElementById("briefing-cancel-new")?.addEventListener("click", () => {
+  document.getElementById("briefing-new-form").style.display = "none";
+  document.getElementById("briefing-add-btn").style.display = "";
 });
 
-newGenBtn.addEventListener("click", async () => {
-  const path = newPath.value.trim();
-  if (!path) { setNewStatus("Pfad fehlt", "error"); return; }
-  newGenBtn.disabled = true;
-  setNewStatus("generiere... (paar Sekunden)");
-  try {
-    const result = await generatePrompt(path);
-    newPrompt.value = result.prompt;
-    setNewStatus("fertig — überprüfe und speichere", "success");
-  } catch (err) {
-    setNewStatus("Fehler: " + err.message, "error");
-  } finally {
-    newGenBtn.disabled = false;
-  }
+document.querySelectorAll("#briefing-new-form input[value='wetter']").forEach(cb => {
+  cb.addEventListener("change", () => {
+    document.getElementById("briefing-standorte-field").style.display = cb.checked ? "" : "none";
+  });
 });
 
-newCopyBtn.addEventListener("click", async () => {
-  const path = newPath.value.trim();
-  if (!path) { setNewStatus("Pfad fehlt", "error"); return; }
-  try {
-    const result = await previewClaudeMd(path);
-    await navigator.clipboard.writeText(result.generator_instruction);
-    setNewStatus("Anweisung in Zwischenablage — füg sie in einem beliebigen LLM ein", "success");
-  } catch (err) {
-    setNewStatus("Fehler: " + err.message, "error");
-  }
-});
-
-newSaveBtn.addEventListener("click", async () => {
-  const name = newName.value.trim();
-  const path = newPath.value.trim();
-  if (!name) { setNewStatus("Name fehlt", "error"); return; }
-  if (!path) { setNewStatus("Pfad fehlt", "error"); return; }
-  newSaveBtn.disabled = true;
-  try {
-    await createVault({ name, path, system_prompt: newPrompt.value });
-    addForm.classList.add("hidden");
-    resetNewForm();
-    refreshVaults();
-  } catch (err) {
-    setNewStatus("Fehler: " + err.message, "error");
-  } finally {
-    newSaveBtn.disabled = false;
-  }
+document.getElementById("briefing-save-new")?.addEventListener("click", async () => {
+  const name = document.getElementById("briefing-new-name").value.trim();
+  if (!name) return;
+  const sources = [...document.querySelectorAll("#briefing-new-form input[type='checkbox']:checked")].map(c => c.value);
+  const standorteRaw = document.getElementById("briefing-new-standorte").value;
+  const standorte = standorteRaw.split(",").map(s => s.trim()).filter(Boolean);
+  const base = await getHttpBase();
+  await fetch(`${base}/tools/briefing/profiles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, sources, standorte }),
+  });
+  document.getElementById("briefing-new-form").style.display = "none";
+  document.getElementById("briefing-add-btn").style.display = "";
+  document.getElementById("briefing-new-name").value = "";
+  loadBriefingProfiles();
 });
 
 // ----- Initial load -----
@@ -475,6 +491,7 @@ newSaveBtn.addEventListener("click", async () => {
     setApiKeyBadge("anthropic", server.anthropic_api_key_set);
     setApiKeyBadge("openai", server.openai_api_key_set);
     setApiKeyBadge("mistral", server.mistral_api_key_set);
+    setApiKeyBadge("gemini", server.gemini_api_key_set);
   }
 
   const providerEl = document.getElementById("llmProvider");
@@ -484,6 +501,7 @@ newSaveBtn.addEventListener("click", async () => {
   });
 
   await refreshVaults();
+  await loadBriefingProfiles();
 })();
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -508,6 +526,7 @@ document.getElementById("save").addEventListener("click", async () => {
     ["anthropicApiKey", "anthropic_api_key"],
     ["openaiApiKey", "openai_api_key"],
     ["mistralApiKey", "mistral_api_key"],
+    ["geminiApiKey", "gemini_api_key"],
   ];
   for (const [elId, payloadKey] of apiKeyInputs) {
     const el = document.getElementById(elId);
@@ -525,6 +544,7 @@ document.getElementById("save").addEventListener("click", async () => {
       setApiKeyBadge("anthropic", updated.anthropic_api_key_set);
       setApiKeyBadge("openai", updated.openai_api_key_set);
       setApiKeyBadge("mistral", updated.mistral_api_key_set);
+      setApiKeyBadge("gemini", updated.gemini_api_key_set);
     } catch (err) {
       serverError = err.message || String(err);
     }

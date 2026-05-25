@@ -19,6 +19,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import config
+
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 EDITABLE_KEYS = {
     "anthropic_api_key",
@@ -29,12 +31,15 @@ EDITABLE_KEYS = {
     "openai_api_key",
     "ollama_base_url",
     "mistral_api_key",
+    "gemini_api_key",
+    "image_gen_model",
 }
-SECRET_KEYS = {"anthropic_api_key", "openai_api_key", "mistral_api_key"}
+SECRET_KEYS = {"anthropic_api_key", "openai_api_key", "mistral_api_key", "gemini_api_key"}
 SECRET_ENV_MAP = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
     "mistral_api_key": "MISTRAL_API_KEY",
+    "gemini_api_key": "GEMINI_API_KEY",
 }
 
 _cache: dict[str, Any] | None = None
@@ -88,8 +93,19 @@ def update(values: dict[str, Any]) -> dict[str, Any]:
 
 # --- Vaults ----------------------------------------------------------------
 
+def _normalize_vault(v: dict[str, Any]) -> dict[str, Any]:
+    """Backwards-Compat: setze `use_local_notes` default False, wenn fehlt.
+    So bleiben bestehende Vaults beim globalen Notes-Pfad."""
+    out = dict(v)
+    if "use_local_notes" not in out:
+        out["use_local_notes"] = False
+    else:
+        out["use_local_notes"] = bool(out["use_local_notes"])
+    return out
+
+
 def get_vaults() -> list[dict[str, Any]]:
-    return list(all().get("vaults") or [])
+    return [_normalize_vault(v) for v in (all().get("vaults") or [])]
 
 
 def get_vault(vault_id: str) -> dict[str, Any] | None:
@@ -105,8 +121,22 @@ def _new_id() -> str:
 
 DEFAULT_VAULT_PERMISSIONS = {"write_raw": False, "write_playlists": False}
 
+DEFAULT_BRIEFING_PROFILES = [
+    {
+        "id": "default",
+        "name": "Morgen-Briefing",
+        "sources": ["wetter", "todos", "fristen", "lernstreak"],
+        "standorte": ["Paderborn"],
+    }
+]
 
-def add_vault(name: str, path: str, system_prompt: str = "") -> dict[str, Any]:
+
+def add_vault(
+    name: str,
+    path: str,
+    system_prompt: str = "",
+    use_local_notes: bool | None = None,
+) -> dict[str, Any]:
     global _cache
     current = all()
     vaults = list(current.get("vaults") or [])
@@ -116,6 +146,9 @@ def add_vault(name: str, path: str, system_prompt: str = "") -> dict[str, Any]:
         "path": path.strip(),
         "system_prompt": system_prompt or "",
         "permissions": dict(DEFAULT_VAULT_PERMISSIONS),
+        # NEUE Vaults default True — bestehende Vaults bleiben unverändert (False
+        # via _normalize_vault, da Feld dort fehlt).
+        "use_local_notes": True if use_local_notes is None else bool(use_local_notes),
     }
     vaults.append(vault)
     current["vaults"] = vaults
@@ -134,6 +167,8 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
             for k in ("name", "path", "system_prompt"):
                 if k in fields and fields[k] is not None:
                     updated[k] = fields[k]
+            if "use_local_notes" in fields and fields["use_local_notes"] is not None:
+                updated["use_local_notes"] = bool(fields["use_local_notes"])
             if "permissions" in fields and fields["permissions"] is not None:
                 merged = dict(DEFAULT_VAULT_PERMISSIONS)
                 merged.update(updated.get("permissions") or {})
@@ -145,6 +180,35 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
             _flush()
             return dict(updated)
     return None
+
+
+def vault_notes_dir(vault_id: str | None) -> Path:
+    """Liefert das Notes-Verzeichnis für einen Vault.
+
+    - vault_id None → globaler `notes_path` aus Settings/Config.
+    - vault gefunden + use_local_notes=True → `<vault.path>/inbox/` (PARA-Schema, neu)
+      oder `<vault.path>/notes/` (Legacy-Schema, falls inbox/ nicht existiert).
+    - vault nicht gefunden ODER use_local_notes=False → globaler Pfad (Fallback).
+
+    Legt den Pfad bei Bedarf an. Neue Vaults bekommen `inbox/` über den Scaffold-
+    Endpoint; bestehende Vaults behalten ihr `notes/`-Verzeichnis.
+    """
+    if vault_id:
+        v = get_vault(vault_id)
+        if v and v.get("use_local_notes"):
+            vault_root = Path(v["path"])
+            inbox = vault_root / "inbox"
+            legacy_notes = vault_root / "notes"
+            # Prefer existing dir; default to inbox/ for new vaults.
+            if legacy_notes.exists() and not inbox.exists():
+                p = legacy_notes
+            else:
+                p = inbox
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+    p = Path(get("notes_path") or config.NOTES_PATH)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def vault_permission(vault_id: str, key: str) -> bool:

@@ -8,7 +8,6 @@ from datetime import date
 from pathlib import Path
 from typing import Callable
 
-import config
 import settings
 
 # Defensiver Lock gegen TOCTOU bei parallelen Write-Adds (z.B. Multi-Tab-Bulk).
@@ -46,14 +45,12 @@ def _config_for(kind: str) -> dict[str, str]:
     return KIND_CONFIG[kind]
 
 
-def _notes_dir() -> Path:
-    p = Path(settings.get("notes_path") or config.NOTES_PATH)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _notes_dir(vault_id: str | None = None) -> Path:
+    return settings.vault_notes_dir(vault_id)
 
 
-def _file_path(kind: str) -> Path:
-    return _notes_dir() / _config_for(kind)["filename"]
+def _file_path(kind: str, vault_id: str | None = None) -> Path:
+    return _notes_dir(vault_id) / _config_for(kind)["filename"]
 
 
 def _empty(tag: str, started: str) -> str:
@@ -82,9 +79,9 @@ def _strip_frontmatter(text: str) -> str:
     return text[end + 4 :].lstrip("\n")
 
 
-def load(kind: str) -> dict:
+def load(kind: str, vault_id: str | None = None) -> dict:
     cfg = _config_for(kind)
-    path = _file_path(kind)
+    path = _file_path(kind, vault_id)
     with _file_lock:
         if not path.exists():
             today = date.today().isoformat()
@@ -98,9 +95,9 @@ def load(kind: str) -> dict:
     }
 
 
-def save(kind: str, content: str) -> dict:
+def save(kind: str, content: str, vault_id: str | None = None) -> dict:
     cfg = _config_for(kind)
-    path = _file_path(kind)
+    path = _file_path(kind, vault_id)
     with _file_lock:
         started = None
         if path.exists():
@@ -116,23 +113,27 @@ def save(kind: str, content: str) -> dict:
     return {"started": started, "saved": True, "path": str(path)}
 
 
-def atomic_update(kind: str, mutator: Callable[[dict], str]) -> dict:
+def atomic_update(
+    kind: str,
+    mutator: Callable[[dict], str],
+    vault_id: str | None = None,
+) -> dict:
     """Read-Modify-Write atomar — `mutator` bekommt die geladenen Daten und
     returnt den neuen Content-String. Lock wird über die ganze Operation gehalten.
 
     Empfohlen für Bookmark/Todo-Mutationen, wenn mehrere parallele Adds möglich
     sind (z.B. Multi-Tab-Capture)."""
     with _file_lock:
-        data = load(kind)
+        data = load(kind, vault_id)
         new_content = mutator(data)
-        save(kind, new_content)
+        save(kind, new_content, vault_id)
     return {"updated": True, "kind": kind}
 
 
 # --- Granular operations for the chat agent --------------------------------
 
-def list_todos() -> list[dict]:
-    data = load("todos")
+def list_todos(vault_id: str | None = None) -> list[dict]:
+    data = load("todos", vault_id)
     items: list[dict] = []
     for line in data["content"].splitlines():
         m = TODO_RE.match(line)
@@ -147,27 +148,27 @@ def list_todos() -> list[dict]:
     return items
 
 
-def add_todo(text: str, due: str | None = None) -> dict:
+def add_todo(text: str, due: str | None = None, vault_id: str | None = None) -> dict:
     text = (text or "").strip()
     if not text:
         raise ValueError("Todo-Text darf nicht leer sein")
     line = f"- [ ] {text}"
     if due:
         line += f" @{due.strip()}"
-    data = load("todos")
+    data = load("todos", vault_id)
     body = data["content"].rstrip()
     new_content = (body + "\n" + line + "\n") if body else (line + "\n")
-    save("todos", new_content)
+    save("todos", new_content, vault_id)
     return {"added": text, "due": due}
 
 
-def update_todo(match_text: str, action: str) -> dict:
+def update_todo(match_text: str, action: str, vault_id: str | None = None) -> dict:
     if action not in {"complete", "uncomplete", "delete"}:
         raise ValueError(f"action muss complete|uncomplete|delete sein, nicht {action}")
     needle = (match_text or "").strip().lower()
     if not needle:
         raise ValueError("match_text darf nicht leer sein")
-    data = load("todos")
+    data = load("todos", vault_id)
     lines = data["content"].splitlines()
     matches: list[tuple[int, str, str]] = []  # (idx, full_line, todo_text)
     for idx, line in enumerate(lines):
@@ -190,29 +191,29 @@ def update_todo(match_text: str, action: str) -> dict:
     else:  # uncomplete
         lines[idx] = re.sub(r"^- \[[ xX]\]", "- [ ]", line, count=1)
     body = "\n".join(lines).rstrip()
-    save("todos", body + "\n" if body else "")
+    save("todos", body + "\n" if body else "", vault_id)
     return {"action": action, "todo": todo_text}
 
 
-def read_scratchpad() -> dict:
-    return load("scratchpad")
+def read_scratchpad(vault_id: str | None = None) -> dict:
+    return load("scratchpad", vault_id)
 
 
-def append_scratchpad(text: str) -> dict:
+def append_scratchpad(text: str, vault_id: str | None = None) -> dict:
     text = (text or "").strip()
     if not text:
         raise ValueError("Text darf nicht leer sein")
     today = date.today().isoformat()
-    data = load("scratchpad")
+    data = load("scratchpad", vault_id)
     body = data["content"].rstrip()
     section = f"## {today}\n{text}\n"
     new_content = (body + "\n\n" + section) if body else section
-    save("scratchpad", new_content)
+    save("scratchpad", new_content, vault_id)
     return {"appended": text, "date": today}
 
 
-def replace_scratchpad(content: str) -> dict:
-    save("scratchpad", content or "")
+def replace_scratchpad(content: str, vault_id: str | None = None) -> dict:
+    save("scratchpad", content or "", vault_id)
     return {"replaced": True, "length": len(content or "")}
 
 

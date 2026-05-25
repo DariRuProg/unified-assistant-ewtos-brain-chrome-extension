@@ -83,49 +83,63 @@ def read_file(vault_id: str, rel_path: str) -> str:
 # --- Notes & Todos (vault-unabhängig, liegen in notes/) --------------------
 
 @mcp.tool()
-def list_todos() -> list[dict]:
-    """Listet alle Todos aus notes/todos.md mit Status (done/offen) und Due-Date."""
-    return notes_file.list_todos()
+def list_todos(vault_id: str | None = None) -> list[dict]:
+    """Listet alle Todos aus notes/todos.md mit Status (done/offen) und Due-Date.
+
+    `vault_id` optional: bei vault.use_local_notes=True schreibt/liest pro Vault
+    (`<vault.path>/notes/`), sonst globaler Pfad.
+    """
+    return notes_file.list_todos(vault_id=vault_id)
 
 
 @mcp.tool()
-def add_todo(text: str, due: str | None = None) -> dict:
+def add_todo(text: str, due: str | None = None, vault_id: str | None = None) -> dict:
     """Fügt ein neues Todo in notes/todos.md hinzu.
 
     `due` als ISO-Datum 'YYYY-MM-DD' oder 'YYYY-MM-DD HH:MM' (optional).
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
     """
-    return notes_file.add_todo(text, due)
+    return notes_file.add_todo(text, due, vault_id=vault_id)
 
 
 @mcp.tool()
-def update_todo(match_text: str, action: str) -> dict:
+def update_todo(match_text: str, action: str, vault_id: str | None = None) -> dict:
     """Aktualisiert ein Todo per Substring-Match auf den Text.
 
     `action`: 'complete' (abhaken), 'uncomplete' (aushaken), 'delete' (löschen).
     Bei mehrdeutigem Match wird ein Fehler mit Vorschlägen geworfen — dann
-    präziser matchen.
+    präziser matchen. `vault_id` optional (Vault-scoped wenn use_local_notes=True).
     """
-    return notes_file.update_todo(match_text, action)
+    return notes_file.update_todo(match_text, action, vault_id=vault_id)
 
 
 @mcp.tool()
-def read_scratchpad() -> dict:
-    """Liest den kompletten Scratchpad (notes/scratchpad.md) inkl. started-Date."""
-    return notes_file.read_scratchpad()
+def read_scratchpad(vault_id: str | None = None) -> dict:
+    """Liest den kompletten Scratchpad (notes/scratchpad.md) inkl. started-Date.
+
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
+    """
+    return notes_file.read_scratchpad(vault_id=vault_id)
 
 
 @mcp.tool()
-def append_scratchpad(text: str) -> dict:
-    """Hängt einen neuen Block an den Scratchpad — automatisch mit '## YYYY-MM-DD'-Header."""
-    return notes_file.append_scratchpad(text)
+def append_scratchpad(text: str, vault_id: str | None = None) -> dict:
+    """Hängt einen neuen Block an den Scratchpad — automatisch mit '## YYYY-MM-DD'-Header.
+
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
+    """
+    return notes_file.append_scratchpad(text, vault_id=vault_id)
 
 
 # --- Bookmarks (notes/bookmarks.md) ---------------------------------------
 
 @mcp.tool()
-def list_bookmarks() -> list[dict]:
-    """Listet alle Bookmarks aus notes/bookmarks.md."""
-    return bookmarks.list_bookmarks()
+def list_bookmarks(vault_id: str | None = None) -> list[dict]:
+    """Listet alle Bookmarks aus notes/bookmarks.md.
+
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
+    """
+    return bookmarks.list_bookmarks(vault_id=vault_id)
 
 
 @mcp.tool()
@@ -134,18 +148,23 @@ def add_bookmark(
     title: str | None = None,
     note: str | None = None,
     source: str = "mcp",
+    vault_id: str | None = None,
 ) -> dict:
-    """Fügt einen Bookmark hinzu. URL ist Pflicht. `source` defaultet auf 'mcp'."""
-    return bookmarks.add_bookmark(url, title=title, note=note, source=source)
+    """Fügt einen Bookmark hinzu. URL ist Pflicht. `source` defaultet auf 'mcp'.
+
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
+    """
+    return bookmarks.add_bookmark(url, title=title, note=note, source=source, vault_id=vault_id)
 
 
 @mcp.tool()
-def delete_bookmark(match: str) -> dict:
+def delete_bookmark(match: str, vault_id: str | None = None) -> dict:
     """Löscht einen Bookmark per Substring-Match (Titel oder URL).
 
     Bei Mehrdeutigkeit wird ein Fehler geworfen — dann präziser matchen.
+    `vault_id` optional (Vault-scoped wenn use_local_notes=True).
     """
-    return bookmarks.delete_bookmark(match)
+    return bookmarks.delete_bookmark(match, vault_id=vault_id)
 
 
 # --- Playlists (wiki/<saeule>/playlists/) ---------------------------------
