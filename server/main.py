@@ -862,6 +862,25 @@ def vault_audit_claude_md_apply(vault_id: str) -> dict[str, Any]:
         raise HTTPException(400, str(e))
 
 
+class VaultRepairRequest(BaseModel):
+    category: str
+    path: str
+
+
+@app.post("/tools/vault_audit/{vault_id}/repair")
+def vault_audit_repair(vault_id: str, req: VaultRepairRequest) -> dict[str, Any]:
+    """Repariert ein einzelnes Finding (nur orphan_index + structure_drift).
+    Per-Finding bestätigt durch den Aufrufer (UI). Idempotent."""
+    try:
+        return vault_audit_tool.repair_finding(vault_id, req.category, req.path)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/tools/vault_search/{vault_id}")
 def vault_search(vault_id: str, q: str, max_results: int = 30) -> dict[str, Any]:
     v = settings.get_vault(vault_id)

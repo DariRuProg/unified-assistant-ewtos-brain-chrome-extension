@@ -117,6 +117,18 @@ def claude_md_upgrade_apply(vault_id: str) -> dict:
     return blueprint.apply_claude_md_upgrade(vault_id)
 
 
+@mcp.tool()
+def repair_finding(vault_id: str, category: str, path: str) -> dict:
+    """Repariert ein einzelnes Audit-Finding (nur 'orphan_index' + 'structure_drift').
+
+    `category` und `path` aus dem jeweiligen Finding von `audit_vault` übernehmen.
+    orphan_index → ergänzt die Page-Zeile im Parent-index.md; structure_drift →
+    legt den fehlenden Ordner an. Idempotent (bereits behoben → repaired False mit
+    Grund). Andere Kategorien sind nicht automatisch reparierbar (ValueError).
+    """
+    return vault_audit.repair_finding(vault_id, category, path)
+
+
 # --- Notes & Todos (vault-unabhängig, liegen in notes/) --------------------
 
 @mcp.tool()

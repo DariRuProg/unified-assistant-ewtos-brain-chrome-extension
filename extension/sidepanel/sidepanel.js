@@ -2673,8 +2673,33 @@ async function renderVaultHealth() {
         row.append(head);
         row.append(el("div", { className: "vh-msg", textContent: f.message }));
         if (f.recommendation) row.append(el("div", { className: "vh-rec", textContent: "→ " + f.recommendation }));
+        if (f.repairable) {
+          const fixBtn = el("button", { type: "button", className: "vh-fix-btn", textContent: "Reparieren" });
+          fixBtn.addEventListener("click", () => repairFinding(f, fixBtn));
+          row.append(fixBtn);
+        }
         listBox.append(row);
       }
+    }
+  }
+
+  async function repairFinding(f, btn) {
+    btn.disabled = true;
+    btn.textContent = "Repariere…";
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/repair`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: f.category, path: f.path }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setStatus(data.repaired ? "Repariert: " + (data.line || data.path || f.path) : "Nichts zu tun: " + (data.reason || "bereits behoben"));
+      await runAudit();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Reparieren";
+      setStatus("Reparatur fehlgeschlagen: " + (err.message || err), "error");
     }
   }
 

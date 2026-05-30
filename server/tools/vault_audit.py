@@ -221,6 +221,98 @@ def _check_claude_md(vault_id: str) -> list[dict]:
     )]
 
 
+# --- Auto-Repair (nur sicher-deterministische Kategorien) -----------------
+# Bewusst eng: nur orphan_index (Index-Zeile ergänzen) + structure_drift
+# (fehlenden Ordner anlegen). broken_wikilink/raw_uningested/missing_frontmatter
+# brauchen menschliches Urteil und bleiben reiner Bericht. Jeder Repair wird vom
+# Aufrufer per-Finding bestätigt (UI/MCP), genau wie der CLAUDE.md-Apply.
+
+REPAIRABLE_CATEGORIES = ("orphan_index", "structure_drift")
+
+
+def _page_title(page: Path) -> str:
+    fm = _parse_frontmatter(_read(page))
+    title = fm.get("titel")
+    return str(title).strip() if title else page.stem
+
+
+def _insert_under_pages(content: str, new_line: str) -> str | None:
+    """Fügt new_line ans Ende der Liste unter '## Pages' ein. None wenn keine Sektion."""
+    lines = content.splitlines()
+    heading = next((i for i, l in enumerate(lines) if l.strip().lower() == "## pages"), None)
+    if heading is None:
+        return None
+    insert_at = heading + 1
+    j = heading + 1
+    while j < len(lines):
+        s = lines[j].strip()
+        if s.startswith(("-", "*")):
+            insert_at = j + 1
+            j += 1
+        elif s == "":
+            j += 1
+        else:
+            break
+    lines.insert(insert_at, new_line)
+    return "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+
+
+def _repair_orphan(root: Path, rel_path: str) -> dict:
+    page = root / rel_path
+    if not page.exists():
+        return {"repaired": False, "reason": f"Page existiert nicht mehr: {rel_path}"}
+    index = page.parent / "index.md"
+    if not index.exists():
+        return {"repaired": False, "reason": f"Kein index.md neben {rel_path} — manueller Eingriff nötig."}
+    content = _read(index)
+    linked = {_link_basename(m) for m in WIKILINK_RE.findall(content)}
+    if page.stem.lower() in linked:
+        return {"repaired": False, "reason": "Page ist bereits im Index verlinkt."}
+    slug = page.with_suffix("").relative_to(root).as_posix()
+    new_line = f"- [[{slug}]] — {_page_title(page)}"
+    merged = _insert_under_pages(content, new_line)
+    if merged is None:
+        return {"repaired": False, "reason": f"Kein '## Pages'-Abschnitt in {index.relative_to(root).as_posix()}."}
+    index.write_text(merged, encoding="utf-8")
+    return {
+        "repaired": True,
+        "action": "index_entry_added",
+        "path": index.relative_to(root).as_posix(),
+        "line": new_line,
+    }
+
+
+def _repair_structure(root: Path, rel_path: str) -> dict:
+    rel = rel_path.rstrip("/")
+    if not rel:
+        return {"repaired": False, "reason": "Kein Ordnerpfad im Finding."}
+    folder = root / rel
+    if folder.exists():
+        return {"repaired": False, "reason": f"Ordner existiert bereits: {rel}/"}
+    folder.mkdir(parents=True, exist_ok=True)
+    return {"repaired": True, "action": "folder_created", "path": rel + "/"}
+
+
+def repair_finding(vault_id: str, category: str, path: str) -> dict:
+    """Repariert ein einzelnes Audit-Finding. Re-validiert gegen den Live-Vault
+    (idempotent: bereits behoben -> repaired False mit Grund). Schreibt nur für
+    REPAIRABLE_CATEGORIES, sonst ValueError."""
+    vault = settings.get_vault(vault_id)
+    if not vault:
+        raise LookupError(f"Vault {vault_id} nicht gefunden")
+    root = Path(vault["path"])
+    if not root.exists():
+        raise FileNotFoundError(f"Vault-Pfad existiert nicht: {root}")
+    if category == "orphan_index":
+        return _repair_orphan(root, path)
+    if category == "structure_drift":
+        return _repair_structure(root, path)
+    raise ValueError(
+        f"Kategorie '{category}' ist nicht automatisch reparierbar "
+        f"(nur: {', '.join(REPAIRABLE_CATEGORIES)})."
+    )
+
+
 def audit_vault(vault_id: str) -> dict:
     """Read-only Health-Check. Liefert {vault_id, findings, summary}."""
     vault = settings.get_vault(vault_id)
@@ -248,6 +340,7 @@ def audit_vault(vault_id: str) -> dict:
     by_severity = {"error": 0, "warn": 0, "info": 0}
     by_category: dict[str, int] = {}
     for f in findings:
+        f["repairable"] = f["category"] in REPAIRABLE_CATEGORIES and bool(f["path"])
         by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
         by_category[f["category"]] = by_category.get(f["category"], 0) + 1
 
