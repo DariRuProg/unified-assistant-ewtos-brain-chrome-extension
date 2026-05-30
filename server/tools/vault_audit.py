@@ -160,7 +160,11 @@ def _check_broken_links(root: Path, md_files: list[Path]) -> list[dict]:
     return out
 
 
-def _check_frontmatter(root: Path, md_files: list[Path]) -> list[dict]:
+def _check_frontmatter(root: Path, md_files: list[Path], has_blueprint: bool) -> list[dict]:
+    # Fremd-Vault ohne EwtosBrain-Blueprint: eigene Frontmatter-Konvention nicht
+    # erzwingen — sonst False Positives bei abweichenden (z.B. englischen) Keys.
+    if not has_blueprint:
+        return []
     out: list[dict] = []
     for p in md_files:
         if p.relative_to(root).parts[0] != "wiki" or p.name == "index.md":
@@ -197,6 +201,27 @@ def _check_structure(vault_id: str, root: Path) -> list[dict]:
 
 
 def _check_claude_md(vault_id: str) -> list[dict]:
+    # Fremd-Vault (kein Blueprint-Snapshot, keine ewtosbrain-Marker): KEIN Apply
+    # anbieten — das Default-Blueprint passt i.d.R. nicht und würde widersprüchliche
+    # Sektionen reinmergen. Nur eine Empfehlung (extend-Mode liest die echte Struktur).
+    vault = settings.get_vault(vault_id)
+    existing = ""
+    if vault:
+        cm = Path(vault["path"]) / "CLAUDE.md"
+        if cm.exists():
+            existing = _read(cm)
+    managed = (
+        blueprint.export_vault_blueprint(vault_id) is not None
+        or "ewtosbrain:section" in existing
+    )
+    if not managed:
+        return [_finding(
+            "claude_md_advice", "info", "CLAUDE.md",
+            "Fremd-Vault ohne EwtosBrain-Blueprint — kein automatischer CLAUDE.md-Abgleich.",
+            "Optional: im Setup-Wizard 'Bestehenden verbinden' (extend-Modus) wählen — "
+            "der Setup-Agent liest die vorhandene Struktur und erweitert sie passend, "
+            "statt das Standard-Blueprint aufzudrücken.",
+        )]
     try:
         prev = blueprint.preview_claude_md_upgrade(vault_id)
     except Exception as e:
@@ -204,20 +229,10 @@ def _check_claude_md(vault_id: str) -> list[dict]:
                          f"CLAUDE.md-Abgleich fehlgeschlagen: {e}", "")]
     if not prev.get("changed"):
         return []
-    managed = (
-        blueprint.export_vault_blueprint(vault_id) is not None
-        or "ewtosbrain:section" in (prev.get("existing") or "")
-    )
-    if managed:
-        return [_finding(
-            "claude_md_drift", "warn", "CLAUDE.md",
-            "Verwaltete CLAUDE.md-Sektionen sind veraltet oder fehlen.",
-            "Upgrade verfügbar — Diff prüfen und 'CLAUDE.md aktualisieren' (non-destruktiv).",
-        )]
     return [_finding(
-        "claude_md_drift", "info", "CLAUDE.md",
-        "Vault ist nicht EwtosBrain-verwaltet — Karpathy-Standardsektionen könnten optional ergänzt werden.",
-        "Optional: Diff prüfen — 'CLAUDE.md aktualisieren' fügt nur verwaltete Marker-Sektionen hinzu (non-destruktiv).",
+        "claude_md_drift", "warn", "CLAUDE.md",
+        "Verwaltete CLAUDE.md-Sektionen sind veraltet oder fehlen.",
+        "Upgrade verfügbar — Diff prüfen und 'CLAUDE.md aktualisieren' (non-destruktiv).",
     )]
 
 
@@ -323,12 +338,13 @@ def audit_vault(vault_id: str) -> dict:
         raise FileNotFoundError(f"Vault-Pfad existiert nicht: {root}")
 
     md_files = _md_files(root)
+    has_blueprint = blueprint.export_vault_blueprint(vault_id) is not None
     findings: list[dict] = []
     for check in (
         lambda: _check_orphans(root),
         lambda: _check_raw_uningested(root, md_files),
         lambda: _check_broken_links(root, md_files),
-        lambda: _check_frontmatter(root, md_files),
+        lambda: _check_frontmatter(root, md_files, has_blueprint),
         lambda: _check_structure(vault_id, root),
         lambda: _check_claude_md(vault_id),
     ):
