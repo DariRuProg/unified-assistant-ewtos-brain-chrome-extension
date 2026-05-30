@@ -139,6 +139,11 @@ async function navigate(dir) {
     if (isAddVaultMode) {
       chrome.runtime.sendMessage({ type: 'vault-added' }).catch(() => {});
     }
+
+    // Existing-Vault: Extend-Agent als Opt-in anbieten (überschreibt nichts).
+    const showExtend = vaultMode === 'existing' && !isAddVaultMode;
+    document.getElementById('btn-extend-agent').style.display = showExtend ? 'inline-flex' : 'none';
+    document.getElementById('extend-hint').style.display = showExtend ? 'block' : 'none';
   }
 }
 
@@ -381,7 +386,7 @@ function renderTemplates(blueprints) {
   nextBtn.id = 'btn-templates-next';
   nextBtn.textContent = 'Weiter mit Setup-Agent';
   nextBtn.disabled = selectedTemplates.size === 0;
-  nextBtn.addEventListener('click', openSetupAgent);
+  nextBtn.addEventListener('click', () => openSetupAgent('fresh'));
 
   actions.append(backBtn, spacer, nextBtn);
   list.append(actions);
@@ -392,18 +397,19 @@ function updateTemplatesNextBtn() {
   if (btn) btn.disabled = selectedTemplates.size === 0;
 }
 
-async function openSetupAgent() {
-  if (!savedVaultId || selectedTemplates.size === 0) return;
+async function openSetupAgent(mode = 'fresh') {
+  if (!savedVaultId) return;
+  if (mode === 'fresh' && selectedTemplates.size === 0) return;
   const templates = [...selectedTemplates].join(',');
   await chrome.storage.local.set({
     setupAgentContext: {
       vault_id: savedVaultId,
       templates: [...selectedTemplates],
-      mode: 'fresh',
+      mode,
       opened_at: Date.now(),
     },
   });
-  const url = chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(savedVaultId)}&mode=fresh&templates=${encodeURIComponent(templates)}`);
+  const url = chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(savedVaultId)}&mode=${mode}&templates=${encodeURIComponent(templates)}`);
   chrome.tabs.create({ url });
   // Wizard-Tab nach kurzer Verzögerung schließen
   setTimeout(() => {
@@ -592,6 +598,7 @@ document.getElementById('btn-open-extension').addEventListener('click', () => {
 document.getElementById('btn-open-settings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
+document.getElementById('btn-extend-agent').addEventListener('click', () => openSetupAgent('extend'));
 const QC_TOOL = { 'qc-youtube': 'youtube_transcript', 'qc-chat': 'chat', 'qc-notes': 'scratchpad' };
 Object.keys(QC_TOOL).forEach(id => {
   document.getElementById(id).addEventListener('click', () => {
