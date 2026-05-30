@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "blueprint_id": "karpathy-para-base",
+  "blueprint_name": "Karpathy + PARA (Basis)",
+  "blueprint_version": "1.0.0",
+  "author": "ewtos.com",
+  "license": "MIT",
+  "description": "Self-Feeding Wiki nach Karpathy/Bonanno + PARA-Buckets. Default-Setup, das den bisherigen statischen Scaffold-Endpoint 1:1 abbildet.",
+  "tags": ["karpathy", "para", "basis"],
+  "extends": [],
+  "folders": [
+    { "path": "inbox", "kind": "system" },
+    { "path": "raw/youtube", "kind": "raw" },
+    { "path": "raw/transcripts", "kind": "raw" },
+    { "path": "raw/artikel", "kind": "raw" },
+    { "path": "raw/eigene-notizen", "kind": "raw" },
+    { "path": "raw/kunden-input", "kind": "raw" },
+    { "path": "raw/chat-archive", "kind": "raw" },
+    { "path": "raw/assets", "kind": "raw" },
+    { "path": "wiki/projects", "kind": "bucket", "label": "projects", "emoji": "🎯" },
+    { "path": "wiki/areas", "kind": "bucket", "label": "areas", "emoji": "🔁" },
+    { "path": "wiki/resources", "kind": "bucket", "label": "resources", "emoji": "📚" },
+    { "path": "wiki/resources/creators", "kind": "asset", "asset_type": "creator", "emoji": "🎙" },
+    { "path": "wiki/resources/videos", "kind": "asset", "asset_type": "video", "emoji": "🎬" },
+    { "path": "wiki/resources/playlists", "kind": "asset", "asset_type": "playlist", "emoji": "🎵" },
+    { "path": "wiki/archive", "kind": "bucket", "label": "archive", "emoji": "🗄" },
+    { "path": "journal", "kind": "journal", "auto_archive": "briefing" }
+  ],
+  "files": [
+    { "path": "agents.md", "template": "karpathy-para-base/agents.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "index.md", "template": "karpathy-para-base/index.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "log.md", "template": "karpathy-para-base/log.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "inbox/todos.md", "template_inline": "---\ntyp: todos\n---\n\n", "merge_policy": "skip_if_exists" },
+    { "path": "inbox/scratchpad.md", "template": "karpathy-para-base/inbox/scratchpad.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "wiki/index.md", "template": "karpathy-para-base/wiki/index.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "wiki/projects/index.md", "template": "karpathy-para-base/bucket-index.md.j2", "vars": { "label": "projects", "emoji": "🎯", "desc": "Endliche Vorhaben mit Deadline." }, "merge_policy": "skip_if_exists" },
+    { "path": "wiki/areas/index.md", "template": "karpathy-para-base/bucket-index.md.j2", "vars": { "label": "areas", "emoji": "🔁", "desc": "Dauer-Themen ohne Endtermin (Branchen, Trends, Lernen)." }, "merge_policy": "skip_if_exists" },
+    { "path": "wiki/archive/index.md", "template": "karpathy-para-base/bucket-index.md.j2", "vars": { "label": "archive", "emoji": "🗄", "desc": "Abgeschlossene Projekte und alte Playlists." }, "merge_policy": "skip_if_exists" },
+    { "path": "wiki/resources/index.md", "template": "karpathy-para-base/resources-index.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "wiki/resources/creators/index.md", "template": "karpathy-para-base/sub-index.md.j2", "vars": { "label": "creators", "emoji": "🎙" }, "merge_policy": "skip_if_exists" },
+    { "path": "wiki/resources/videos/index.md", "template": "karpathy-para-base/sub-index.md.j2", "vars": { "label": "videos", "emoji": "🎬" }, "merge_policy": "skip_if_exists" },
+    { "path": "wiki/resources/playlists/index.md", "template": "karpathy-para-base/sub-index.md.j2", "vars": { "label": "playlists", "emoji": "🎵" }, "merge_policy": "skip_if_exists" }
+  ],
+  "bases": [],
+  "claude_md_sections": [
+    {
+      "id": "karpathy-vault-intro",
+      "order": 10,
+      "title": "Vault-Schema",
+      "template": "karpathy-para-base/claude-md/intro.md.j2",
+      "merge_policy": "replace_if_marker"
+    },
+    {
+      "id": "karpathy-routinen",
+      "order": 20,
+      "title": "Routinen (Karpathy)",
+      "template": "karpathy-para-base/claude-md/routinen.md.j2",
+      "merge_policy": "replace_if_marker"
+    }
+  ],
+  "briefing_sources": ["wetter", "todos", "fristen", "lernstreak"],
+  "permissions_defaults": { "write_raw": false, "write_playlists": false }
+}

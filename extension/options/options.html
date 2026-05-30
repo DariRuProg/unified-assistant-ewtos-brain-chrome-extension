@@ -229,6 +229,32 @@
   </div>
 
   <div class="field external-service-card">
+    <label for="youtubeApiKey">YouTube Data API v3 Key</label>
+    <div class="hint">
+      Für Briefing-Quellen <code>youtube_trending</code>, <code>competitor_videos</code>, <code>playlist_trending</code>.
+      Default-Quota 10k Units/Tag (~80 Briefings). Key holen unter <code>console.cloud.google.com</code>.
+      <span id="youtubeApiKeyStatus" style="font-weight: 600;"></span>
+    </div>
+    <input id="youtubeApiKey" type="password" placeholder="AIza..." autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="setupAgentProvider">Setup-Agent — eigenes Modell (optional)</label>
+    <div class="hint">
+      Wenn leer, wird der gleiche Provider wie für Vault-Chat verwendet. Nur ändern wenn du den Setup-Agenten
+      mit einem stärkeren/günstigeren Modell laufen lassen willst.
+    </div>
+    <select id="setupAgentProvider" style="margin-bottom: 6px;">
+      <option value="">(gleich wie Vault-Chat)</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="openai">OpenAI (GPT)</option>
+      <option value="ollama">Ollama (lokal)</option>
+      <option value="mistral">Mistral</option>
+    </select>
+    <input id="setupAgentModel" type="text" placeholder="z.B. claude-opus-4-7" autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
     <label for="imageGenModel">Image-Generator Default-Modell</label>
     <div class="hint">Welches Gemini-Modell der Image-Generator beim Start vorschlägt. In der Tool-UI weiter umschaltbar.</div>
     <select id="imageGenModel">
@@ -312,11 +338,29 @@
         <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="todos" checked> Offene Todos</label>
         <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="fristen" checked> Fristen &amp; Deadlines</label>
         <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="lernstreak" checked> Lernstreak</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="vertrags_fristen"> Vertrags-Fristen</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="kampagnen_kickoffs"> Kampagnen-Kickoffs</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="youtube_trending"> YouTube-Trending</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="competitor_videos"> Konkurrenz-Videos</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="playlist_trending"> Playlist-Trending</label>
+        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="recommendations"> Empfehlungen ("What to do")</label>
       </div>
     </div>
     <div class="field" id="briefing-standorte-field">
       <label for="briefing-new-standorte">Wetter-Standorte <span class="hint" style="display:inline; font-weight:normal;">(kommagetrennt)</span></label>
       <input type="text" id="briefing-new-standorte" placeholder="Paderborn, Kavala">
+    </div>
+    <div class="field" id="briefing-nische-field" style="display:none;">
+      <label for="briefing-new-nische">YouTube-Nische <span class="hint" style="display:inline; font-weight:normal;">(Suchbegriffe für Trending)</span></label>
+      <input type="text" id="briefing-new-nische" placeholder="n8n automation tutorial">
+    </div>
+    <div class="field" id="briefing-competitor-field" style="display:none;">
+      <label for="briefing-new-competitor">Konkurrenz-Channel-IDs <span class="hint" style="display:inline; font-weight:normal;">(eine pro Zeile, Format <code>UCxxx...</code>)</span></label>
+      <textarea id="briefing-new-competitor" rows="3" placeholder="UCxxxxxxxxxxxxxxxxxxxxxx"></textarea>
+    </div>
+    <div class="field" id="briefing-recommendations-field" style="display:none;">
+      <label for="briefing-new-recommendations-days">Empfehlungen-Lookback <span class="hint" style="display:inline; font-weight:normal;">(Tage)</span></label>
+      <input type="number" id="briefing-new-recommendations-days" min="1" max="90" value="14">
     </div>
     <div class="vault-actions">
       <button type="button" id="briefing-save-new">Profil speichern</button>
@@ -351,6 +395,14 @@
     <input id="theme" type="hidden" value="neutral" />
   </div>
 
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input id="hideQuickRowOnTool" type="checkbox" />
+      <span>Quick-Buttons ausblenden, wenn ein Tool geöffnet ist</span>
+    </label>
+    <div class="hint">Spart Platz im Sidepanel, sobald du in einem Tool arbeitest. Standardmäßig aus.</div>
+  </div>
+
   <h2>Verbundene Vaults</h2>
   <div class="hint" style="margin-bottom: 12px;">
     Jeder Vault ist ein Ordner mit <code>.md</code>-Dateien (Karpathy-Style). Pro Vault eigener System-Prompt + eigener Chat-Verlauf. Im Side-Panel wechselst du zwischen den Vaults.
@@ -359,6 +411,23 @@
   <div id="vaults-container"></div>
 
   <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault hinzufügen</button>
+
+  <h2>Blueprints</h2>
+  <div class="hint" style="margin-bottom: 12px;">
+    Vault-Vorlagen. Built-in liefert EwtosBrain mit; importierte Blueprints kommen von dir oder Premium-Quellen.
+  </div>
+
+  <div id="blueprint-list"></div>
+
+  <div style="border: 1px dashed var(--border-input); border-radius: 6px; padding: 14px; margin-top: 12px; background: var(--bg);">
+    <label for="blueprint-import-file" style="display: block; margin-bottom: 6px;">Blueprint importieren</label>
+    <div class="hint" style="margin-bottom: 8px;">JSON-Datei mit Blueprint-Struktur. Unsignierte Blueprints werden vor dem Import angefragt.</div>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <input type="file" id="blueprint-import-file" accept="application/json" style="flex: 1; min-width: 200px;">
+      <button type="button" id="btn-blueprint-import">Importieren</button>
+    </div>
+    <div id="blueprint-import-status" class="vault-status" style="margin-top: 8px;"></div>
+  </div>
 
   <script src="options.js"></script>
 </body>

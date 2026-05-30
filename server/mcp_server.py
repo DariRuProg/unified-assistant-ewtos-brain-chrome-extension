@@ -11,11 +11,12 @@ laufenden FastAPI-Server.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+import paths
+
+paths.migrate_legacy_data()
+load_dotenv(paths.env_file())
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -23,11 +24,13 @@ from mcp.server.fastmcp import FastMCP
 import config
 import settings
 from tools import (
+    blueprint,
     bookmarks,
     notes_file,
     playlists,
     raw_promoter,
     transcript_writer,
+    vault_audit,
     videos,
     wiki_reader,
 )
@@ -78,6 +81,40 @@ def list_folder(vault_id: str, rel_path: str = "") -> dict:
 def read_file(vault_id: str, rel_path: str) -> str:
     """Liest eine .md-Datei aus dem Vault. `rel_path` relativ zum Vault-Root."""
     return wiki_reader.read_file(_vault_path(vault_id), rel_path)
+
+
+# --- Vault-Audit & CLAUDE.md-Upgrade ---------------------------------------
+
+@mcp.tool()
+def audit_vault(vault_id: str) -> dict:
+    """Read-only Health-Check eines Vaults.
+
+    Findet Orphans (Pages nicht im Parent-Index), un-ingestete raw-Dateien,
+    kaputte Wikilinks, fehlende Pflicht-Frontmatter, Struktur-Drift gegen das
+    Blueprint und veraltete verwaltete CLAUDE.md-Sektionen. Liefert
+    {vault_id, findings[], summary}. Schreibt nichts.
+    """
+    return vault_audit.audit_vault(vault_id)
+
+
+@mcp.tool()
+def claude_md_upgrade_preview(vault_id: str) -> dict:
+    """Diff-Vorschau für das verwaltete CLAUDE.md (read-only, kein Write).
+
+    Liefert {existing, merged, changed, sections}. `changed=False` = bereits aktuell.
+    Der Merge ist non-destruktiv: nur Marker-Sektionen werden ersetzt, User-Text
+    außerhalb bleibt erhalten.
+    """
+    return blueprint.preview_claude_md_upgrade(vault_id)
+
+
+@mcp.tool()
+def claude_md_upgrade_apply(vault_id: str) -> dict:
+    """Schreibt das gemergte CLAUDE.md (non-destruktiv). Idempotent.
+
+    Vorher `claude_md_upgrade_preview` zeigen lassen. Liefert {written, sections}.
+    """
+    return blueprint.apply_claude_md_upgrade(vault_id)
 
 
 # --- Notes & Todos (vault-unabhängig, liegen in notes/) --------------------

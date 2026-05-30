@@ -1,11 +1,12 @@
 // EwtosBrain Setup Wizard | ewtos.com
 
-const TOTAL = 5;
+const TOTAL = 6;
 let current = 1;
 let connOk = false;
 let selectedProvider = 'anthropic';
 let vaultMode = 'new';
 let savedVaultId = null;
+const selectedTemplates = new Set();
 
 const isAddVaultMode = new URLSearchParams(location.search).get('mode') === 'add-vault';
 
@@ -50,6 +51,7 @@ function updateProgress(step) {
   for (let i = 1; i <= TOTAL; i++) {
     const dot  = document.getElementById('dot-' + i);
     const conn = document.getElementById('conn-' + i);
+    if (!dot) continue;
     dot.className = 'step-dot';
     if (i < step)  dot.classList.add('done');
     if (i === step) dot.classList.add('active');
@@ -68,7 +70,7 @@ function updateFooter(step) {
   const footer  = document.getElementById('step-footer');
 
   if (isAddVaultMode) {
-    footer.style.display = step === 5 ? 'none' : 'flex';
+    footer.style.display = step === TOTAL ? 'none' : 'flex';
     btnBack.style.display = 'none';
     btnSkip.style.display = 'none';
     btnNext.textContent = 'Vault speichern';
@@ -76,12 +78,18 @@ function updateFooter(step) {
     return;
   }
 
-  footer.style.display = step === 5 ? 'none' : 'flex';
+  // Step 5 (Template-Picker) hat eigene Buttons — Footer ausblenden
+  if (step === 5) {
+    footer.style.display = 'none';
+    return;
+  }
+  footer.style.display = step === TOTAL ? 'none' : 'flex';
   btnBack.style.display = step > 1 ? 'inline-flex' : 'none';
   btnSkip.style.display = step === 4 ? 'inline-flex' : 'none';
 
   if (step === 1) { btnNext.textContent = "Los geht's"; btnNext.disabled = false; }
   else if (step === 2) { btnNext.textContent = 'Weiter'; btnNext.disabled = !connOk; }
+  else if (step === 4) { btnNext.textContent = vaultMode === 'new' ? 'Weiter zu Templates' : 'Vault verbinden'; btnNext.disabled = false; }
   else { btnNext.textContent = 'Weiter'; btnNext.disabled = false; }
 }
 
@@ -92,7 +100,17 @@ async function navigate(dir) {
     if (!ok) return;
   }
 
-  const next = current + dir;
+  let next = current + dir;
+
+  // Existing-Vault-Mode: Step 5 (Template-Picker) ueberspringen — User connectet
+  // einen bereits befuellten Vault, wir wollen nichts drueberscaffolden.
+  if (vaultMode === 'existing' && dir > 0 && current === 4) {
+    next = 6;
+  }
+  if (vaultMode === 'existing' && dir < 0 && current === 6) {
+    next = 4;
+  }
+
   if (next < 1 || next > TOTAL) return;
 
   document.getElementById('step-' + current).classList.remove('active');
@@ -104,12 +122,19 @@ async function navigate(dir) {
   updateProgress(current);
   updateFooter(current);
 
-  if (current === 5) {
+  // Bei Eintritt in den Template-Schritt: Templates laden
+  if (current === 5 && vaultMode === 'new') {
+    loadTemplates();
+  }
+
+  if (current === TOTAL) {
     const pathSelector = isAddVaultMode ? '.checkmark-path-addvault' : '.checkmark-path';
     const path = document.querySelector(pathSelector);
-    path.style.animation = 'none';
-    path.offsetHeight;
-    path.style.animation = '';
+    if (path) {
+      path.style.animation = 'none';
+      path.offsetHeight;
+      path.style.animation = '';
+    }
 
     if (isAddVaultMode) {
       chrome.runtime.sendMessage({ type: 'vault-added' }).catch(() => {});
@@ -218,14 +243,9 @@ async function saveVault() {
     });
 
     if (vaultMode === 'new') {
-      const scaffoldRes = await fetch(httpBase() + '/vaults/' + vaultId + '/scaffold', { method: 'POST' });
-      if (scaffoldRes.ok) {
-        const scaffoldData = await scaffoldRes.json();
-        const created = scaffoldData.created || [];
-        status.className = 'info-box success';
-        status.textContent = `Vault angelegt. ${created.length} Dateien erstellt.`;
-        status.style.display = 'block';
-      }
+      status.className = 'info-box success';
+      status.textContent = 'Vault-Eintrag angelegt. Im naechsten Schritt waehlst du den Aufbau.';
+      status.style.display = 'block';
     }
     return true;
   } catch (e) {
@@ -233,6 +253,201 @@ async function saveVault() {
     status.textContent = e.message;
     status.style.display = 'block';
     return false;
+  }
+}
+
+// ── Template-Picker ───────────────────────────────────────────────────────
+async function loadTemplates() {
+  const list = document.getElementById('template-list');
+  list.replaceChildren();
+  list.innerHTML = '<div class="info-box neutral">Lade Templates…</div>';
+
+  try {
+    const res = await fetch(httpBase() + '/blueprints');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const blueprints = Array.isArray(data) ? data : (data.blueprints || []);
+    renderTemplates(blueprints);
+
+    // Default-Auswahl: karpathy-para-base
+    if (selectedTemplates.size === 0) {
+      const def = blueprints.find(b => b.id === 'karpathy-para-base') || blueprints[0];
+      if (def) {
+        selectedTemplates.add(def.id);
+        const card = list.querySelector(`[data-template-id="${def.id}"]`);
+        if (card) card.classList.add('selected');
+      }
+    }
+    updateTemplatesNextBtn();
+  } catch (e) {
+    list.replaceChildren();
+    const err = document.createElement('div');
+    err.className = 'info-box error';
+    err.textContent = 'Fehler beim Laden der Templates: ' + e.message;
+    list.append(err);
+    // Back-Button damit User trotzdem zurückkann
+    const actions = document.createElement('div');
+    actions.className = 'step-actions';
+    const back = document.createElement('button');
+    back.className = 'btn btn-secondary btn-sm';
+    back.textContent = 'Zurück';
+    back.addEventListener('click', () => navigate(-1));
+    actions.append(back);
+    list.append(actions);
+  }
+}
+
+function renderTemplates(blueprints) {
+  const list = document.getElementById('template-list');
+  list.replaceChildren();
+
+  if (!blueprints.length) {
+    const empty = document.createElement('div');
+    empty.className = 'info-box neutral';
+    empty.textContent = 'Keine Templates gefunden.';
+    list.append(empty);
+    return;
+  }
+
+  for (const bp of blueprints) {
+    const card = document.createElement('div');
+    card.className = 'template-card';
+    card.dataset.templateId = bp.id;
+    if (selectedTemplates.has(bp.id)) card.classList.add('selected');
+
+    const check = document.createElement('div');
+    check.className = 'template-check';
+
+    const body = document.createElement('div');
+    body.className = 'template-body';
+
+    const name = document.createElement('div');
+    name.className = 'template-name';
+    name.textContent = bp.name + (bp.version ? ` (${bp.version})` : '');
+
+    const desc = document.createElement('div');
+    desc.className = 'template-desc';
+    desc.textContent = bp.description || 'Keine Beschreibung.';
+
+    const tags = document.createElement('div');
+    tags.className = 'template-tags';
+    const sourceTag = document.createElement('span');
+    sourceTag.className = 'template-tag ' + (bp.source === 'builtin' ? 'builtin' : 'imported');
+    sourceTag.textContent = bp.source === 'builtin' ? 'Built-in' : 'Importiert';
+    tags.append(sourceTag);
+    if (bp.trusted) {
+      const trust = document.createElement('span');
+      trust.className = 'template-tag trusted';
+      trust.textContent = '✓ Signiert';
+      tags.append(trust);
+    } else if (bp.source !== 'builtin') {
+      const warn = document.createElement('span');
+      warn.className = 'template-tag imported';
+      warn.textContent = '⚠ Unsigniert';
+      tags.append(warn);
+    }
+
+    body.append(name, desc, tags);
+    card.append(check, body);
+
+    card.addEventListener('click', () => {
+      if (selectedTemplates.has(bp.id)) {
+        selectedTemplates.delete(bp.id);
+        card.classList.remove('selected');
+      } else {
+        selectedTemplates.add(bp.id);
+        card.classList.add('selected');
+      }
+      updateTemplatesNextBtn();
+    });
+
+    list.append(card);
+  }
+
+  // Buttons-Row anhängen
+  const actions = document.createElement('div');
+  actions.className = 'step-actions';
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-secondary btn-sm';
+  backBtn.id = 'btn-templates-back';
+  backBtn.textContent = 'Zurück';
+  backBtn.addEventListener('click', () => navigate(-1));
+
+  const spacer = document.createElement('div');
+  spacer.className = 'footer-spacer';
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'btn btn-primary btn-sm';
+  nextBtn.id = 'btn-templates-next';
+  nextBtn.textContent = 'Weiter mit Setup-Agent';
+  nextBtn.disabled = selectedTemplates.size === 0;
+  nextBtn.addEventListener('click', openSetupAgent);
+
+  actions.append(backBtn, spacer, nextBtn);
+  list.append(actions);
+}
+
+function updateTemplatesNextBtn() {
+  const btn = document.getElementById('btn-templates-next');
+  if (btn) btn.disabled = selectedTemplates.size === 0;
+}
+
+async function openSetupAgent() {
+  if (!savedVaultId || selectedTemplates.size === 0) return;
+  const templates = [...selectedTemplates].join(',');
+  await chrome.storage.local.set({
+    setupAgentContext: {
+      vault_id: savedVaultId,
+      templates: [...selectedTemplates],
+      mode: 'fresh',
+      opened_at: Date.now(),
+    },
+  });
+  const url = chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(savedVaultId)}&mode=fresh&templates=${encodeURIComponent(templates)}`);
+  chrome.tabs.create({ url });
+  // Wizard-Tab nach kurzer Verzögerung schließen
+  setTimeout(() => {
+    chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); });
+  }, 400);
+}
+
+async function skipSetupAgent() {
+  const status = document.getElementById('step5-status');
+  status.style.display = 'none';
+  if (!savedVaultId) {
+    status.className = 'info-box error';
+    status.textContent = 'Vault-ID fehlt — bitte zurück zu Schritt 4.';
+    status.style.display = 'block';
+    return;
+  }
+  status.className = 'info-box neutral';
+  status.textContent = 'Wende Standard-Blueprint an…';
+  status.style.display = 'block';
+  try {
+    const bpRes = await fetch(httpBase() + '/blueprints/karpathy-para-base');
+    if (!bpRes.ok) throw new Error('Blueprint nicht gefunden: HTTP ' + bpRes.status);
+    const blueprint = await bpRes.json();
+    const commitRes = await fetch(httpBase() + `/vaults/${savedVaultId}/blueprint/commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blueprint }),
+    });
+    if (!commitRes.ok) {
+      const errText = await commitRes.text();
+      throw new Error('Commit fehlgeschlagen: ' + errText);
+    }
+    // Weiter zu Step 6 (Fertig)
+    document.getElementById('step-5').classList.remove('active');
+    document.getElementById('step-6').classList.add('active');
+    current = 6;
+    updateProgress(6);
+    updateFooter(6);
+    const path = document.querySelector('.checkmark-path');
+    if (path) { path.style.animation = 'none'; path.offsetHeight; path.style.animation = ''; }
+  } catch (e) {
+    status.className = 'info-box error';
+    status.textContent = 'Fehler: ' + e.message;
+    status.style.display = 'block';
   }
 }
 
@@ -305,43 +520,85 @@ document.querySelectorAll('.provider-card').forEach(card => {
   });
 });
 
+// Default-Provider beim Laden setzen (Anthropic ist vorausgewählt, ohne Klick
+// wäre der Key-Link sonst leer).
+if (keyLinks[selectedProvider]) {
+  document.getElementById('key-gen-link').href = keyLinks[selectedProvider];
+}
+
+// Fenster-ID vorab holen, damit der Quick-Start das Side-Panel synchron öffnen kann.
+let wizardWindowId = null;
+chrome.windows.getCurrent().then(w => { wizardWindowId = w.id; }).catch(() => {});
+
+// ── Vault-Pfad durchsuchen (nativer Ordner-Dialog via Server) ─────────────
+document.getElementById('btn-browse-vault').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-browse-vault');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Wähle…';
+  try {
+    const res = await fetch(httpBase() + '/pick_folder');
+    const data = await res.json();
+    if (data.ok && data.path) {
+      document.getElementById('vault-path').value = data.path;
+    }
+  } catch { /* Dialog abgebrochen oder Server offline — Eingabefeld bleibt */ }
+  finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 // ── Vault Mode Toggle ─────────────────────────────────────────────────────
 document.getElementById('mode-new').addEventListener('click', () => {
   vaultMode = 'new';
   document.getElementById('mode-new').classList.add('active');
   document.getElementById('mode-existing').classList.remove('active');
   document.getElementById('vault-new-hint').style.display = 'block';
+  updateFooter(current);
 });
 document.getElementById('mode-existing').addEventListener('click', () => {
   vaultMode = 'existing';
   document.getElementById('mode-existing').classList.add('active');
   document.getElementById('mode-new').classList.remove('active');
   document.getElementById('vault-new-hint').style.display = 'none';
+  updateFooter(current);
 });
 
 // ── Footer buttons ────────────────────────────────────────────────────────
 document.getElementById('btn-next').addEventListener('click', () => navigate(1));
 document.getElementById('btn-back').addEventListener('click', () => navigate(-1));
 document.getElementById('btn-skip').addEventListener('click', () => {
-  current++;
-  document.getElementById('step-4').classList.remove('active');
-  document.getElementById('step-5').classList.add('active');
-  updateProgress(5);
-  updateFooter(5);
+  // Skip-Button überspringt Vault komplett → direkt zu Step 6
+  document.getElementById('step-' + current).classList.remove('active');
+  document.getElementById('step-6').classList.add('active');
+  current = 6;
+  updateProgress(6);
+  updateFooter(6);
   const path = document.querySelector('.checkmark-path');
-  path.style.animation = 'none'; path.offsetHeight; path.style.animation = '';
+  if (path) { path.style.animation = 'none'; path.offsetHeight; path.style.animation = ''; }
 });
 
-// ── Step 5 buttons ────────────────────────────────────────────────────────
+// ── Setup-Agent-Überspringen-Link ─────────────────────────────────────────
+document.getElementById('skip-setup-agent').addEventListener('click', (e) => {
+  e.preventDefault();
+  skipSetupAgent();
+});
+
+// ── Step 6 (Fertig) buttons ───────────────────────────────────────────────
 document.getElementById('btn-open-extension').addEventListener('click', () => {
   chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); });
 });
 document.getElementById('btn-open-settings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
-['qc-youtube', 'qc-chat', 'qc-notes'].forEach(id => {
+const QC_TOOL = { 'qc-youtube': 'youtube_transcript', 'qc-chat': 'chat', 'qc-notes': 'scratchpad' };
+Object.keys(QC_TOOL).forEach(id => {
   document.getElementById(id).addEventListener('click', () => {
-    chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); });
+    // sidePanel.open MUSS synchron in der User-Geste laufen (kein await davor).
+    try { if (wizardWindowId != null) chrome.sidePanel.open({ windowId: wizardWindowId }); } catch {}
+    chrome.storage.local.set({ startTool: QC_TOOL[id] });
+    setTimeout(() => chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); }), 150);
   });
 });
 

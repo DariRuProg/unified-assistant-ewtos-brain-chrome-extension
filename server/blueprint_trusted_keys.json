@@ -1,0 +1,10 @@
+{
+  "keys": [
+    {
+      "id": "ewtos-2026-key1",
+      "alg": "ed25519",
+      "pubkey": null,
+      "note": "Platzhalter — pubkey wird mit erstem Premium-Blueprint nachgereicht."
+    }
+  ]
+}

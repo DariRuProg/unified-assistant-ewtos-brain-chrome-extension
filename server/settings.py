@@ -20,8 +20,9 @@ from pathlib import Path
 from typing import Any
 
 import config
+import paths
 
-SETTINGS_FILE = Path(__file__).parent / "settings.json"
+SETTINGS_FILE = paths.settings_file()
 EDITABLE_KEYS = {
     "anthropic_api_key",
     "chat_model",
@@ -33,13 +34,24 @@ EDITABLE_KEYS = {
     "mistral_api_key",
     "gemini_api_key",
     "image_gen_model",
+    "youtube_api_key",
+    "setup_agent_provider",
+    "setup_agent_model",
+    "vault_search_enabled",
 }
-SECRET_KEYS = {"anthropic_api_key", "openai_api_key", "mistral_api_key", "gemini_api_key"}
+SECRET_KEYS = {
+    "anthropic_api_key",
+    "openai_api_key",
+    "mistral_api_key",
+    "gemini_api_key",
+    "youtube_api_key",
+}
 SECRET_ENV_MAP = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
     "mistral_api_key": "MISTRAL_API_KEY",
     "gemini_api_key": "GEMINI_API_KEY",
+    "youtube_api_key": "YOUTUBE_API_KEY",
 }
 
 _cache: dict[str, Any] | None = None
@@ -119,7 +131,7 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
-DEFAULT_VAULT_PERMISSIONS = {"write_raw": False, "write_playlists": False}
+DEFAULT_VAULT_PERMISSIONS = {"write_raw": False, "write_playlists": False, "write_files": False}
 
 DEFAULT_BRIEFING_PROFILES = [
     {
@@ -164,7 +176,7 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
     for i, v in enumerate(vaults):
         if v.get("id") == vault_id:
             updated = dict(v)
-            for k in ("name", "path", "system_prompt"):
+            for k in ("name", "path", "system_prompt", "blueprint_ref"):
                 if k in fields and fields[k] is not None:
                     updated[k] = fields[k]
             if "use_local_notes" in fields and fields["use_local_notes"] is not None:
@@ -180,6 +192,47 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
             _flush()
             return dict(updated)
     return None
+
+
+# --- Imported Blueprints --------------------------------------------------
+
+def get_imported_blueprints() -> list[dict[str, Any]]:
+    """Liste der importierten Blueprints. Eintrag: {blueprint: {...}, trusted: bool, imported_at: str|None}."""
+    return list(all().get("imported_blueprints") or [])
+
+
+def add_imported_blueprint(blueprint: dict[str, Any], trusted: bool = False) -> None:
+    """Fuegt importierten Blueprint hinzu, ersetzt vorhandenen mit gleicher id."""
+    global _cache
+    import time
+    current = all()
+    items = list(current.get("imported_blueprints") or [])
+    bid = blueprint.get("blueprint_id")
+    if not bid:
+        raise ValueError("blueprint_id fehlt")
+    entry = {
+        "blueprint": dict(blueprint),
+        "trusted": bool(trusted),
+        "imported_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    new_list = [e for e in items if (e.get("blueprint") or {}).get("blueprint_id") != bid]
+    new_list.append(entry)
+    current["imported_blueprints"] = new_list
+    _cache = current
+    _flush()
+
+
+def remove_imported_blueprint(blueprint_id: str) -> bool:
+    global _cache
+    current = all()
+    items = list(current.get("imported_blueprints") or [])
+    new_list = [e for e in items if (e.get("blueprint") or {}).get("blueprint_id") != blueprint_id]
+    if len(new_list) == len(items):
+        return False
+    current["imported_blueprints"] = new_list
+    _cache = current
+    _flush()
+    return True
 
 
 def vault_notes_dir(vault_id: str | None) -> Path:

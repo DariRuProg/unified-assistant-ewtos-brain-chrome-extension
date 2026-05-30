@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>EwtosBrain — UI Redesign Mockup</title>
+<style>
+  :root {
+    --bg: #0e0f12;
+    --bg-elevated: #15171c;
+    --bg-tile: #1a1d24;
+    --bg-tile-hover: #21252e;
+    --border: #2a2f3a;
+    --border-strong: #3a414f;
+    --text: #e6e8ee;
+    --text-muted: #8a92a3;
+    --text-faint: #5c6373;
+    --accent: #ff7847;
+    --accent-soft: rgba(255, 120, 71, 0.12);
+    --success: #4ade80;
+    --warn: #fbbf24;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h1 .sub {
+    color: var(--text-faint);
+    font-weight: 400;
+    font-size: 14px;
+    margin-left: 8px;
+  }
+  .intro {
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    max-width: 760px;
+  }
+  .intro code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg-elevated);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  section { margin-bottom: 56px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .section-head .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+  }
+  .section-head h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .section-desc {
+    color: var(--text-muted);
+    margin: 4px 0 24px;
+    max-width: 760px;
+  }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    max-width: 880px;
+  }
+  .variant-head {
+    margin-bottom: 12px;
+  }
+  .variant-head h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .variant-head h3 .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-left: 8px;
+    font-weight: 400;
+  }
+  .variant-head p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  /* Sidepanel-Frame */
+  .panel {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-header .brand {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .panel-header .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.15);
+  }
+  .panel-tabs {
+    display: flex;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+  }
+  .panel-tabs button {
+    background: none; border: none; color: var(--text-muted);
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+  }
+  .panel-tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .panel-tabs .view-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    border-bottom: none;
+    gap: 0;
+    padding: 8px 0;
+  }
+  .view-toggle .vt-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin: 0;
+  }
+  .view-toggle .vt-btn.first { border-radius: 4px 0 0 4px; }
+  .view-toggle .vt-btn.last  { border-radius: 0 4px 4px 0; border-left: 0; }
+  .view-toggle .vt-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--border-strong);
+  }
+  .quick-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .quick-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 7px 4px;
+    background: var(--bg-tile);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    position: relative;
+  }
+  .quick-btn:hover { background: var(--bg-tile-hover); border-color: var(--border-strong); }
+  .quick-btn .ico { font-size: 16px; }
+  .quick-btn.plus {
+    color: var(--text-faint);
+    border-style: dashed;
+    background: transparent;
+  }
+  .quick-btn.editing {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .quick-btn.editing::after {
+    content: "✕";
+    position: absolute;
+    top: -6px; right: -6px;
+    background: var(--accent);
+    color: #fff;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  .quick-row-wrap { position: relative; }
+  .quick-edit-trigger {
+    position: absolute;
+    top: 4px; right: 10px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2;
+  }
+  .quick-edit-trigger:hover { color: var(--text); border-color: var(--border-strong); }
+
+  /* Tool-Liste */
+  .tools-body { padding: 12px; min-height: 280px; }
+  .tools {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tool {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-tile);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    align-items: center;
+    position: relative;
+  }
+  .tool:hover {
+    background: var(--bg-tile-hover);
+    border-color: var(--border-strong);
+  }
+  .tool .ico {
+    font-size: 18px;
+    text-align: center;
+  }
+  .tool .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tool .label { font-size: 13px; font-weight: 500; }
+  .tool .hint  { font-size: 11px; color: var(--text-muted); }
+  .tool .count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-faint);
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  /* Variante A: Action-Chips im Fuß */
+  .tool.has-chips {
+    grid-template-columns: 32px 1fr auto;
+    padding-bottom: 0;
+  }
+  .tool .chips {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    border-top: 1px dashed var(--border);
+    padding: 8px 0 10px;
+    margin-left: -2px;
+  }
+  .chip {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .chip:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .chip .chip-ico { font-size: 11px; }
+
+  /* Variante B: Caret + Popover */
+  .tool.has-caret { padding-right: 8px; }
+  .caret {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-faint);
+    width: 24px; height: 24px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit;
+  }
+  .caret:hover {
+    color: var(--text);
+    background: var(--bg);
+    border-color: var(--border-strong);
+  }
+  .popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 4px;
+    min-width: 200px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    z-index: 10;
+    display: none;
+  }
+  .popover.open { display: block; }
+  .popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .popover-item:hover { background: var(--bg-tile-hover); }
+  .popover-item .pi-ico { width: 16px; text-align: center; }
+  .popover-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+  .popover-item.muted { color: var(--text-muted); }
+
+  /* Quick-Buttons Mockup Sektion */
+  .qb-section .panel {
+    max-width: 400px;
+  }
+
+  /* Inline-Editor für Quick-Buttons (Variante B) */
+  .qb-editor {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+    display: none;
+  }
+  .qb-editor.open { display: block; }
+  .qb-editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .qb-editor-head .title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .qb-editor-head .close {
+    background: none; border: none;
+    color: var(--text-faint);
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .qb-slots {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .qb-slot {
+    background: var(--bg-tile);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 4px;
+    text-align: center;
+    cursor: grab;
+    font-size: 10px;
+  }
+  .qb-slot.empty {
+    border-style: dashed;
+    color: var(--text-faint);
+  }
+  .qb-slot .ico { display: block; font-size: 16px; margin-bottom: 2px; }
+  .qb-hint {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .qb-picker {
+    margin-top: 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .qb-pick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .qb-pick:hover { background: var(--bg-tile-hover); }
+  .qb-pick .ico { width: 18px; text-align: center; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    font-family: var(--mono);
+    z-index: 100;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast-accent { color: var(--accent); }
+
+  .note {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--accent-soft);
+    border-left: 2px solid var(--accent);
+    color: var(--text);
+    font-size: 12px;
+    border-radius: 0 4px 4px 0;
+    max-width: 880px;
+  }
+  .note strong { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>EwtosBrain — UI Redesign Mockup <span class="sub">A/B-Vergleich, klickbar</span></h1>
+<p class="intro">
+  Zwei Vorschläge stehen sich nebeneinander gegenüber. Klick die Buttons an —
+  Caret öffnet Popover, Chips zeigen Toast. Nichts ändert echten Code, das hier
+  ist nur statische Vorschau. Dateipfad: <code>mockups/ui-redesign.html</code>.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEKTION 1: Sekundär-Aktionen auf Tool-Kacheln                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="section-head">
+    <span class="tag">01</span>
+    <h2>Sekundär-Aktionen auf Kacheln</h2>
+  </div>
+  <p class="section-desc">
+    Problem: Bookmarks-Tool kann nicht nur speichern, sondern auch markierte Tabs
+    erfassen oder reine URLs in die Zwischenablage kopieren. Aktuell nicht erkennbar
+    auf der Kachel. Hier zwei Lösungen:
+  </p>
+
+  <div class="compare">
+    <!-- Variante A: Action-Chips -->
+    <div>
+      <div class="variant-head">
+        <h3>A — Action-Chips im Fuß <span class="badge">explizit</span></h3>
+        <p>Aktionen direkt sichtbar. +28px Höhe pro Kachel. Empfohlen für 2-3 Tools mit echtem Multi-Action-Bedarf.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="brand">EwtosBrain</div>
+          <div class="status"><span class="dot"></span>verbunden</div>
+        </div>
+        <div class="panel-tabs">
+          <button class="active">Vault</button>
+          <button>Web</button>
+          <div class="view-toggle">
+            <button class="vt-btn first" title="Liste">☰</button>
+            <button class="vt-btn last active" title="Kachel">⊞</button>
+          </div>
+        </div>
+        <div class="quick-row">
+          <button class="quick-btn"><span class="ico">📚</span>Vault</button>
+          <button class="quick-btn"><span class="ico">📝</span>Notiz</button>
+          <button class="quick-btn"><span class="ico">✅</span>Todos</button>
+          <button class="quick-btn"><span class="ico">☀</span>Morgen</button>
+        </div>
+        <div class="tools-body">
+          <ul class="tools">
+            <li class="tool">
+              <span class="ico">📚</span>
+              <div class="meta">
+                <span class="label">Explorer</span>
+                <span class="hint">Vault durchblättern</span>
+              </div>
+              <span class="count">128</span>
+            </li>
+            <li class="tool has-chips">
+              <span class="ico">🔖</span>
+              <div class="meta">
+                <span class="label">Bookmarks</span>
+                <span class="hint">URL-Inbox aus Browser-Capture</span>
+              </div>
+              <span class="count">42</span>
+              <div class="chips">
+                <button class="chip" data-toast="+ neuer Bookmark angelegt">
+                  <span class="chip-ico">+</span>Neu
+                </button>
+                <button class="chip" data-toast="3 markierte Tabs erfasst">
+                  <span class="chip-ico">⇲</span>Tabs
+                </button>
+                <button class="chip" data-toast="3 URLs in Zwischenablage">
+                  <span class="chip-ico">⧉</span>URLs kopieren
+                </button>
+              </div>
+            </li>
+            <li class="tool">
+              <span class="ico">✅</span>
+              <div class="meta">
+                <span class="label">Todos</span>
+                <span class="hint">Liste mit Due-Dates</span>
+              </div>
+              <span class="count">7</span>
+            </li>
+            <li class="tool">
+              <span class="ico">📝</span>
+              <div class="meta">
+                <span class="label">Note-Taker</span>
+                <span class="hint">Globaler Scratchpad</span>
+              </div>
+              <span class="count">—</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variante B: Caret + Popover -->
+    <div>
+      <div class="variant-head">
+        <h3>B — Caret-Split-Button <span class="badge">dezent</span></h3>
+        <p>Liste bleibt minimal. Klick auf Body öffnet Tool, Klick auf ▾ öffnet Aktionen-Menü. Default für alle Tools.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="brand">EwtosBrain</div>
+          <div class="status"><span class="dot"></span>verbunden</div>
+        </div>
+        <div class="panel-tabs">
+          <button class="active">Vault</button>
+          <button>Web</button>
+          <div class="view-toggle">
+            <button class="vt-btn first" title="Liste">☰</button>
+            <button class="vt-btn last active" title="Kachel">⊞</button>
+          </div>
+        </div>
+        <div class="quick-row">
+          <button class="quick-btn"><span class="ico">📚</span>Vault</button>
+          <button class="quick-btn"><span class="ico">📝</span>Notiz</button>
+          <button class="quick-btn"><span class="ico">✅</span>Todos</button>
+          <button class="quick-btn"><span class="ico">☀</span>Morgen</button>
+        </div>
+        <div class="tools-body">
+          <ul class="tools">
+            <li class="tool">
+              <span class="ico">📚</span>
+              <div class="meta">
+                <span class="label">Explorer</span>
+                <span class="hint">Vault durchblättern</span>
+              </div>
+              <span class="count">128</span>
+            </li>
+            <li class="tool has-caret">
+              <span class="ico">🔖</span>
+              <div class="meta">
+                <span class="label">Bookmarks <span class="count" style="margin-left:6px">42</span></span>
+                <span class="hint">URL-Inbox aus Browser-Capture</span>
+              </div>
+              <button class="caret" data-popover="pop-bookmarks">▾</button>
+              <div class="popover" id="pop-bookmarks">
+                <div class="popover-item" data-toast="+ neuer Bookmark angelegt"><span class="pi-ico">+</span>Neuen Bookmark</div>
+                <div class="popover-item" data-toast="3 markierte Tabs erfasst"><span class="pi-ico">⇲</span>Markierte Tabs</div>
+                <div class="popover-item" data-toast="3 URLs in Zwischenablage"><span class="pi-ico">⧉</span>URLs kopieren</div>
+                <div class="popover-divider"></div>
+                <div class="popover-item muted" data-toast="Tool geöffnet"><span class="pi-ico">⚙</span>Tool öffnen</div>
+              </div>
+            </li>
+            <li class="tool">
+              <span class="ico">✅</span>
+              <div class="meta">
+                <span class="label">Todos</span>
+                <span class="hint">Liste mit Due-Dates</span>
+              </div>
+              <span class="count">7</span>
+            </li>
+            <li class="tool">
+              <span class="ico">📝</span>
+              <div class="meta">
+                <span class="label">Note-Taker</span>
+                <span class="hint">Globaler Scratchpad</span>
+              </div>
+              <span class="count">—</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Hinweis zum Vergleich:</strong> A ist lauter, aber zero-click-Discovery.
+    B ist ruhiger und skaliert auf beliebig viele Aktionen. Hybrid möglich: A für
+    Bookmarks/Screenshot/Page-Scrape, B als Default für alle anderen.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SEKTION 2: Konfigurierbare Quick-Buttons                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="qb-section">
+  <div class="section-head">
+    <span class="tag">02</span>
+    <h2>Konfigurierbare Quick-Buttons</h2>
+  </div>
+  <p class="section-desc">
+    4 Slots, frei belegbar. Beide Varianten zeigen denselben Editor-Flow —
+    Unterschied ist nur, wie er ausgelöst wird.
+  </p>
+
+  <div class="compare">
+    <!-- Variante A: Long-Press / Stift-Button -->
+    <div>
+      <div class="variant-head">
+        <h3>A — Stift-Trigger oben rechts <span class="badge">explizit, klein</span></h3>
+        <p>Dezentes ✎-Icon öffnet Edit-Modus. Slots wackeln, ✕ löscht, Klick wählt Tool. Bekannte iOS-Metapher.</p>
+      </div>
+      <div class="panel" id="panel-qb-a">
+        <div class="panel-header">
+          <div class="brand">EwtosBrain</div>
+          <div class="status"><span class="dot"></span>verbunden</div>
+        </div>
+        <div class="panel-tabs">
+          <button class="active">Vault</button>
+          <button>Web</button>
+          <div class="view-toggle">
+            <button class="vt-btn first" title="Liste">☰</button>
+            <button class="vt-btn last active" title="Kachel">⊞</button>
+          </div>
+        </div>
+        <div class="quick-row-wrap">
+          <button class="quick-edit-trigger" data-toggle-editor="editor-a" title="Quick-Slots bearbeiten">✎</button>
+          <div class="quick-row" id="row-a">
+            <button class="quick-btn"><span class="ico">📚</span>Vault</button>
+            <button class="quick-btn"><span class="ico">📝</span>Notiz</button>
+            <button class="quick-btn"><span class="ico">✅</span>Todos</button>
+            <button class="quick-btn"><span class="ico">☀</span>Morgen</button>
+          </div>
+        </div>
+        <div class="qb-editor" id="editor-a">
+          <div class="qb-editor-head">
+            <span class="title">Quick-Slots bearbeiten</span>
+            <button class="close" data-toggle-editor="editor-a">✕</button>
+          </div>
+          <div class="qb-slots">
+            <div class="qb-slot"><span class="ico">📚</span>Vault</div>
+            <div class="qb-slot"><span class="ico">📝</span>Notiz</div>
+            <div class="qb-slot empty">leer</div>
+            <div class="qb-slot empty">leer</div>
+          </div>
+          <p class="qb-hint">Tippe auf einen leeren Slot, um ein Tool zu wählen:</p>
+          <div class="qb-picker">
+            <div class="qb-pick"><span class="ico">🔍</span>SEO-Check</div>
+            <div class="qb-pick"><span class="ico">📄</span>Page-Scrape</div>
+            <div class="qb-pick"><span class="ico">🎨</span>Color-Picker</div>
+            <div class="qb-pick"><span class="ico">📸</span>Screenshot</div>
+            <div class="qb-pick"><span class="ico">🔖</span>Bookmarks</div>
+            <div class="qb-pick"><span class="ico">🎵</span>Playlists</div>
+          </div>
+        </div>
+        <div class="tools-body">
+          <ul class="tools">
+            <li class="tool">
+              <span class="ico">📚</span>
+              <div class="meta">
+                <span class="label">Explorer</span>
+                <span class="hint">Vault durchblättern</span>
+              </div>
+              <span class="count">128</span>
+            </li>
+            <li class="tool">
+              <span class="ico">📝</span>
+              <div class="meta">
+                <span class="label">Note-Taker</span>
+                <span class="hint">Globaler Scratchpad</span>
+              </div>
+              <span class="count">—</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variante B: "+"-Slot als 5. Position -->
+    <div>
+      <div class="variant-head">
+        <h3>B — „+"-Slot als Affordance <span class="badge">discoverable</span></h3>
+        <p>Solange Slots frei sind, ist ein „+"-Platzhalter sichtbar. Klick öffnet Editor. Nicht zu übersehen, kein Mystery-Long-Press.</p>
+      </div>
+      <div class="panel" id="panel-qb-b">
+        <div class="panel-header">
+          <div class="brand">EwtosBrain</div>
+          <div class="status"><span class="dot"></span>verbunden</div>
+        </div>
+        <div class="panel-tabs">
+          <button class="active">Vault</button>
+          <button>Web</button>
+          <div class="view-toggle">
+            <button class="vt-btn first" title="Liste">☰</button>
+            <button class="vt-btn last active" title="Kachel">⊞</button>
+          </div>
+        </div>
+        <div class="quick-row" id="row-b">
+          <button class="quick-btn"><span class="ico">📚</span>Vault</button>
+          <button class="quick-btn"><span class="ico">📝</span>Notiz</button>
+          <button class="quick-btn"><span class="ico">✅</span>Todos</button>
+          <button class="quick-btn plus" data-toggle-editor="editor-b">+<br>Slot</button>
+        </div>
+        <div class="qb-editor" id="editor-b">
+          <div class="qb-editor-head">
+            <span class="title">Slot 4 belegen</span>
+            <button class="close" data-toggle-editor="editor-b">✕</button>
+          </div>
+          <p class="qb-hint" style="margin-top:0;margin-bottom:10px;">Tool auswählen:</p>
+          <div class="qb-picker">
+            <div class="qb-pick"><span class="ico">☀</span>Briefing „Guten Morgen"</div>
+            <div class="qb-pick"><span class="ico">🔖</span>Bookmarks</div>
+            <div class="qb-pick"><span class="ico">🔍</span>SEO-Check</div>
+            <div class="qb-pick"><span class="ico">📄</span>Page-Scrape</div>
+            <div class="qb-pick"><span class="ico">🎨</span>Color-Picker</div>
+            <div class="qb-pick"><span class="ico">📸</span>Screenshot</div>
+          </div>
+        </div>
+        <div class="tools-body">
+          <ul class="tools">
+            <li class="tool">
+              <span class="ico">📚</span>
+              <div class="meta">
+                <span class="label">Explorer</span>
+                <span class="hint">Vault durchblättern</span>
+              </div>
+              <span class="count">128</span>
+            </li>
+            <li class="tool">
+              <span class="ico">📝</span>
+              <div class="meta">
+                <span class="label">Note-Taker</span>
+                <span class="hint">Globaler Scratchpad</span>
+              </div>
+              <span class="count">—</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Hinweis:</strong> In beiden Varianten ist der View-Toggle (☰/⊞) jetzt
+    sichtbar rechts neben den Tabs — nicht mehr versteckt im Burger. Die Tabs
+    zeigen nur noch Vault/Web (Code-Tab entfernt bis Sprint 3).
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const toast = document.getElementById("toast");
+  function showToast(msg) {
+    toast.innerHTML = '<span class="toast-accent">→</span> ' + msg;
+    toast.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove("show"), 1800);
+  }
+
+  // Chips + Popover-Items mit data-toast
+  document.querySelectorAll("[data-toast]").forEach(el => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showToast(el.dataset.toast);
+      // Popover schließen wenn aus Popover
+      const pop = el.closest(".popover");
+      if (pop) pop.classList.remove("open");
+    });
+  });
+
+  // Caret → Popover toggle
+  document.querySelectorAll("[data-popover]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pop = document.getElementById(btn.dataset.popover);
+      document.querySelectorAll(".popover.open").forEach(p => {
+        if (p !== pop) p.classList.remove("open");
+      });
+      pop.classList.toggle("open");
+    });
+  });
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".popover.open").forEach(p => p.classList.remove("open"));
+  });
+
+  // Editor toggle
+  document.querySelectorAll("[data-toggle-editor]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const ed = document.getElementById(btn.dataset.toggleEditor);
+      ed.classList.toggle("open");
+    });
+  });
+
+  // Tool-Klicks (Body) zeigen Toast
+  document.querySelectorAll(".tool").forEach(tool => {
+    tool.addEventListener("click", (e) => {
+      if (e.target.closest(".chip, .caret, .popover")) return;
+      const label = tool.querySelector(".label").textContent.trim();
+      showToast("Tool geöffnet: " + label);
+    });
+  });
+
+  // Quick-Buttons Toast
+  document.querySelectorAll(".quick-btn").forEach(qb => {
+    qb.addEventListener("click", (e) => {
+      if (qb.dataset.toggleEditor) return; // "+"-Slot hat eigenen Handler
+      const text = qb.textContent.trim();
+      showToast("Quick: " + text);
+    });
+  });
+
+  // Picker-Items: Slot wird belegt (visuelles Feedback nur)
+  document.querySelectorAll(".qb-pick").forEach(p => {
+    p.addEventListener("click", () => {
+      const label = p.textContent.trim();
+      showToast("Slot belegt: " + label);
+    });
+  });
+</script>
+
+</body>
+</html>

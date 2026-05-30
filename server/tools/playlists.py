@@ -63,6 +63,31 @@ def _playlist_path(vault_id: str, name: str, saeule: str) -> Path:
     return _playlist_dir(vault_id, saeule) / f"{_slugify(name)}.md"
 
 
+def _update_playlist_index(root: Path, saeule: str, slug: str, name: str, thema: str | None) -> None:
+    """Trägt eine neue Playlist in wiki/<saeule>/playlists/index.md ein.
+    Legt index.md an falls sie nicht existiert. Kein Duplikat wenn Slug bereits verlinkt."""
+    index_path = root / "wiki" / saeule / "playlists" / "index.md"
+    entry_link = f"[[wiki/{saeule}/playlists/{slug}]]"
+    label = f"{name} ({thema})" if thema else name
+    new_line = f"- {entry_link} — {label}"
+
+    if index_path.exists():
+        content = index_path.read_text(encoding="utf-8")
+        if f"/{slug}]]" in content:
+            return  # Bereits verlinkt — kein Duplikat
+        if "## Pages" in content:
+            content = content.rstrip("\n") + "\n" + new_line + "\n"
+        else:
+            content = content.rstrip("\n") + "\n\n## Pages\n" + new_line + "\n"
+        index_path.write_text(content, encoding="utf-8")
+    else:
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        index_path.write_text(
+            f"---\ntitel: Playlists\nstatus: aktiv\n---\n\n# Playlists\n\n## Pages\n{new_line}\n",
+            encoding="utf-8",
+        )
+
+
 def _empty_playlist(name: str, thema: str | None, saeule: str) -> str:
     today = date.today().isoformat()
     fm = ["---", f"typ: {saeulen.typ_from_saeule(saeule)}", f"titel: {name}", "status: aktiv"]
@@ -214,6 +239,7 @@ def create_playlist(
     if p.exists():
         raise ValueError(f"Playlist '{name}' existiert bereits ({p.name}) in Säule '{s}'")
     p.write_text(_empty_playlist(name, thema, s), encoding="utf-8")
+    _update_playlist_index(Path(settings.get_vault(vault_id)["path"]), s, p.stem, name, thema)
     return {"created": True, "name": name, "slug": p.stem, "saeule": s, "path": str(p)}
 
 

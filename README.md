@@ -2,53 +2,70 @@
 
 Unified Chrome Extension + Python Server. Produktivitäts-Assistent mit Vault-Wissen, Browser-Tools und Claude-Code-Integration.
 
-## Schnellstart
+EwtosBrain besteht aus **zwei Teilen**, die getrennt ausgeliefert werden:
 
-### 1. Server starten
+1. **Chrome-Extension** — die Oberfläche (Side-Panel, Tools, Chat).
+2. **Server-App** — das Gehirn (Vault-Zugriff, LLM-Calls). Läuft lokal als Tray-App; eine Chrome-Extension kann selbst keinen Server enthalten.
 
-**Doppelklick auf `start-server.bat`** im Projekt-Ordner.
+---
 
-Beim ersten Mal legt das Skript automatisch ein Python-venv im Projekt-Root an (`.venv\`) und installiert die Dependencies. Danach startet der Server auf `http://127.0.0.1:9988`.
+## Für Endnutzer (installierte Version)
 
-> Voraussetzung: Python 3.11+ ist installiert (von [python.org/downloads](https://python.org/downloads)).
+### 1. Server-App installieren
 
-**Anthropic-API-Key:** wird aus `server/.env` geladen. Vor dem ersten Start anlegen:
+`EwtosBrain-Setup-<version>.exe` ausführen. Installiert nach `%LOCALAPPDATA%\Programs\EwtosBrain` (kein Admin nötig), optional Autostart beim Login. Nach der Installation läuft EwtosBrain als **Tray-Icon** (Systemleiste) auf `http://127.0.0.1:9988`.
+
+Tray-Menü: Logs öffnen · Datenordner öffnen · Neu starten · Beenden.
+
+Alle Daten (Einstellungen, API-Keys, Chats) liegen in `%LOCALAPPDATA%\EwtosBrain` — getrennt vom Programm, überstehen Updates.
+
+### 2. Extension installieren
+
+Aus dem Chrome Web Store (Link vom Owner) oder als entpacktes ZIP via `chrome://extensions/` → Entwicklermodus → „Entpackte Erweiterung laden".
+
+### 3. Einrichten
+
+Side-Panel öffnen → der **Setup-Wizard** führt durch Server-Verbindung, LLM-Provider, API-Key und Vault-Pfad. Der API-Key landet in `%LOCALAPPDATA%\EwtosBrain\settings.json` — keine Datei-Bastelei nötig.
+
+---
+
+## Für Entwickler (aus dem Source starten)
+
+### Server
+
+**Doppelklick auf `start-server.bat`.** Legt beim ersten Mal ein venv im Projekt-Root an (`.venv\`), installiert Dependencies, startet den Server auf `http://127.0.0.1:9988`.
+
+> Voraussetzung: Python 3.11+ ([python.org](https://python.org/downloads), „Add to PATH" anhaken).
+
+**API-Key:** Wird aus `%LOCALAPPDATA%\EwtosBrain\.env` geladen. Ein vorhandenes `server/.env` wird beim ersten Start automatisch dorthin migriert. Vorlage:
 
 ```
 copy server\.env.example server\.env
 ```
 
-Dann in `server/.env` den Key eintragen: `ANTHROPIC_API_KEY=sk-ant-...`
+Dann `ANTHROPIC_API_KEY=sk-ant-...` eintragen. (Alternativ Key direkt über den Setup-Wizard setzen.)
 
-Wenn die Datei fehlt, warnt `start-server.bat` beim Start; der Server läuft trotzdem, aber Chat-Funktionen funktionieren nicht.
+### Extension
 
-**Server beenden:** Konsole-Fenster schließen.
+`chrome://extensions/` → Entwicklermodus → „Entpackte Erweiterung laden" → Ordner `extension/`.
 
-### 2. Server beim Windows-Start automatisch laden (optional)
+### Server-App bauen (.exe + Installer)
 
-**Doppelklick auf `enable-autostart.bat`** — legt eine Verknüpfung im Windows-Autostart an. Server läuft ab Boot minimiert mit.
+```
+build.bat                     REM PyInstaller -> dist\EwtosBrain\EwtosBrain.exe
+ISCC installer\ewtosbrain.iss REM Inno Setup 6 -> dist\EwtosBrain-Setup-<version>.exe
+```
 
-Deaktivieren: `disable-autostart.bat`.
+Extension-Icons neu generieren (bei Brand-Änderung): `python extension\images\make_icons.py`.
 
-### 3. Extension in Chrome laden
-
-1. `chrome://extensions/` öffnen
-2. Entwicklermodus aktivieren (oben rechts)
-3. **"Entpackte Erweiterung laden"** → Ordner `extension/` wählen
-4. Extension-Icon an die Toolbar pinnen (Puzzle-Icon → EwtosBrain pinnen)
-
-### 4. Side-Panel öffnen + konfigurieren
-
-- Klick aufs Extension-Icon → Side-Panel öffnet sich
-- Status-Punkt sollte grün sein (Server verbunden). Falls rot: Banner zeigt was zu tun ist
-- Für **Chat mit Vault**: API-Key liegt bereits in `server/.env` (siehe Schritt 1). Die Einstellungen-UI in der Extension setzt nur Fallback-Werte in `server/settings.json` — `.env` hat immer Vorrang.
+---
 
 ## Features
 
 - **Note-Taker** — Globaler Scratchpad, autosave, exportierbar
 - **Todos** — Klickbare Liste mit Due-Dates (`@2026-05-04 14:00`-Syntax)
 - **Chat mit Vault** — Karpathy-Navigation: LLM liest `wiki/index.md` und navigiert iterativ
-- **YouTube-Transcript** — Transkript aus aktivem YouTube-Tab
+- **Browser-Tools** — YouTube-Transcript, Page-Scrape, SEO-Check, Screenshot, Color-Picker, Image-Analyse
 
 ## Architektur
 
@@ -56,10 +73,10 @@ Siehe [CLAUDE.md](CLAUDE.md) für Architektur, Sprint-Plan und Design-Entscheidu
 
 ## Trouble-Shooting
 
-**Server startet nicht / Python nicht gefunden** → Python von [python.org](https://python.org/downloads) installieren, beim Setup "Add to PATH" anhaken.
+**Side-Panel zeigt Offline-Banner** → Server-App (Tray) starten bzw. `start-server.bat`, dann „Erneut verbinden".
 
-**`Activate.ps1`-Fehler** → unwichtig, das Skript verwendet `.venv\Scripts\python.exe` direkt, kein `Activate` nötig.
+**Version-Konflikt im Banner** → Extension und Server-App haben inkompatible Versionen (major.minor). Beide auf denselben Stand bringen.
 
-**Port 9988 belegt** → in [server/config.py](server/config.py) `PORT` ändern. Extension-Settings nachziehen (`ws://localhost:<neuer-port>/ws`).
+**Port 9988 belegt** → `EWTOS_PORT` als Umgebungsvariable setzen. Extension-Settings nachziehen (`ws://localhost:<port>/ws`).
 
-**Side-Panel zeigt offline-Banner** → `start-server.bat` doppelklicken, dann "Erneut verbinden" im Banner klicken.
+**Python nicht gefunden (Dev)** → Python von [python.org](https://python.org/downloads) installieren, „Add to PATH" anhaken.

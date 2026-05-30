@@ -1,0 +1,30 @@
+- **🟢 Ingest:** `raw/` → Master-Page in `wiki/<saeule>/videos|creators|playlists/` + Crossrefs + `log.md`-Eintrag.
+- **🔵 Query:** `index.md` → Bucket-Index → Seite → Antwort mit Wikilinks.
+- **🟡 Check:** Stichproben auf Frontmatter, Wikilinks, Tool-Verlinkung.
+- **🔴 Lint:** Voll-Scan auf Widersprüche, Orphans, kaputte Links.
+
+## Schreibrechte für EwtosBrain
+
+EwtosBrain darf **standardmäßig nur** in `inbox/` schreiben. Erweiterte Rechte (`raw/`, Playlists) sind pro Vault in den Extension-Settings einzeln freizugeben.
+
+## Playlists & Videos — Pfad-Konvention
+
+- Playlist-Datei: `wiki/<saeule>/playlists/<slug>.md`
+- Video-Page: `wiki/<saeule>/videos/<slug>.md`
+- Playlists-Index: `wiki/<saeule>/playlists/index.md` — verlinkt alle Playlists der Säule unter `## Pages`
+
+EwtosBrain legt `playlists/index.md` beim Anlegen einer Playlist automatisch an und aktualisiert sie.
+Eintrag-Format: `- [[wiki/<saeule>/playlists/<slug>]] — <titel>`
+
+## Index-Pflege (Invariante)
+
+**Orphan** = eine Page die in `wiki/<saeule>/playlists/` existiert, aber nicht in `playlists/index.md` verlinkt ist.
+
+EwtosBrain verhindert Orphans automatisch beim Anlegen über `create_playlist`. Falls du manuell eine Playlist-Datei anlegst, trage sie sofort in `playlists/index.md` ein.
+
+## Lint — konkrete Schritte
+
+1. `list_folder("wiki/<saeule>/playlists")` → alle Slugs (ohne `index`) sammeln
+2. `read_file("wiki/<saeule>/playlists/index.md")` → verlinkte Slugs aus `[[.../<slug>]]`-Mustern extrahieren
+3. Differenz = Orphans → fehlende Einträge in `index.md` unter `## Pages` nachtragen
+4. Für nicht-ingestierte `raw/`-Dateien: `list_folder("raw/<subfolder>")` → prüfe ob jede Datei als `quelle_url` oder `quellen`-Eintrag in einer Wiki-Page referenziert wird

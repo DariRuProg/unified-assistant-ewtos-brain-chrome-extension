@@ -68,6 +68,56 @@ def read_file(vault_path: str, rel_path: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def search_files(vault_path: str, q: str, max_results: int = 30) -> list[dict]:
+    """Case-insensitive Volltextsuche über alle .md-Dateien im Vault."""
+    root = resolve_dir(vault_path).resolve()
+    results = []
+    query = q.lower()
+    for md_file in sorted(root.rglob("*.md")):
+        if any(part in IGNORED_NAMES for part in md_file.parts):
+            continue
+        try:
+            content = md_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        lower = content.lower()
+        if query not in lower:
+            continue
+        pos = lower.find(query)
+        start = max(0, pos - 60)
+        end = min(len(content), pos + len(q) + 60)
+        snippet = content[start:end].replace("\n", " ").strip()
+        try:
+            rel = str(md_file.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            continue
+        results.append({"rel_path": rel, "snippet": snippet})
+        if len(results) >= max_results:
+            break
+    return results
+
+
+def write_file(vault_path: str, rel_path: str, content: str) -> None:
+    """Überschreibt eine bestehende .md-Datei."""
+    p = _safe_resolve(vault_path, rel_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Datei nicht gefunden: {rel_path}")
+    if p.suffix.lower() != ".md":
+        raise ValueError("Nur .md Dateien erlaubt")
+    p.write_text(content, encoding="utf-8")
+
+
+def create_file(vault_path: str, rel_path: str, content: str = "") -> None:
+    """Legt eine neue .md-Datei an — schlägt fehl wenn sie bereits existiert."""
+    if not rel_path.endswith(".md"):
+        rel_path = rel_path + ".md"
+    p = _safe_resolve(vault_path, rel_path)
+    if p.exists():
+        raise FileExistsError(f"Datei existiert bereits: {rel_path}")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content, encoding="utf-8")
+
+
 def find_claude_md(vault_path: str) -> str | None:
     """CLAUDE.md liegt typischerweise im Vault-Root (Eltern des wiki/-Ordners
     bei Karpathy-Layout, oder direkt im resolved dir bei Notiz-Vaults)."""

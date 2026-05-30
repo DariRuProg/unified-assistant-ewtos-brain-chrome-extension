@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
+import sys
 import uuid
 from datetime import date
 from contextlib import asynccontextmanager
@@ -11,7 +13,10 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent / ".env")
+import paths
+
+paths.migrate_legacy_data()
+load_dotenv(paths.env_file())
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -31,9 +36,22 @@ from tools import auto_tagger
 from tools import raw_promoter
 from tools import saeulen as saeulen_tool
 from tools import image_generator as image_generator_tool
+from tools import blueprint as blueprint_tool
+from tools import setup_agent as setup_agent_tool
+from tools import vault_audit as vault_audit_tool
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
+
+# Single Source der Server-Version. Muss mit extension/manifest.json "version"
+# uebereinstimmen — der WS-Handshake gleicht major.minor ab.
+SERVER_VERSION = "0.1.0"
+
+
+def _version_compatible(client_version: str | None) -> bool:
+    if not client_version:
+        return False
+    return client_version.split(".")[:2] == SERVER_VERSION.split(".")[:2]
 
 
 class ExtensionBridge:
@@ -105,16 +123,46 @@ async def lifespan(app: FastAPI):
     log.info("Server shutting down")
 
 
-app = FastAPI(title="EwtosBrain", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="EwtosBrain", version=SERVER_VERSION, lifespan=lifespan)
 
 
 @app.get("/")
 def root() -> dict[str, Any]:
     return {
         "name": "EwtosBrain",
-        "version": "0.1.0",
+        "version": SERVER_VERSION,
         "extension_connected": bridge.connected,
     }
+
+
+@app.get("/health")
+def health() -> dict[str, Any]:
+    return {"ok": True, "version": SERVER_VERSION}
+
+
+@app.get("/pick_folder")
+def pick_folder() -> dict[str, Any]:
+    """Oeffnet einen nativen Ordner-Dialog auf der Server-Maschine (lokal) und
+    gibt den gewaehlten Pfad zurueck. Fuer den Vault-Pfad im Setup-Wizard."""
+    if sys.platform != "win32":
+        return {"ok": False, "error": "Ordner-Dialog nur unter Windows verfügbar."}
+    ps = (
+        "Add-Type -AssemblyName System.Windows.Forms;"
+        "$f=New-Object System.Windows.Forms.FolderBrowserDialog;"
+        "$f.Description='EwtosBrain: Vault-Ordner wählen';"
+        "$f.ShowNewFolderButton=$true;"
+        "if($f.ShowDialog() -eq 'OK'){[Console]::Out.Write($f.SelectedPath)}"
+    )
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", ps],
+            capture_output=True, text=True, timeout=180,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        path = out.stdout.strip()
+        return {"ok": bool(path), "path": path}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/status")
@@ -131,7 +179,17 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             msg = await ws.receive_json()
             mtype = msg.get("type")
             if mtype == "hello":
-                log.info("Hello from %s v%s", msg.get("client"), msg.get("version"))
+                client_version = msg.get("version")
+                compatible = _version_compatible(client_version)
+                log.info(
+                    "Hello from %s v%s (compatible=%s)",
+                    msg.get("client"), client_version, compatible,
+                )
+                await ws.send_json({
+                    "type": "hello_ack",
+                    "server_version": SERVER_VERSION,
+                    "compatible": compatible,
+                })
             elif mtype == "ping":
                 await ws.send_json({"type": "pong"})
             elif mtype == "tool_result":
@@ -531,12 +589,34 @@ async def playlists_pull_pending(
 # --- Briefing ------------------------------------------------------------
 
 @app.get("/tools/briefing")
-async def briefing_get(profile: str = "default", vault_id: str | None = None) -> dict[str, Any]:
+async def briefing_get(
+    profile: str = "default",
+    vault_id: str | None = None,
+    archive: bool = True,
+) -> dict[str, Any]:
     try:
-        data = await briefing_tool.get_briefing(profile_id=profile, vault_id=vault_id)
+        data = await briefing_tool.get_briefing(
+            profile_id=profile, vault_id=vault_id, archive=archive
+        )
         return {"ok": True, "data": data}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.get("/tools/briefing/lookback")
+def briefing_lookback(days: int = 1, vault_id: str | None = None) -> dict[str, Any]:
+    vault_path: str | None = None
+    if vault_id:
+        v = settings.get_vault(vault_id)
+        if v:
+            vault_path = v["path"]
+    if vault_path is None:
+        vaults = settings.get_vaults()
+        if vaults:
+            vault_path = vaults[0].get("path")
+    if not vault_path:
+        return {"ok": False, "error": "Kein Vault konfiguriert"}
+    return briefing_tool.read_journal_lookback(vault_path, days_ago=days)
 
 
 @app.get("/tools/briefing/profiles")
@@ -690,6 +770,10 @@ class PromoteRequest(BaseModel):
     filename_slug: str | None = None
 
 
+class VaultWriteRequest(BaseModel):
+    content: str
+
+
 @app.post("/tools/promote")
 def promote_endpoint(req: PromoteRequest) -> dict[str, Any]:
     try:
@@ -751,6 +835,76 @@ def vault_list_folder(vault_id: str, rel_path: str = "") -> dict[str, Any]:
         raise HTTPException(400, str(e))
 
 
+@app.get("/tools/vault_audit/{vault_id}")
+def vault_audit_run(vault_id: str) -> dict[str, Any]:
+    """Read-only Health-Check: Orphans, un-ingestete raw, kaputte Links, Frontmatter, CLAUDE.md-Drift."""
+    try:
+        return vault_audit_tool.audit_vault(vault_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/tools/vault_audit/{vault_id}/claude_md_preview")
+def vault_audit_claude_md_preview(vault_id: str) -> dict[str, Any]:
+    try:
+        return blueprint_tool.preview_claude_md_upgrade(vault_id)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/vault_audit/{vault_id}/claude_md_apply")
+def vault_audit_claude_md_apply(vault_id: str) -> dict[str, Any]:
+    try:
+        return blueprint_tool.apply_claude_md_upgrade(vault_id)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/tools/vault_search/{vault_id}")
+def vault_search(vault_id: str, q: str, max_results: int = 30) -> dict[str, Any]:
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    if not q or not q.strip():
+        raise HTTPException(400, "Suchbegriff darf nicht leer sein")
+    results = wiki_reader.search_files(v["path"], q.strip(), max_results)
+    return {"vault_id": vault_id, "q": q, "results": results}
+
+
+@app.put("/tools/vault_file/{vault_id}")
+def vault_file_write(vault_id: str, rel_path: str, body: VaultWriteRequest) -> dict[str, Any]:
+    if not settings.vault_permission(vault_id, "write_files"):
+        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        wiki_reader.write_file(v["path"], rel_path, body.content)
+        return {"ok": True}
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tools/vault_file_new/{vault_id}")
+def vault_file_create(vault_id: str, rel_path: str, body: VaultWriteRequest) -> dict[str, Any]:
+    if not settings.vault_permission(vault_id, "write_files"):
+        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        wiki_reader.create_file(v["path"], rel_path, body.content)
+        return {"ok": True}
+    except FileExistsError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/tools/videos/{vault_id}/{slug}/transcript")
 def videos_save_transcript(
     vault_id: str,
@@ -790,6 +944,7 @@ class SettingsUpdate(BaseModel):
     mistral_api_key: str | None = None
     gemini_api_key: str | None = None
     image_gen_model: str | None = None
+    vault_search_enabled: bool | None = None
 
 
 def _public_settings() -> dict[str, Any]:
@@ -806,6 +961,7 @@ def _public_settings() -> dict[str, Any]:
         "mistral_api_key_set": bool(s.get("mistral_api_key")),
         "gemini_api_key_set": bool(s.get("gemini_api_key")),
         "image_gen_model": s.get("image_gen_model") or "gemini-2.5-flash-image",
+        "vault_search_enabled": s.get("vault_search_enabled", True),
     }
 
 
@@ -929,252 +1085,192 @@ def vaults_delete(vault_id: str) -> dict[str, Any]:
 
 @app.post("/vaults/{vault_id}/scaffold")
 def vaults_scaffold(vault_id: str) -> dict[str, Any]:
-    """Create standard Karpathy + PARA vault structure. Non-destructive — skips existing files.
+    """Convenience-Endpoint: scaffold default Karpathy + PARA vault.
 
-    Pipeline-Achse (Karpathy) top-level: inbox/ → raw/ → wiki/.
-    PARA-Achse innerhalb wiki/: projects/, areas/, resources/, archive/.
-    Schreibt eine agents.md (LLM-agnostisch) + index.md-Hierarchie.
+    Intern: ruft blueprint.commit(vault_id, load_builtin('karpathy-para-base')).
+    Eine einzige Wahrheit fuer alle Scaffold-Pfade.
     """
     v = settings.get_vault(vault_id)
     if not v:
         raise HTTPException(404, "Vault nicht gefunden")
-    vault_path = Path(v["path"])
-    if not vault_path.exists():
-        raise HTTPException(400, f"Pfad existiert nicht: {vault_path}")
+    try:
+        bp = blueprint_tool.load_builtin("karpathy-para-base")
+        return blueprint_tool.commit(vault_id, bp)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
-    today = date.today().isoformat()
-    vault_name = v["name"]
 
-    agents_md = f"""# {vault_name} — agents.md
+# --- Blueprints -----------------------------------------------------------
 
-Dieser Vault folgt der **Karpathy-Pipeline** (inbox → raw → wiki) kombiniert mit **PARA innerhalb `wiki/`** (Projects / Areas / Resources / Archive).
 
-> Diese Datei ist die LLM-agnostische Schema-Beschreibung für jeden Agenten (Claude, ChatGPT, Gemini, lokale Modelle).
+@app.get("/blueprints")
+def blueprints_list() -> dict[str, Any]:
+    return {"blueprints": blueprint_tool.list_available()}
 
-## Struktur
 
-```
-vault/
-├─ agents.md           ← dieses File
-├─ index.md            ← Home-MOC
-├─ log.md              ← append-only Audit
-│
-├─ inbox/              # PARA-Inbox — App-Workspace (Scratchpad, Todos)
-│   ├─ scratchpad.md
-│   └─ todos.md
-│
-├─ raw/                # immutable Quellen
-│   ├─ youtube/<channel>/<slug>.md
-│   ├─ transcripts/<datum>-<slug>.md
-│   ├─ artikel/<slug>.md
-│   ├─ eigene-notizen/<slug>.md
-│   ├─ kunden-input/<kunde>/<slug>.md
-│   └─ chat-archive/<datum>-<slug>.md
-│
-├─ wiki/               # LLM-kuratiert, PARA
-│   ├─ index.md
-│   ├─ projects/       # P — endliche Vorhaben
-│   ├─ areas/          # A — Dauer-Themen
-│   ├─ resources/      # R — Wissens-Assets (creators, videos, playlists)
-│   │   ├─ creators/
-│   │   ├─ videos/
-│   │   └─ playlists/
-│   └─ archive/        # Z — abgeschlossen
-│
-└─ journal/            # optional, Daily Notes
-```
+@app.get("/blueprints/{blueprint_id}")
+def blueprints_get(blueprint_id: str) -> dict[str, Any]:
+    try:
+        bp = blueprint_tool.load_builtin(blueprint_id)
+    except blueprint_tool.BlueprintError:
+        bp = blueprint_tool.load_imported(blueprint_id)
+    if not bp:
+        raise HTTPException(404, "Blueprint nicht gefunden")
+    try:
+        resolved = blueprint_tool.resolve_extends(bp)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+    return resolved
 
-## Schreibrechte
 
-EwtosBrain darf **standardmäßig nur** in `inbox/` schreiben. Schreib-Zugriff auf `raw/` und Playlists ist pro Vault einzeln in den Settings freizugeben. Permission-Keys:
+class BlueprintImportRequest(BaseModel):
+    blueprint: dict[str, Any] | None = None
+    url: str | None = None
 
-- `write_raw` → `promote_to_raw` in die Whitelist-Pfade unter `raw/`
-- `write_playlists` → Playlist-CRUD in `wiki/resources/playlists/`
 
-## Operationen (Karpathy-Methode)
+@app.post("/blueprints/import")
+def blueprints_import(req: BlueprintImportRequest) -> dict[str, Any]:
+    if req.url and not req.blueprint:
+        raise HTTPException(400, "URL-Import noch nicht implementiert — bitte JSON-Body senden.")
+    if not req.blueprint:
+        raise HTTPException(400, "Body braucht 'blueprint'-Objekt")
+    bp = req.blueprint
+    try:
+        blueprint_tool.validate(bp)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+    trusted, reason = blueprint_tool.verify_signature(bp)
+    try:
+        bid = blueprint_tool.save_imported(bp, trusted=trusted)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "blueprint_id": bid, "trusted": trusted, "reason": reason}
 
-- **🟢 Ingest:** raw/ → Master-Page in `wiki/resources/videos/` + Creator-Update + trending + index + log
-- **🔵 Query:** index → Bucket-Index → Seite → Antwort mit Wikilinks
-- **🟡 Check:** Stichproben auf Frontmatter, Wikilinks, Tool-Verlinkung
-- **🔴 Lint:** Voll-Scan auf Widersprüche, Orphans, kaputte Links
 
-## Konventionen
+@app.delete("/blueprints/{blueprint_id}")
+def blueprints_delete(blueprint_id: str) -> dict[str, Any]:
+    # Built-in nicht loeschbar
+    try:
+        builtin = blueprint_tool.load_builtin(blueprint_id)
+        if builtin:
+            raise HTTPException(400, "Built-in Blueprints koennen nicht geloescht werden")
+    except blueprint_tool.BlueprintError:
+        pass
+    if not blueprint_tool.delete_imported(blueprint_id):
+        raise HTTPException(404, "Importierter Blueprint nicht gefunden")
+    return {"ok": True, "removed": blueprint_id}
 
-- Dateinamen: Kleinbuchstaben, Bindestriche
-- Datum: ISO 8601 (`YYYY-MM-DD`)
-- Tags: Englisch, Kleinbuchstaben
-- Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`
 
-## Frontmatter (Beispiele)
+class BlueprintBody(BaseModel):
+    blueprint: dict[str, Any]
 
-Video-Master-Page:
-```yaml
----
-typ: video
-bucket: resources
-topic: ai
-titel: <text>
-status: aktiv
-quelle_url: https://...
-youtuber: <handle>
-transcript: raw/transcripts/YYYY-MM-DD-<slug>.md
----
-```
 
-Project-Page:
-```yaml
----
-typ: project
-bucket: projects
-status: aktiv
-deadline: YYYY-MM-DD
----
-```
-"""
+@app.post("/vaults/{vault_id}/blueprint/preview")
+def vault_blueprint_preview(vault_id: str, body: BlueprintBody) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return blueprint_tool.preview(vault_id, body.blueprint)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
-    index_md = f"""---
-typ: index
-aktualisiert: {today}
----
 
-# {vault_name}
+@app.post("/vaults/{vault_id}/blueprint/commit")
+def vault_blueprint_commit(vault_id: str, body: BlueprintBody) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return blueprint_tool.commit(vault_id, body.blueprint)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
-Home-MOC für diesen Vault. Siehe [[agents.md]] für die Schema-Beschreibung.
 
-## Buckets (PARA)
+@app.get("/vaults/{vault_id}/blueprint")
+def vault_blueprint_export(vault_id: str) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    bp = blueprint_tool.export_vault_blueprint(vault_id)
+    if bp is None:
+        raise HTTPException(404, "Kein Blueprint-Snapshot vorhanden")
+    return bp
 
-- [[wiki/projects/index|🎯 Projects]] — endliche Vorhaben mit Deadline
-- [[wiki/areas/index|🔁 Areas]] — Dauer-Themen ohne Endtermin
-- [[wiki/resources/index|📚 Resources]] — Wissens-Assets
-- [[wiki/archive/index|🗄 Archive]] — abgeschlossen
 
-## Workspace
+# --- Legacy scaffold code removed — moved to blueprint_schemas/karpathy-para-base.json
+# (Statische agents.md/index.md/log.md/wiki-Hierarchie wird nun via blueprint.commit
+# aus Jinja2-Templates erzeugt. Siehe server/tools/blueprint_templates/karpathy-para-base/)
 
-- [[inbox/scratchpad|📝 Scratchpad]] — schnelle Notizen
-- [[inbox/todos|✅ Todos]] — offene Aufgaben
-- [[log|📜 Log]] — Audit-Trail
-"""
 
-    log_md = f"""---
-typ: log
----
+# --- Setup-Agent ---------------------------------------------------------
 
-## {today} — Vault erstellt
+class SetupAgentStartRequest(BaseModel):
+    mode: str = "fresh"  # "fresh" | "extend"
+    templates: list[str] | None = None
+    use_case_hint: str | None = None
 
-Vault wurde mit dem EwtosBrain Setup-Wizard erstellt (Karpathy + PARA-Schema).
-"""
 
-    wiki_index = f"""---
-typ: index
-aktualisiert: {today}
----
+class SetupAgentMessageRequest(BaseModel):
+    session_id: str
+    message: str
 
-# Wiki — Übersicht
 
-Die vier PARA-Buckets dieses Vaults.
+class SetupAgentCommitRequest(BaseModel):
+    session_id: str
 
-- [[projects/index|🎯 Projects]]
-- [[areas/index|🔁 Areas]]
-- [[resources/index|📚 Resources]]
-- [[archive/index|🗄 Archive]]
-"""
 
-    bucket_index = lambda label, emoji, desc: f"""---
-typ: bucket-index
-bucket: {label}
-aktualisiert: {today}
----
+@app.post("/vaults/{vault_id}/setup_agent/start")
+def setup_agent_start(vault_id: str, req: SetupAgentStartRequest) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return setup_agent_tool.start_session(
+            vault_id,
+            mode=req.mode,
+            templates=req.templates,
+            use_case_hint=req.use_case_hint,
+        )
+    except setup_agent_tool.SetupAgentError as e:
+        raise HTTPException(400, str(e))
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
-# {emoji} {label.capitalize()}
 
-{desc}
+@app.post("/vaults/{vault_id}/setup_agent/message")
+def setup_agent_message(vault_id: str, req: SetupAgentMessageRequest) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return setup_agent_tool.send_message(req.session_id, req.message)
+    except setup_agent_tool.SetupAgentError as e:
+        # Session-not-found -> 404, sonst 400
+        msg = str(e)
+        code = 404 if "nicht gefunden" in msg else 400
+        raise HTTPException(code, msg)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
-```dataview
-TABLE status, zuletzt
-FROM "wiki/{label}"
-WHERE typ != "bucket-index"
-SORT zuletzt DESC
-```
-"""
 
-    resources_index = f"""---
-typ: bucket-index
-bucket: resources
-aktualisiert: {today}
----
+@app.get("/vaults/{vault_id}/setup_agent/state")
+def setup_agent_state(vault_id: str, session_id: str = Query(...)) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return setup_agent_tool.get_state(session_id)
+    except setup_agent_tool.SetupAgentError as e:
+        raise HTTPException(404, str(e))
 
-# 📚 Resources
 
-Wissens-Assets, querverlinkbar. Untergliederung nach Asset-Typ.
-
-- [[creators/index|🎙 Creators]]
-- [[videos/index|🎬 Videos]]
-- [[playlists/index|🎵 Playlists]]
-"""
-
-    sub_index = lambda label, emoji: f"""---
-typ: sub-index
-bucket: resources
-kategorie: {label}
-aktualisiert: {today}
----
-
-# {emoji} {label.capitalize()}
-
-```dataview
-TABLE titel, zuletzt
-FROM "wiki/resources/{label}"
-WHERE typ != "sub-index"
-SORT zuletzt DESC
-```
-"""
-
-    templates = {
-        "agents.md": agents_md,
-        "index.md": index_md,
-        "log.md": log_md,
-        "inbox/todos.md": "---\ntyp: todos\n---\n\n",
-        "inbox/scratchpad.md": f"---\ntyp: scratchpad\n---\n\n## {today}\n\n",
-        "wiki/index.md": wiki_index,
-        "wiki/projects/index.md": bucket_index("projects", "🎯", "Endliche Vorhaben mit Deadline."),
-        "wiki/areas/index.md": bucket_index("areas", "🔁", "Dauer-Themen ohne Endtermin (Branchen, Trends, Lernen)."),
-        "wiki/resources/index.md": resources_index,
-        "wiki/resources/creators/index.md": sub_index("creators", "🎙"),
-        "wiki/resources/videos/index.md": sub_index("videos", "🎬"),
-        "wiki/resources/playlists/index.md": sub_index("playlists", "🎵"),
-        "wiki/archive/index.md": bucket_index("archive", "🗄", "Abgeschlossene Projekte und alte Playlists."),
-    }
-
-    # Empty placeholder dirs (created via .gitkeep so Obsidian sieht sie)
-    empty_dirs = [
-        "raw/youtube",
-        "raw/transcripts",
-        "raw/artikel",
-        "raw/eigene-notizen",
-        "raw/kunden-input",
-        "raw/chat-archive",
-        "raw/assets",
-        "journal",
-    ]
-
-    created: list[str] = []
-    skipped: list[str] = []
-    for rel, content in templates.items():
-        target = vault_path / rel
-        if target.exists():
-            skipped.append(rel)
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-        created.append(rel)
-
-    for rel in empty_dirs:
-        target = vault_path / rel
-        if not target.exists():
-            target.mkdir(parents=True, exist_ok=True)
-            created.append(rel + "/")
-
-    return {"ok": True, "created": created, "skipped": skipped}
+@app.post("/vaults/{vault_id}/setup_agent/commit")
+def setup_agent_commit(vault_id: str, req: SetupAgentCommitRequest) -> dict[str, Any]:
+    if not settings.get_vault(vault_id):
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        return setup_agent_tool.commit(req.session_id)
+    except setup_agent_tool.SetupAgentError as e:
+        msg = str(e)
+        code = 404 if "nicht gefunden" in msg else 400
+        raise HTTPException(code, msg)
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
 
 
 # --- Chat -----------------------------------------------------------------
@@ -1276,4 +1372,4 @@ def chat_send(vault_id: str, req: ChatSendRequest) -> dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host=config.HOST, port=config.PORT, reload=False)
+    uvicorn.run(app, host=config.HOST, port=config.PORT, reload=False)

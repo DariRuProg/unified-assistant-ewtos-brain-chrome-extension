@@ -35,7 +35,7 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "imageGenModel"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
   maxUserTurns: "max_user_turns",
@@ -43,6 +43,8 @@ const SERVER_KEY_MAP = {
   llmModel: "llm_model",
   ollamaBaseUrl: "ollama_base_url",
   imageGenModel: "image_gen_model",
+  setupAgentProvider: "setup_agent_provider",
+  setupAgentModel: "setup_agent_model",
 };
 
 // Provider-spezifische Modell-Hints + Datalist-Werte
@@ -267,20 +269,55 @@ function renderVaultCard(vault) {
   const writePlaylistsText = el("span", { textContent: "EwtosBrain darf Playlists in wiki/ki/playlists/ verwalten" });
   writePlaylistsLabel.append(writePlaylistsCheckbox, writePlaylistsText);
 
+  const writeFilesLabel = el("label", { className: "checkbox-row" });
+  const writeFilesCheckbox = el("input", { type: "checkbox" });
+  writeFilesCheckbox.checked = !!(vault.permissions && vault.permissions.write_files);
+  const writeFilesText = el("span", { textContent: "EwtosBrain darf .md-Dateien bearbeiten und neue anlegen (Editor im Vault-Explorer)" });
+  writeFilesLabel.append(writeFilesCheckbox, writeFilesText);
+
   const localNotesLabel = el("label", { className: "checkbox-row" });
   const localNotesCheckbox = el("input", { type: "checkbox" });
   localNotesCheckbox.checked = !!vault.use_local_notes;
   const localNotesText = el("span", { textContent: "Eigene Notes-Inbox in diesem Vault (Scratchpad/Todos/Bookmarks in <vault>/notes/)" });
   localNotesLabel.append(localNotesCheckbox, localNotesText);
 
-  permsField.append(permsHint, writeRawLabel, writePlaylistsLabel, localNotesLabel);
+  permsField.append(permsHint, writeRawLabel, writePlaylistsLabel, writeFilesLabel, localNotesLabel);
 
   const actions = el("div", { className: "vault-actions" });
   const genBtn = el("button", { type: "button", textContent: "Neu generieren" });
   const copyBtn = el("button", { type: "button", className: "secondary", textContent: "Anweisung kopieren" });
   const saveBtn = el("button", { type: "button", textContent: "Speichern" });
+  const setupBtn = el("button", { type: "button", className: "secondary", textContent: "Setup-Agent erneut starten" });
+  const exportBtn = el("button", { type: "button", className: "secondary", textContent: "Blueprint exportieren" });
   const delBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
-  actions.append(genBtn, copyBtn, saveBtn, delBtn);
+  actions.append(genBtn, copyBtn, saveBtn, setupBtn, exportBtn, delBtn);
+
+  setupBtn.addEventListener("click", () => {
+    const url = chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(vault.id)}&mode=extend`);
+    chrome.tabs.create({ url });
+  });
+
+  exportBtn.addEventListener("click", async () => {
+    try {
+      const bp = await jfetch(`/vaults/${vault.id}/blueprint`);
+      const blob = new Blob([JSON.stringify(bp, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const safeName = (vault.name || "vault").replace(/[^a-z0-9_-]/gi, "_");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeName}-blueprint.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus("Blueprint exportiert", "success");
+    } catch (err) {
+      const msg = err.status === 404
+        ? "Kein Blueprint für diesen Vault — Setup-Agent zuerst durchlaufen"
+        : "Export-Fehler: " + err.message;
+      setStatus(msg, "error");
+    }
+  });
 
   const status = el("div", { className: "vault-status" });
 
@@ -341,6 +378,7 @@ function renderVaultCard(vault) {
         permissions: {
           write_raw: writeRawCheckbox.checked,
           write_playlists: writePlaylistsCheckbox.checked,
+          write_files: writeFilesCheckbox.checked,
         },
         use_local_notes: localNotesCheckbox.checked,
       });
@@ -394,6 +432,21 @@ async function loadBriefingProfiles() {
   }
 }
 
+const BRIEFING_SOURCE_LABELS = {
+  wetter: "Wetter",
+  todos: "Todos",
+  fristen: "Fristen",
+  lernstreak: "Lernstreak",
+  vertrags_fristen: "Vertrags-Fristen",
+  kampagnen_kickoffs: "Kampagnen-Kickoffs",
+  youtube_trending: "YouTube-Trending",
+  competitor_videos: "Konkurrenz-Videos",
+  playlist_trending: "Playlist-Trending",
+  recommendations: "Empfehlungen",
+};
+
+let briefingEditId = null;
+
 function renderBriefingProfiles(profiles) {
   const list = document.getElementById("briefing-profiles-list");
   list.replaceChildren();
@@ -401,7 +454,6 @@ function renderBriefingProfiles(profiles) {
     list.append(el("div", { className: "empty-vaults", textContent: "Keine Profile vorhanden." }));
     return;
   }
-  const sourceLabels = { wetter: "Wetter", todos: "Todos", fristen: "Fristen", lernstreak: "Lernstreak" };
   for (const p of profiles) {
     const card = el("div", { className: "vault-card" });
 
@@ -411,13 +463,18 @@ function renderBriefingProfiles(profiles) {
 
     const sourceTags = el("div", { className: "source-tags" });
     for (const s of (p.sources || [])) {
-      sourceTags.append(el("span", { className: "source-tag", textContent: sourceLabels[s] || s }));
+      sourceTags.append(el("span", { className: "source-tag", textContent: BRIEFING_SOURCE_LABELS[s] || s }));
     }
     title.append(sourceTags);
 
     if (p.sources?.includes("wetter") && p.standorte?.length) {
       title.append(el("div", { className: "vault-path-summary", textContent: p.standorte.join(", ") }));
     }
+
+    const actions = el("div", { style: "display:flex; gap:6px;" });
+    const editBtn = el("button", { type: "button", className: "secondary", textContent: "Bearbeiten" });
+    editBtn.addEventListener("click", () => openBriefingEditor(p));
+    actions.append(editBtn);
 
     const deleteBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
     deleteBtn.disabled = p.id === "default";
@@ -427,14 +484,63 @@ function renderBriefingProfiles(profiles) {
       await fetch(`${base}/tools/briefing/profiles/${p.id}`, { method: "DELETE" });
       loadBriefingProfiles();
     });
+    actions.append(deleteBtn);
 
-    header.append(title, deleteBtn);
+    header.append(title, actions);
     card.append(header);
     list.append(card);
   }
 }
 
+function updateBriefingConditionalFields() {
+  const form = document.getElementById("briefing-new-form");
+  if (!form) return;
+  const checked = (val) => !!form.querySelector(`input[type='checkbox'][value='${val}']:checked`);
+  const toggle = (id, show) => { document.getElementById(id).style.display = show ? "" : "none"; };
+  toggle("briefing-standorte-field", checked("wetter"));
+  toggle("briefing-nische-field", checked("youtube_trending"));
+  toggle("briefing-competitor-field", checked("competitor_videos"));
+  toggle("briefing-recommendations-field", checked("recommendations"));
+}
+
+function resetBriefingForm() {
+  briefingEditId = null;
+  document.getElementById("briefing-new-name").value = "";
+  document.getElementById("briefing-new-standorte").value = "";
+  document.getElementById("briefing-new-nische").value = "";
+  document.getElementById("briefing-new-competitor").value = "";
+  document.getElementById("briefing-new-recommendations-days").value = "14";
+  const form = document.getElementById("briefing-new-form");
+  form.querySelectorAll("input[type='checkbox']").forEach(cb => {
+    cb.checked = ["wetter", "todos", "fristen", "lernstreak"].includes(cb.value);
+  });
+  const saveBtn = document.getElementById("briefing-save-new");
+  if (saveBtn) saveBtn.textContent = "Profil speichern";
+  updateBriefingConditionalFields();
+}
+
+function openBriefingEditor(profile) {
+  briefingEditId = profile.id;
+  document.getElementById("briefing-new-name").value = profile.name || "";
+  const sources = profile.sources || [];
+  const form = document.getElementById("briefing-new-form");
+  form.querySelectorAll("input[type='checkbox']").forEach(cb => {
+    cb.checked = sources.includes(cb.value);
+  });
+  document.getElementById("briefing-new-standorte").value = (profile.standorte || []).join(", ");
+  document.getElementById("briefing-new-nische").value = profile.youtube_nische || "";
+  document.getElementById("briefing-new-competitor").value = (profile.competitor_channels || []).join("\n");
+  document.getElementById("briefing-new-recommendations-days").value = profile.recommendations_lookback_days || 14;
+  const saveBtn = document.getElementById("briefing-save-new");
+  if (saveBtn) saveBtn.textContent = "Änderungen speichern";
+  updateBriefingConditionalFields();
+  form.style.display = "block";
+  document.getElementById("briefing-add-btn").style.display = "none";
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 document.getElementById("briefing-add-btn")?.addEventListener("click", () => {
+  resetBriefingForm();
   document.getElementById("briefing-new-form").style.display = "block";
   document.getElementById("briefing-add-btn").style.display = "none";
 });
@@ -442,12 +548,11 @@ document.getElementById("briefing-add-btn")?.addEventListener("click", () => {
 document.getElementById("briefing-cancel-new")?.addEventListener("click", () => {
   document.getElementById("briefing-new-form").style.display = "none";
   document.getElementById("briefing-add-btn").style.display = "";
+  resetBriefingForm();
 });
 
-document.querySelectorAll("#briefing-new-form input[value='wetter']").forEach(cb => {
-  cb.addEventListener("change", () => {
-    document.getElementById("briefing-standorte-field").style.display = cb.checked ? "" : "none";
-  });
+document.querySelectorAll("#briefing-new-form input[type='checkbox']").forEach(cb => {
+  cb.addEventListener("change", updateBriefingConditionalFields);
 });
 
 document.getElementById("briefing-save-new")?.addEventListener("click", async () => {
@@ -456,22 +561,33 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
   const sources = [...document.querySelectorAll("#briefing-new-form input[type='checkbox']:checked")].map(c => c.value);
   const standorteRaw = document.getElementById("briefing-new-standorte").value;
   const standorte = standorteRaw.split(",").map(s => s.trim()).filter(Boolean);
+  const youtubeNische = document.getElementById("briefing-new-nische").value.trim();
+  const competitorRaw = document.getElementById("briefing-new-competitor").value;
+  const competitorChannels = competitorRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const recommendationsLookbackDays = parseInt(document.getElementById("briefing-new-recommendations-days").value, 10) || 14;
+
+  const payload = { name, sources, standorte };
+  if (briefingEditId) payload.id = briefingEditId;
+  if (sources.includes("youtube_trending") && youtubeNische) payload.youtube_nische = youtubeNische;
+  if (sources.includes("competitor_videos") && competitorChannels.length) payload.competitor_channels = competitorChannels;
+  if (sources.includes("recommendations")) payload.recommendations_lookback_days = recommendationsLookbackDays;
+
   const base = await getHttpBase();
   await fetch(`${base}/tools/briefing/profiles`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, sources, standorte }),
+    body: JSON.stringify(payload),
   });
   document.getElementById("briefing-new-form").style.display = "none";
   document.getElementById("briefing-add-btn").style.display = "";
-  document.getElementById("briefing-new-name").value = "";
+  resetBriefingForm();
   loadBriefingProfiles();
 });
 
 // ----- Initial load -----
 
 (async () => {
-  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode"]);
+  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "hideQuickRowOnTool"]);
   for (const key of CLIENT_FIELDS) {
     const e = document.getElementById(key);
     if (e && stored[key] !== undefined) e.value = stored[key];
@@ -480,6 +596,12 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
   const theme = stored.theme || "neutral";
   setActiveSwatch(theme);
   applyThemeToPage(theme, stored.darkMode || false);
+
+  const hideQR = document.getElementById("hideQuickRowOnTool");
+  hideQR.checked = !!stored.hideQuickRowOnTool;
+  hideQR.addEventListener("change", () => {
+    chrome.storage.local.set({ hideQuickRowOnTool: hideQR.checked });
+  });
 
   const server = await loadServerSettings();
   if (server) {
@@ -492,6 +614,7 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
     setApiKeyBadge("openai", server.openai_api_key_set);
     setApiKeyBadge("mistral", server.mistral_api_key_set);
     setApiKeyBadge("gemini", server.gemini_api_key_set);
+    setApiKeyBadge("youtube", server.youtube_api_key_set);
   }
 
   const providerEl = document.getElementById("llmProvider");
@@ -502,7 +625,128 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
 
   await refreshVaults();
   await loadBriefingProfiles();
+  await refreshBlueprints();
 })();
+
+// ----- Blueprints -----
+
+async function refreshBlueprints() {
+  const list = document.getElementById("blueprint-list");
+  if (!list) return;
+  list.replaceChildren();
+  let blueprints = [];
+  try {
+    const data = await jfetch("/blueprints");
+    blueprints = Array.isArray(data) ? data : (data.blueprints || []);
+  } catch (err) {
+    list.append(el("div", { className: "empty-vaults", textContent: "Server nicht erreichbar." }));
+    return;
+  }
+  if (!blueprints.length) {
+    list.append(el("div", { className: "empty-vaults", textContent: "Keine Blueprints vorhanden." }));
+    return;
+  }
+  for (const bp of blueprints) {
+    list.append(renderBlueprintCard(bp));
+  }
+}
+
+function renderBlueprintCard(bp) {
+  const card = el("div", { className: "vault-card" });
+  const header = el("div", { className: "vault-header", style: "cursor: default;" });
+
+  const title = el("div", { className: "vault-title" });
+  const strong = el("strong", { textContent: bp.name + (bp.version ? ` (${bp.version})` : "") });
+  title.append(strong);
+
+  const tags = el("div", { className: "source-tags" });
+  const sourceTag = el("span", {
+    className: "source-tag",
+    textContent: bp.source === "builtin" ? "Built-in" : "Importiert",
+  });
+  tags.append(sourceTag);
+  if (bp.trusted) {
+    tags.append(el("span", { className: "source-tag", textContent: "✓ Signiert" }));
+  } else if (bp.source !== "builtin") {
+    tags.append(el("span", { className: "source-tag", textContent: "⚠ Unsigniert" }));
+  }
+  title.append(tags);
+
+  if (bp.description) {
+    title.append(el("div", { className: "vault-path-summary", textContent: bp.description }));
+  }
+
+  header.append(title);
+
+  if (bp.source !== "builtin") {
+    const delBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
+    delBtn.addEventListener("click", async () => {
+      if (!confirm(`Blueprint "${bp.name}" wirklich löschen?`)) return;
+      try {
+        await jfetch(`/blueprints/${encodeURIComponent(bp.id)}`, { method: "DELETE" });
+        refreshBlueprints();
+      } catch (err) {
+        alert("Fehler: " + err.message);
+      }
+    });
+    header.append(delBtn);
+  }
+
+  card.append(header);
+  return card;
+}
+
+document.getElementById("btn-blueprint-import")?.addEventListener("click", async () => {
+  const fileInput = document.getElementById("blueprint-import-file");
+  const status = document.getElementById("blueprint-import-status");
+  status.textContent = "";
+  status.className = "vault-status";
+
+  const file = fileInput.files?.[0];
+  if (!file) {
+    status.textContent = "Keine Datei gewählt.";
+    status.className = "vault-status error";
+    return;
+  }
+
+  let blueprint;
+  try {
+    const text = await file.text();
+    blueprint = JSON.parse(text);
+  } catch (err) {
+    status.textContent = "Datei ist kein gültiges JSON: " + err.message;
+    status.className = "vault-status error";
+    return;
+  }
+
+  try {
+    const res = await jfetch("/blueprints/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blueprint }),
+    });
+    if (res && res.trusted === false) {
+      const proceed = confirm(
+        "Dieses Blueprint ist nicht signiert. Es kann beliebige Dateien in deinem Vault anlegen.\n\nTrotzdem importieren?"
+      );
+      if (!proceed) {
+        if (res.blueprint_id) {
+          await jfetch(`/blueprints/${encodeURIComponent(res.blueprint_id)}`, { method: "DELETE" }).catch(() => {});
+        }
+        status.textContent = "Import abgebrochen.";
+        status.className = "vault-status";
+        return;
+      }
+    }
+    status.textContent = `Importiert: ${res.blueprint_id || "ok"}`;
+    status.className = "vault-status success";
+    fileInput.value = "";
+    refreshBlueprints();
+  } catch (err) {
+    status.textContent = "Import-Fehler: " + err.message;
+    status.className = "vault-status error";
+  }
+});
 
 document.getElementById("save").addEventListener("click", async () => {
   const previous = await chrome.storage.local.get(CLIENT_FIELDS);
@@ -527,6 +771,7 @@ document.getElementById("save").addEventListener("click", async () => {
     ["openaiApiKey", "openai_api_key"],
     ["mistralApiKey", "mistral_api_key"],
     ["geminiApiKey", "gemini_api_key"],
+    ["youtubeApiKey", "youtube_api_key"],
   ];
   for (const [elId, payloadKey] of apiKeyInputs) {
     const el = document.getElementById(elId);
@@ -545,6 +790,7 @@ document.getElementById("save").addEventListener("click", async () => {
       setApiKeyBadge("openai", updated.openai_api_key_set);
       setApiKeyBadge("mistral", updated.mistral_api_key_set);
       setApiKeyBadge("gemini", updated.gemini_api_key_set);
+      setApiKeyBadge("youtube", updated.youtube_api_key_set);
     } catch (err) {
       serverError = err.message || String(err);
     }

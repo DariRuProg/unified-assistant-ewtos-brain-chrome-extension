@@ -96,7 +96,8 @@ Tool-Result (Extension → Server):
 2. **Sprint 2 ✅:** Note-Taker → `raw/`, Chat mit Vault (Karpathy), MCP-Layer für Claude Code (`server/mcp_server.py`, Stdio)
 3. **Phase 6 ✅ (cross-cutting):** Multi-LLM-Backend — Anthropic, OpenAI, Ollama, Mistral. Provider-Dropdown in Options-UI. `server/llm_providers/`, `server/llm_client.py`. `chat_model` legacy; aktiver Stack: `llm_provider` + `llm_model`.
 4. **Sprint 3:** Restliche Browser-Tools (Page-Scrape, SEO, Image-Analyse, Color-Picker, Screenshot+Annotation)
-5. **Sprint 4:** REST-API-Auth, Cloud-Deployment (Railway/Render), Stripe-Integration
+5. **Phase 7 ✅ (Produktionsreife, intern):** Server als PyInstaller-Tray-App + Inno-Installer, User-Datenverzeichnis (`%LOCALAPPDATA%\EwtosBrain`), bundle-aware Pfade (`server/paths.py`), `/health` + WS-Version-Handshake, Extension Store-Prep (Icons, host_permissions, Reconnect-Backoff). Auslieferbar als Setup.exe + Extension.
+6. **Sprint 4 (SaaS):** REST-API-Auth, `wss`/Cloud-Deployment (Railway/Render), Stripe, Vault-Abstraktion (`VaultFS`)
 
 ## Backlog (geplant, ungeplant)
 
@@ -125,6 +126,10 @@ Tool-Result (Extension → Server):
     "E:\Coding_Kurse\Chrome-Extensions\unified-assistant\server\mcp_server.py"
   ```
   Nach Restart von Claude Code: `/mcp` zeigt `ewtosbrain` als verbunden, Tools sind unter `mcp__ewtosbrain__*` verfügbar. WS-Bridge-Tool (`pull_transcript_via_extension`) erfordert zusätzlich, dass `start-server.bat` läuft + Chrome-Extension geöffnet ist.
+- **Zentrales Datenverzeichnis `%LOCALAPPDATA%\EwtosBrain` via `server/paths.py`** *seit 2026-05-29* — *Why:* Eine in Program Files installierte `.exe` darf nicht neben sich schreiben (Admin-Rechte). Schreibpfade müssen vom Code/Bundle getrennt sein. *Apply:* `paths.py` ist die einzige Pfad-Quelle. `data_dir()` (Schreibpfade: `settings.json`, `.env`, `chat-*.json`, `setup_sessions/`, `generated_images/`, `logs/`), `bundle_dir()` (read-only Assets: `blueprint_schemas/`, `blueprint_templates/`, `blueprint_trusted_keys.json`) — bundle-aware via `sys._MEIPASS`/`sys.frozen`. `migrate_legacy_data()` kopiert alte Dateien aus `server/` beim ersten Start. **Neue Schreib-/Asset-Pfade IMMER über `paths.py`**, nie `Path(__file__)`-relativ. `config.py` hat keinen Hardcoded-Vault mehr — Vaults kommen aus `settings.json` (Setup-Wizard).
+- **Packaging: PyInstaller-Tray-App + Inno-Installer (per-User)** *seit 2026-05-29* — *Why:* Server muss als eigenständige Desktop-App auslieferbar sein (Endnutzer ohne Python). *Apply:* Entrypoint `server/tray.py` (pystray, uvicorn im Daemon-Thread, Datei-Logging). Build: `build.bat` → `server/ewtosbrain.spec` → `dist\EwtosBrain\`. Installer: `installer\ewtosbrain.iss` (Inno Setup 6) → per-User-Install nach `%LOCALAPPDATA%\Programs\EwtosBrain`, kein Admin, optional Autostart (HKCU Run). `uvicorn.run(app, ...)` nutzt das App-Objekt (nicht `"main:app"`-String — bricht im Bundle).
+- **Version-Handshake Extension↔Server** *seit 2026-05-29* — *Why:* Inkompatible Versionen sollen sichtbar sein, nicht still failen. *Apply:* `main.SERVER_VERSION` = Single Source (muss mit `manifest.json` `version` matchen). WS-`hello` → Server antwortet `hello_ack` mit `compatible` (major.minor-Abgleich). Extension liest eigene Version aus `chrome.runtime.getManifest()`, zeigt bei Mismatch ein Konflikt-Banner. `/health`-Endpoint für REST-Checks (Setup-Wizard).
+- **Extension Store-Prep** *seit 2026-05-29* — Icons in `extension/images/` (16/48/128, generiert via `make_icons.py`). `host_permissions` = `http://*/*` + `https://*/*` statt `<all_urls>` (engerer Scope, Page-Tools laufen weiter). Reconnect mit Exponential-Backoff (1s→30s). Store-Listing muss den Web-Zugriff der Page-Tools begründen.
 
 ## Bestehende Code-Quellen (zum Referenzieren)
 

@@ -1,0 +1,16 @@
+Vault: **{{ vault_name }}**. Dieser Vault folgt der **Karpathy-Pipeline** (`inbox/` → `raw/` → `wiki/`) kombiniert mit **PARA innerhalb `wiki/`** (Projects / Areas / Resources / Archive). Schema-Details siehe [[agents.md]].
+
+## Struktur (Kurzfassung)
+
+- `inbox/scratchpad.md`, `inbox/todos.md` — Workspace für Notizen und Aufgaben.
+- `raw/<subfolder>/` — immutable Quellen (Transcripts, Artikel, Kunden-Input, Chat-Archive, Assets).
+- `wiki/projects|areas|resources|archive/` — LLM-kuratiertes Wissen, PARA-Buckets.
+- `journal/YYYY-MM-DD.md` — automatische Briefing-Archive (vom „Morgen"-Tool gefüllt).
+- `log.md` — append-only Audit der strukturellen Vault-Änderungen.
+
+## Konventionen
+
+- Dateinamen: Kleinbuchstaben, Bindestriche.
+- Datum: ISO 8601 (`YYYY-MM-DD`).
+- Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`.
+- Frontmatter: jede `wiki/`-Seite hat `typ`, `titel`, `status`, `zuletzt`.

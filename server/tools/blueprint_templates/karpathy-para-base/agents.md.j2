@@ -1,0 +1,85 @@
+# {{ vault_name }} — agents.md
+
+Dieser Vault folgt der **Karpathy-Pipeline** (inbox → raw → wiki) kombiniert mit **PARA innerhalb `wiki/`** (Projects / Areas / Resources / Archive).
+
+> Diese Datei ist die LLM-agnostische Schema-Beschreibung für jeden Agenten (Claude, ChatGPT, Gemini, lokale Modelle).
+
+## Struktur
+
+```
+vault/
+├─ agents.md           ← dieses File
+├─ index.md            ← Home-MOC
+├─ log.md              ← append-only Audit
+│
+├─ inbox/              # PARA-Inbox — App-Workspace (Scratchpad, Todos)
+│   ├─ scratchpad.md
+│   └─ todos.md
+│
+├─ raw/                # immutable Quellen
+│   ├─ youtube/<channel>/<slug>.md
+│   ├─ transcripts/<datum>-<slug>.md
+│   ├─ artikel/<slug>.md
+│   ├─ eigene-notizen/<slug>.md
+│   ├─ kunden-input/<kunde>/<slug>.md
+│   └─ chat-archive/<datum>-<slug>.md
+│
+├─ wiki/               # LLM-kuratiert, PARA
+│   ├─ index.md
+│   ├─ projects/       # P — endliche Vorhaben
+│   ├─ areas/          # A — Dauer-Themen
+│   ├─ resources/      # R — Wissens-Assets (creators, videos, playlists)
+│   │   ├─ creators/
+│   │   ├─ videos/
+│   │   └─ playlists/
+│   └─ archive/        # Z — abgeschlossen
+│
+└─ journal/            # optional, Daily Notes
+```
+
+## Schreibrechte
+
+EwtosBrain darf **standardmäßig nur** in `inbox/` schreiben. Schreib-Zugriff auf `raw/` und Playlists ist pro Vault einzeln in den Settings freizugeben. Permission-Keys:
+
+- `write_raw` → `promote_to_raw` in die Whitelist-Pfade unter `raw/`
+- `write_playlists` → Playlist-CRUD in `wiki/resources/playlists/`
+
+## Operationen (Karpathy-Methode)
+
+- **🟢 Ingest:** raw/ → Master-Page in `wiki/resources/videos/` + Creator-Update + trending + index + log
+- **🔵 Query:** index → Bucket-Index → Seite → Antwort mit Wikilinks
+- **🟡 Check:** Stichproben auf Frontmatter, Wikilinks, Tool-Verlinkung
+- **🔴 Lint:** Voll-Scan auf Widersprüche, Orphans, kaputte Links
+
+## Konventionen
+
+- Dateinamen: Kleinbuchstaben, Bindestriche
+- Datum: ISO 8601 (`YYYY-MM-DD`)
+- Tags: Englisch, Kleinbuchstaben
+- Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`
+
+## Frontmatter (Beispiele)
+
+Video-Master-Page:
+```yaml
+---
+typ: video
+bucket: resources
+topic: ai
+titel: <text>
+status: aktiv
+quelle_url: https://...
+youtuber: <handle>
+transcript: raw/transcripts/YYYY-MM-DD-<slug>.md
+---
+```
+
+Project-Page:
+```yaml
+---
+typ: project
+bucket: projects
+status: aktiv
+deadline: YYYY-MM-DD
+---
+```

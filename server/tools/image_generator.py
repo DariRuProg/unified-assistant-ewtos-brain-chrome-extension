@@ -25,6 +25,7 @@ from typing import Any
 
 import httpx
 
+import paths
 import settings
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -36,7 +37,7 @@ ALLOWED_MODELS = {
 }
 DEFAULT_MODEL = "gemini-2.5-flash-image"
 
-OUTPUT_ROOT = Path(__file__).resolve().parent.parent / "generated_images"
+OUTPUT_ROOT = paths.generated_images_dir()
 INDEX_FILE = OUTPUT_ROOT / "index.json"
 TRASH_DIR = OUTPUT_ROOT / "_papierkorb"
 SLUG_RE = re.compile(r"[^a-z0-9]+")

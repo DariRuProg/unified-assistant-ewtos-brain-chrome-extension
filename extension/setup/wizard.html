@@ -222,6 +222,44 @@
     .footer-spacer { flex:1; }
     code { background:var(--surface-3); padding:1px 5px; border-radius:4px; font-size:12px; color:var(--accent); }
     .divider { height:1px; background:var(--border); margin:16px 0; }
+    /* Template-Picker */
+    .template-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; max-height:340px; overflow-y:auto; padding-right:4px; }
+    .template-card {
+      background:var(--surface-2); border:2px solid var(--border); border-radius:var(--radius);
+      padding:12px 14px; cursor:pointer; transition:border-color var(--transition), background var(--transition);
+      display:flex; gap:12px; align-items:flex-start;
+    }
+    .template-card:hover { border-color:var(--border-focus); background:var(--surface-3); }
+    .template-card.selected { border-color:var(--accent); background:var(--accent-soft); }
+    .template-check {
+      width:18px; height:18px; border:2px solid var(--border); border-radius:4px;
+      background:var(--surface); flex-shrink:0; margin-top:1px; position:relative;
+      transition:background var(--transition), border-color var(--transition);
+    }
+    .template-card.selected .template-check { background:var(--accent); border-color:var(--accent); }
+    .template-card.selected .template-check::after {
+      content:''; position:absolute; top:1px; left:4px; width:5px; height:9px;
+      border-right:2px solid #fff; border-bottom:2px solid #fff; transform:rotate(45deg);
+    }
+    .template-body { flex:1; min-width:0; }
+    .template-name { font-size:13.5px; font-weight:600; color:var(--text); margin-bottom:2px; }
+    .template-desc { font-size:12px; color:var(--text-muted); line-height:1.5; margin-bottom:6px; }
+    .template-tags { display:flex; gap:5px; flex-wrap:wrap; }
+    .template-tag {
+      font-size:10px; padding:2px 7px; border-radius:100px;
+      background:var(--surface-3); border:1px solid var(--border); color:var(--text-muted);
+      font-weight:500;
+    }
+    .template-tag.builtin { background:var(--accent-soft); border-color:rgba(108,99,255,0.35); color:var(--accent-hover); }
+    .template-tag.imported { background:var(--warning-soft); border-color:rgba(251,191,36,0.3); color:var(--warning); }
+    .template-tag.trusted { background:var(--success-soft); border-color:rgba(62,207,142,0.3); color:var(--success); }
+    .step-actions { display:flex; gap:8px; align-items:center; margin-top:16px; }
+    .step-actions .footer-spacer { flex:1; }
+    .skip-link {
+      font-size:12px; color:var(--text-muted); text-decoration:none; cursor:pointer;
+      padding:6px 4px; transition:color var(--transition);
+    }
+    .skip-link:hover { color:var(--accent); }
   </style>
 </head>
 <body>
@@ -239,6 +277,8 @@
       <div class="step-item"><div class="step-dot" id="dot-4"><span>4</span></div></div>
       <div class="step-connector" id="conn-4"></div>
       <div class="step-item"><div class="step-dot" id="dot-5"><span>5</span></div></div>
+      <div class="step-connector" id="conn-5"></div>
+      <div class="step-item"><div class="step-dot" id="dot-6"><span>6</span></div></div>
     </div>
     <div class="progress-bar-wrap">
       <div class="progress-bar-fill" id="progress-fill" style="width:10%"></div>
@@ -271,14 +311,14 @@
         <div class="pill accent">Browser-Tools</div>
       </div>
       <div class="info-box">
-        <strong>Voraussetzung:</strong> Du benötigst den laufenden Python-Server. Starte <code>start-server.bat</code> im Projektordner.
+        <strong>Voraussetzung:</strong> Die EwtosBrain-Server-App muss laufen (violettes Icon in der Systemleiste). Im Dev-Setup stattdessen <code>start-server.bat</code> starten.
       </div>
     </div>
 
     <!-- Step 2: Server verbinden -->
     <div class="step" id="step-2">
       <h2 class="step-headline">Server verbinden</h2>
-      <p class="step-subtext">EwtosBrain benötigt einen lokalen Python-Server. Starte <code>start-server.bat</code> im Projektordner, dann teste hier die Verbindung.</p>
+      <p class="step-subtext">EwtosBrain braucht die lokale Server-App. Stelle sicher, dass sie läuft (Tray-Icon in der Systemleiste — im Dev: <code>start-server.bat</code>), dann teste hier die Verbindung.</p>
       <div class="field-group">
         <label class="field-label" for="server-url">Server-URL</label>
         <div class="conn-row">
@@ -364,7 +404,10 @@
       </div>
       <div class="field-group">
         <label class="field-label" for="vault-path">Vault-Pfad</label>
-        <input class="field-input" type="text" id="vault-path" placeholder="z.B. E:\Obsidian\Mein-Vault">
+        <div class="api-key-row">
+          <input class="field-input" type="text" id="vault-path" placeholder="z.B. E:\Obsidian\Mein-Vault">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-vault">Durchsuchen…</button>
+        </div>
         <p class="field-hint">Absoluter Pfad zum Ordner auf deinem Rechner.</p>
       </div>
       <label class="checkbox-row">
@@ -382,8 +425,21 @@
       <div id="step4-status" class="info-box" style="display:none"></div>
     </div>
 
-    <!-- Step 5: Fertig -->
+    <!-- Step 5: Template-Picker -->
     <div class="step" id="step-5">
+      <h2 class="step-headline">Vault-Aufbau wählen</h2>
+      <p class="step-subtext">Welche Templates sollen die Basis bilden? Du kannst mehrere kombinieren — der Setup-Agent hilft dir danach beim Feinschliff.</p>
+      <div id="template-list" class="template-list">
+        <div class="info-box neutral">Lade Templates…</div>
+      </div>
+      <div id="step5-status" class="info-box" style="display:none"></div>
+      <div class="step-actions">
+        <a class="skip-link" id="skip-setup-agent" href="#">Setup-Agent überspringen — Standard verwenden</a>
+      </div>
+    </div>
+
+    <!-- Step 6: Fertig -->
+    <div class="step" id="step-6">
 
       <div id="step5-default">
         <div class="success-icon-wrap">

@@ -1,0 +1,15 @@
+---
+typ: sub-index
+bucket: resources
+kategorie: {{ label }}
+aktualisiert: {{ today }}
+---
+
+# {{ emoji }} {{ label | capitalize }}
+
+```dataview
+TABLE titel, zuletzt
+FROM "wiki/resources/{{ label }}"
+WHERE typ != "sub-index"
+SORT zuletzt DESC
+```

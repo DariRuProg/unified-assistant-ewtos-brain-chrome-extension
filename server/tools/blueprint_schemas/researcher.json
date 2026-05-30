@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "blueprint_id": "researcher",
+  "blueprint_name": "Researcher",
+  "blueprint_version": "1.0.0",
+  "author": "ewtos.com",
+  "license": "MIT",
+  "description": "Researcher-Setup: erbt karpathy-para-base, fügt Themen/Papers/Fragen-Strukturen plus zwei .base-Views.",
+  "tags": ["research", "papers", "karpathy"],
+  "extends": ["karpathy-para-base"],
+  "folders": [
+    { "path": "wiki/areas/themen", "kind": "area", "label": "themen", "emoji": "🧪" },
+    { "path": "wiki/areas/fragen", "kind": "area", "label": "fragen", "emoji": "❓" },
+    { "path": "wiki/projects/papers", "kind": "bucket", "label": "papers", "emoji": "📄" },
+    { "path": "raw/papers", "kind": "raw" }
+  ],
+  "files": [],
+  "bases": [
+    {
+      "path": "wiki/areas/themen/themen.base",
+      "title": "Themen",
+      "source": { "folder": "wiki/areas/themen", "recursive": true },
+      "filters": [
+        { "field": "typ", "op": "eq", "value": "thema" }
+      ],
+      "columns": [
+        { "field": "file.name", "label": "Thema" },
+        { "field": "status", "label": "Status" },
+        { "field": "zuletzt", "label": "Zuletzt" }
+      ],
+      "views": [
+        {
+          "type": "table",
+          "name": "Alle Themen",
+          "sort": [{ "field": "zuletzt", "dir": "desc" }]
+        }
+      ]
+    },
+    {
+      "path": "wiki/projects/papers/papers.base",
+      "title": "Papers",
+      "source": { "folder": "wiki/projects/papers", "recursive": true },
+      "filters": [
+        { "field": "typ", "op": "eq", "value": "paper" }
+      ],
+      "columns": [
+        { "field": "file.name", "label": "Paper" },
+        { "field": "status", "label": "Status" },
+        { "field": "published_at", "label": "Erschienen" }
+      ],
+      "views": [
+        {
+          "type": "cards",
+          "name": "Pipeline",
+          "group_by": "status",
+          "sort": [{ "field": "published_at", "dir": "desc" }]
+        }
+      ]
+    }
+  ],
+  "claude_md_sections": [
+    {
+      "id": "researcher-konventionen",
+      "order": 40,
+      "title": "Researcher-Konventionen",
+      "content": "- `wiki/areas/themen/<slug>.md` — Dauerthemen (Frontmatter `typ: thema`).\n- `wiki/projects/papers/<slug>.md` — Einzelne Papers, endlicher Lese-/Schreibvorgang (`typ: paper`, `status: gelesen|tbd|notizen`, `published_at`).\n- `wiki/areas/fragen/<slug>.md` — Offene Forschungsfragen, verlinkt auf Themen und Papers.\n- Raw-PDFs/Notizen landen unter `raw/papers/`.",
+      "merge_policy": "replace_if_marker"
+    }
+  ],
+  "briefing_sources": [],
+  "permissions_defaults": {}
+}

@@ -1,0 +1,492 @@
+<!-- EwtosBrain Setup-Agent | ewtos.com -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EwtosBrain — Setup-Agent</title>
+  <style>
+    :root {
+      --bg:           #0f1117;
+      --surface:      #1a1d27;
+      --surface-2:    #22263a;
+      --surface-3:    #2a2f47;
+      --border:       #2e3248;
+      --border-focus: #6c63ff;
+      --accent:       #6c63ff;
+      --accent-hover: #7c73ff;
+      --accent-soft:  rgba(108, 99, 255, 0.15);
+      --text:         #e8eaf2;
+      --text-muted:   #8b90a8;
+      --text-dim:     #5c6080;
+      --success:      #3ecf8e;
+      --success-soft: rgba(62, 207, 142, 0.12);
+      --error:        #f87171;
+      --error-soft:   rgba(248, 113, 113, 0.12);
+      --warning:      #fbbf24;
+      --warning-soft: rgba(251, 191, 36, 0.12);
+      --radius:       10px;
+      --radius-sm:    6px;
+      --transition:   220ms cubic-bezier(0.4,0,0.2,1);
+    }
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    html, body { height:100%; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .agent-app {
+      display:grid;
+      grid-template-rows: auto 1fr auto;
+      height:100vh;
+    }
+
+    /* Header */
+    .agent-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display:flex; align-items:center; gap:12px; }
+    .brand { font-size:15px; font-weight:700; color:var(--text); letter-spacing:-0.3px; }
+    .brand .accent { color:var(--accent); }
+    .header-subtitle { font-size:12.5px; color:var(--text-muted); }
+    .header-right { display:flex; gap:8px; }
+
+    /* Main grid: chat + sidebar */
+    .agent-main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      overflow: hidden;
+    }
+
+    /* Chat */
+    .agent-chat {
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .msg {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--accent-soft);
+      border: 1px solid rgba(108,99,255,0.3);
+      color: var(--text);
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .msg.error {
+      align-self: stretch;
+      background: var(--error-soft);
+      border: 1px solid rgba(248,113,113,0.3);
+      color: var(--error);
+      font-size: 12.5px;
+      max-width: 100%;
+    }
+    .msg.system {
+      align-self: center;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 11.5px;
+      font-style: italic;
+    }
+
+    /* Tool-Call-Block */
+    .tool-call {
+      align-self: flex-start;
+      max-width: 80%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .tool-call summary {
+      cursor: pointer;
+      list-style: none;
+      display:flex; align-items:center; gap:8px;
+    }
+    .tool-call summary::-webkit-details-marker { display: none; }
+    .tool-call .tool-icon { color: var(--accent); }
+    .tool-call .tool-name { color: var(--text); font-weight: 600; }
+    .tool-call .tool-args { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
+    .tool-call pre {
+      margin-top: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 8px;
+      overflow-x: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    /* Sidebar */
+    .agent-blueprint {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px 18px;
+    }
+    .agent-blueprint h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .bp-summary {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.55;
+    }
+    .bp-summary strong { color: var(--text); font-weight: 600; }
+    .bp-section {
+      margin-bottom: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .bp-section summary {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      list-style: none;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .bp-section summary::-webkit-details-marker { display: none; }
+    .bp-section summary::after {
+      content: '▾';
+      color: var(--text-dim);
+      transition: transform var(--transition);
+    }
+    .bp-section[open] summary::after { transform: rotate(180deg); }
+    .bp-section ul {
+      list-style: none;
+      padding: 4px 12px 10px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .bp-section li {
+      padding: 3px 0;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bp-section .empty { color: var(--text-dim); font-style: italic; font-size: 11px; padding: 4px 12px 10px; }
+    /* View-Switcher */
+    .bp-view-switch {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      margin-bottom: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .bp-view-btn {
+      appearance: none;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+    .bp-view-btn:hover { color: var(--text); }
+    .bp-view-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    /* Tree-View */
+    .bp-tree {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .bp-tree-node { margin: 0; }
+    .bp-tree-node > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 3px 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11.5px;
+    }
+    .bp-tree-node > summary:hover { background: var(--bg); }
+    .bp-tree-node > summary::-webkit-details-marker { display: none; }
+    .bp-tree-node > summary::before {
+      content: '▸';
+      color: var(--text-dim);
+      font-size: 10px;
+      width: 8px;
+      flex-shrink: 0;
+      transition: transform var(--transition);
+    }
+    .bp-tree-node[open] > summary::before { transform: rotate(90deg); }
+    .bp-tree-node.leaf > summary::before { content: ''; }
+    .bp-tree-node.implicit > summary { color: var(--text-muted); font-style: italic; }
+    .bp-tree-children {
+      padding-left: 14px;
+      margin-left: 6px;
+      border-left: 1px solid var(--border);
+    }
+    .bp-tree-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px 3px 18px;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-radius: 4px;
+    }
+    .bp-tree-item:hover { background: var(--bg); color: var(--text); }
+    .bp-tree-icon { flex-shrink: 0; }
+    .bp-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bp-tree-empty { color: var(--text-dim); font-style: italic; font-size: 11px; padding: 4px 0; }
+    .bp-json-wrap { margin-top: 12px; }
+    .bp-json-wrap summary { font-size: 11.5px; color: var(--text-muted); cursor: pointer; padding: 6px 0; }
+    .bp-json-wrap pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      overflow-x: auto;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    /* Input bar */
+    .agent-input-bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      align-items: flex-end;
+    }
+    #agent-input {
+      flex: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 13.5px;
+      font-family: inherit;
+      color: var(--text);
+      outline: none;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+      transition: border-color var(--transition);
+    }
+    #agent-input:focus { border-color: var(--border-focus); }
+    #agent-input::placeholder { color: var(--text-dim); }
+
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px 16px; border-radius:var(--radius-sm); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border:none; outline:none; transition:background var(--transition), opacity var(--transition); }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-primary:hover { background:var(--accent-hover); }
+    .btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+    .btn-secondary { background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border); }
+    .btn-secondary:hover { background:var(--surface-3); color:var(--text); }
+    .btn-ghost { background:transparent; color:var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color:var(--text); border-color: var(--border-focus); }
+    .btn-sm { padding:7px 12px; font-size:12px; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 12.5px;
+      color: var(--text);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+      z-index: 100;
+      opacity: 0;
+      transform: translateX(8px);
+      transition: opacity 220ms, transform 220ms;
+      max-width: 340px;
+    }
+    .toast.show { opacity: 1; transform: translateX(0); }
+    .toast.success { border-color: rgba(62,207,142,0.4); color: var(--success); }
+    .toast.error { border-color: rgba(248,113,113,0.4); color: var(--error); }
+
+    /* Dialog */
+    dialog#diff-dialog {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: var(--radius);
+      padding: 0;
+      max-width: 720px;
+      width: 90%;
+      max-height: 80vh;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+    dialog header {
+      display:flex; justify-content:space-between; align-items:center;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    dialog header h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 0; }
+    #btn-diff-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    #btn-diff-close:hover { color: var(--text); }
+    #diff-body {
+      padding: 16px 20px;
+      max-height: 56vh;
+      overflow-y: auto;
+      font-size: 12.5px;
+    }
+    #diff-body h4 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+      margin-top: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #diff-body h4:first-child { margin-top: 0; }
+    #diff-body ul { list-style: none; padding-left: 0; }
+    #diff-body li {
+      padding: 4px 8px;
+      font-family: ui-monospace, "Consolas", monospace;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      background: var(--surface-2);
+      border-radius: 4px;
+      margin-bottom: 3px;
+    }
+    #diff-body li.warning { background: var(--warning-soft); color: var(--warning); }
+    #diff-body li.skip { color: var(--text-dim); }
+    #diff-body .empty { color: var(--text-dim); font-style: italic; font-size: 12px; }
+    dialog footer {
+      display:flex; gap:8px; justify-content:flex-end;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    code {
+      background: var(--surface-3);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-family: ui-monospace, "Consolas", monospace;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+<div class="agent-app">
+
+  <header class="agent-header">
+    <div class="header-left">
+      <span class="brand">Ewtos<span class="accent">Brain</span> · Setup-Agent</span>
+      <span class="header-subtitle" id="agent-vault-info">Vault wird geladen…</span>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-ghost btn-sm" id="btn-preview">Diff anzeigen</button>
+      <button class="btn btn-primary btn-sm" id="btn-commit" disabled>Commit</button>
+    </div>
+  </header>
+
+  <main class="agent-main">
+    <section class="agent-chat" id="agent-chat">
+      <!-- Messages dynamisch eingehängt -->
+    </section>
+    <aside class="agent-blueprint">
+      <h3>Working Blueprint</h3>
+      <div class="bp-view-switch" role="tablist" aria-label="Ansicht">
+        <button type="button" class="bp-view-btn active" data-view="tree" role="tab" aria-selected="true">Tree</button>
+        <button type="button" class="bp-view-btn" data-view="flat" role="tab" aria-selected="false">Flach</button>
+      </div>
+      <div class="bp-summary" id="bp-summary">Noch keine Daten.</div>
+      <div id="bp-sections"></div>
+      <details class="bp-json-wrap">
+        <summary>JSON anzeigen</summary>
+        <pre id="bp-json">{}</pre>
+      </details>
+    </aside>
+  </main>
+
+  <footer class="agent-input-bar">
+    <textarea id="agent-input" placeholder="Beschreibe was du brauchst…" rows="2"></textarea>
+    <button class="btn btn-primary" id="btn-send">Senden</button>
+  </footer>
+
+</div>
+
+<dialog id="diff-dialog">
+  <header>
+    <h3>Vorschau — was wird erstellt</h3>
+    <button id="btn-diff-close" aria-label="Schließen">×</button>
+  </header>
+  <div id="diff-body"></div>
+  <footer>
+    <button class="btn btn-secondary btn-sm" id="btn-diff-cancel">Abbrechen</button>
+    <button class="btn btn-primary btn-sm" id="btn-diff-confirm">Commit ausführen</button>
+  </footer>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script src="agent.js"></script>
+</body>
+</html>

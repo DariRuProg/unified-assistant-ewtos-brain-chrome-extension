@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ewtos.com/schemas/ewtosbrain-blueprint-v1.json",
+  "title": "EwtosBrain Vault Blueprint",
+  "description": "Declarative description of a vault layout: folders, files, .base views, CLAUDE.md sections, briefing sources. Used by the EwtosBrain Setup-Agent and the /vaults/{id}/blueprint/* endpoints. Designed to be readable by an LLM that wants to compose or extend a vault setup.",
+  "type": "object",
+  "required": ["schema_version", "blueprint_id", "blueprint_name"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.",
+      "description": "Blueprint schema major.minor. Must match ^1\\. for this version."
+    },
+    "blueprint_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9\\-]*$",
+      "description": "Stable kebab-case id, e.g. 'karpathy-para-base'. Used as filename and reference target for extends[]."
+    },
+    "blueprint_name": {
+      "type": "string",
+      "description": "Human-readable name shown in UI."
+    },
+    "blueprint_version": {
+      "type": "string",
+      "description": "SemVer of this blueprint instance (independent of schema_version)."
+    },
+    "author": {
+      "type": "string",
+      "description": "Author handle or company (e.g. 'ewtos.com')."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license id or free-form license string."
+    },
+    "description": {
+      "type": "string",
+      "description": "One-paragraph human description of what this blueprint produces."
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Free-form tags for marketplace discovery."
+    },
+    "extends": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Parent blueprint ids that are resolved recursively before commit. Cycles are an error."
+    },
+    "vars": {
+      "type": "object",
+      "description": "Free-form key/value pairs (owner_name, branche, ...). Merged child-overrides-parent and exposed in template render context.",
+      "additionalProperties": true
+    },
+    "folders": {
+      "type": "array",
+      "description": "Directories to mkdir relative to vault root.",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)(?!.*\\\\).+$",
+            "description": "POSIX-relative path, no leading slash, no '..', no backslashes."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["system", "raw", "bucket", "asset", "area", "journal"],
+            "description": "Semantic role of this folder. Used by UI grouping and by other tools to find e.g. 'all asset folders'."
+          },
+          "label": {"type": "string"},
+          "emoji": {"type": "string"},
+          "asset_type": {"type": "string", "description": "If kind=asset: which entity (creator, video, playlist, kunde, mitarbeiter, ...)."},
+          "auto_archive": {"type": "string", "description": "Optional auto-archive consumer key (e.g. 'briefing')."},
+          "gitkeep": {"type": "boolean"}
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Files to create from a Jinja2 template or an inline literal.",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)(?!.*\\\\).+$"
+          },
+          "template": {
+            "type": "string",
+            "description": "Relative Jinja2 template ref inside server/tools/blueprint_templates/. Mutually exclusive with template_inline."
+          },
+          "template_inline": {
+            "type": "string",
+            "description": "Inline literal content. Written as-is, NOT passed through Jinja2 (so backslash-sequences are NOT interpreted)."
+          },
+          "vars": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per-file variables passed to the template context (unfolded to top-level keys)."
+          },
+          "merge_policy": {
+            "type": "string",
+            "enum": ["skip_if_exists", "overwrite"],
+            "description": "How to behave if the target file already exists."
+          }
+        }
+      }
+    },
+    "bases": {
+      "type": "array",
+      "description": "Obsidian .base view definitions. Rendered to YAML by server/tools/base_generator.py.",
+      "items": {
+        "type": "object",
+        "required": ["path", "source"],
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)(?!.*\\\\).+\\.base$"
+          },
+          "title": {"type": "string"},
+          "source": {
+            "type": "object",
+            "required": ["folder"],
+            "properties": {
+              "folder": {"type": "string"},
+              "recursive": {"type": "boolean"}
+            }
+          },
+          "filters": {"type": "array"},
+          "columns": {"type": "array"},
+          "views": {"type": "array"}
+        }
+      }
+    },
+    "claude_md_sections": {
+      "type": "array",
+      "description": "Sections to merge into <vault>/CLAUDE.md via marker-merger.",
+      "items": {
+        "type": "object",
+        "required": ["id", "order"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9\\-]*$"},
+          "order": {"type": "integer"},
+          "title": {"type": "string"},
+          "content": {"type": "string", "description": "Literal markdown body (no Jinja2)."},
+          "template": {"type": "string", "description": "Optional Jinja2 template ref. If set, overrides 'content'."},
+          "merge_policy": {
+            "type": "string",
+            "enum": ["replace_if_marker", "skip_if_exists", "overwrite"]
+          }
+        }
+      }
+    },
+    "briefing_sources": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Briefing-source keys this blueprint activates (e.g. 'wetter', 'todos', 'playlist_trending'). Merged as set-union with parents."
+    },
+    "permissions_defaults": {
+      "type": "object",
+      "additionalProperties": {"type": "boolean"},
+      "description": "Default per-vault permissions (e.g. write_raw, write_playlists). Child overrides parent."
+    },
+    "system_prompt_template": {
+      "type": "string",
+      "description": "Optional Jinja2 template ref for the vault's system prompt. Child wins on conflict."
+    },
+    "signature": {
+      "type": "object",
+      "description": "Optional ed25519 signature. Verified against server/blueprint_trusted_keys.json.",
+      "additionalProperties": false,
+      "properties": {
+        "alg": {"type": "string", "enum": ["ed25519"]},
+        "signed_by": {"type": "string"},
+        "pubkey_id": {"type": "string"},
+        "value": {"type": "string"}
+      }
+    }
+  }
+}

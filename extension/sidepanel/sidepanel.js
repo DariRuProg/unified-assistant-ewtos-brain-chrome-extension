@@ -28,7 +28,15 @@ function updateDarkToggleIcon(darkMode) {
   applyTheme(theme, darkMode);
   updateDarkToggleIcon(darkMode);
   toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
-  updateViewToggleBtn();
+  const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
+  if (Array.isArray(stored)) {
+    quickSlots = stored.slice(0, QUICK_SLOT_COUNT);
+    while (quickSlots.length < QUICK_SLOT_COUNT) quickSlots.push(null);
+  }
+  renderTabs();
+  renderQuickActions();
+  await loadQuickRowPref();
+  if (!activeTool) renderToolList();
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -38,6 +46,10 @@ chrome.storage.onChanged.addListener((changes) => {
       updateDarkToggleIcon(darkMode);
     });
   }
+  if (changes.hideQuickRowOnTool !== undefined) {
+    hideQuickRowOnTool = !!changes.hideQuickRowOnTool.newValue;
+    applyQuickRowVisibility();
+  }
   if (changes.playlistPick && changes.playlistPick.newValue) {
     checkPendingPlaylistPick();
   }
@@ -46,12 +58,13 @@ chrome.storage.onChanged.addListener((changes) => {
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
 const statusDot = document.getElementById("status-dot");
-const statusText = document.getElementById("status-text");
 const tabsNav = document.getElementById("tabs");
 const content = document.getElementById("content");
 const openOptions = document.getElementById("open-options");
 const reconnectBtn = document.getElementById("reconnect");
 const quickActions = document.getElementById("quick-actions");
+const offlineBannerText = document.getElementById("offline-banner-text");
+const DEFAULT_OFFLINE_HTML = offlineBannerText ? offlineBannerText.innerHTML : "";
 
 const TOOL_RENDERERS = {
   youtube_transcript: renderYoutubeTranscript,
@@ -62,6 +75,7 @@ const TOOL_RENDERERS = {
   todos: renderTodos,
   chat: renderChat,
   vault_explorer: renderVaultExplorer,
+  vault_health: renderVaultHealth,
   playlists: renderPlaylistsTool,
   bookmarks: renderBookmarksTool,
   page_scrape: renderPageScrape,
@@ -82,7 +96,14 @@ const GROUPS = [
       { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
       { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates", icon: "✅" },
       { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule", icon: "🎵" },
-      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture", icon: "🔖" },
+      { id: "vault_health", label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
+      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
+        actions: [
+          { label: "Neuen Bookmark", icon: "+", action: "add" },
+          { label: "Markierte Tabs erfassen", icon: "⇲", action: "capture_tabs" },
+          { label: "URLs der Tabs kopieren", icon: "⧉", action: "copy_urls" },
+        ],
+      },
     ],
   },
   {
@@ -90,30 +111,65 @@ const GROUPS = [
     label: "Web",
     tools: [
       { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
-      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄" },
+      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄",
+        actions: [
+          { label: "Nur Inhalt scrapen", icon: "▸", action: "scrape_content" },
+          { label: "Komplette Seite scrapen", icon: "▸", action: "scrape_full" },
+        ],
+      },
       { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
       { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
       { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
-      { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸" },
+      { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸",
+        actions: [
+          { label: "Sichtbar", icon: "▸", action: "shot_visible" },
+          { label: "Bereich wählen", icon: "▸", action: "shot_area" },
+          { label: "Ganze Seite", icon: "▸", action: "shot_full" },
+        ],
+      },
       { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
       { id: "image_generator", label: "Image-Gen", hint: "Bild erzeugen + editieren (Gemini Nano Banana)", icon: "🪄" },
     ],
   },
-  {
-    id: "code",
-    label: "Code",
-    tools: [
-      { id: "tbd", label: "noch undefiniert", hint: "Sprint 3", soon: true },
-    ],
-  },
 ];
 
-const QUICK_TOOLS = [
-  { id: "vault_explorer", label: "Vault", icon: "📚" },
-  { id: "scratchpad", label: "Notiz", icon: "📝" },
-  { id: "todos",     label: "Todos", icon: "✅" },
-  { id: "_briefing", label: "Morgen", icon: "☀", action: showBriefingPanel },
-];
+const QUICK_SPECIAL = {
+  _briefing: { label: "Briefing", icon: "☀", run: () => showBriefingPanel() },
+};
+const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing"];
+const QUICK_SLOT_COUNT = 4;
+let quickSlots = DEFAULT_QUICK_SLOTS.slice();
+
+function getQuickOption(id) {
+  if (!id) return null;
+  if (QUICK_SPECIAL[id]) {
+    return { id, label: QUICK_SPECIAL[id].label, icon: QUICK_SPECIAL[id].icon, special: true };
+  }
+  for (const g of GROUPS) {
+    const t = g.tools.find((x) => x.id === id);
+    if (t) return { id: t.id, label: t.label, icon: t.icon || "•", special: false };
+  }
+  return null;
+}
+
+function getAllQuickOptions() {
+  const opts = [];
+  for (const [id, meta] of Object.entries(QUICK_SPECIAL)) {
+    opts.push({ id, label: meta.label, icon: meta.icon, special: true });
+  }
+  for (const g of GROUPS) {
+    for (const t of g.tools) {
+      if (t.soon) continue;
+      opts.push({ id: t.id, label: t.label, icon: t.icon || "•", group: g.label });
+    }
+  }
+  return opts;
+}
+
+function runQuickSlot(id) {
+  if (QUICK_SPECIAL[id]) return QUICK_SPECIAL[id].run();
+  openTool(id);
+}
 
 let activeTab = GROUPS[0].id;
 let activeTool = null;
@@ -137,6 +193,7 @@ renderToolList();
 renderQuickActions();
 checkPendingPlaylistPick();
 checkPendingBrainPick();
+checkStartTool();
 checkActiveTabForYoutube();
 
 // Globaler Click-Handler für Obsidian-Wikilinks aus renderMarkdown.
@@ -159,7 +216,18 @@ chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "connection_status") setStatus(!!msg.connected);
+  if (msg?.type === "connection_status") {
+    if (msg.incompatible) {
+      if (offlineBannerText) {
+        offlineBannerText.textContent =
+          `Version-Konflikt: Server v${msg.serverVersion ?? "?"}, Extension v${chrome.runtime.getManifest().version}. Bitte beide aktualisieren.`;
+      }
+      setStatus(false, "Version-Konflikt");
+    } else {
+      if (offlineBannerText) offlineBannerText.innerHTML = DEFAULT_OFFLINE_HTML;
+      setStatus(!!msg.connected);
+    }
+  }
 });
 
 // Wenn das Sidepanel schon offen ist und ein neuer Context-Menu-Pick reinkommt,
@@ -170,6 +238,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (area === "local" && changes.brainPick && changes.brainPick.newValue) {
     checkPendingBrainPick();
+  }
+  if (area === "local" && changes.startTool && changes.startTool.newValue) {
+    checkStartTool();
   }
   // Vault-Switch: Notes-Tools sind vault-scoped, also komplett neu rendern,
   // damit scratchpad/todos/bookmarks aus dem neu gewählten Vault geladen werden.
@@ -183,6 +254,11 @@ openOptions.addEventListener("click", () => {
   closeBurgerMenu();
 });
 
+document.getElementById("edit-quick-slots").addEventListener("click", () => {
+  closeBurgerMenu();
+  openQuickEditor(null);
+});
+
 reconnectBtn.addEventListener("click", () => {
   setStatus(false, "verbinde...");
   chrome.runtime.sendMessage({ type: "reconnect" });
@@ -191,21 +267,14 @@ reconnectBtn.addEventListener("click", () => {
 
 const burgerBtn = document.getElementById("burger-btn");
 const burgerMenu = document.getElementById("burger-menu");
-const viewToggleMenuBtn = document.getElementById("view-toggle");
 
-function updateViewToggleBtn() {
-  if (viewToggleMenuBtn) {
-    viewToggleMenuBtn.textContent = toolViewMode === "grid" ? "☰ Listen-Ansicht" : "⊞ Kachel-Ansicht";
-  }
-}
-
-viewToggleMenuBtn.addEventListener("click", async () => {
-  toolViewMode = toolViewMode === "grid" ? "list" : "grid";
+async function setViewMode(mode) {
+  if (toolViewMode === mode) return;
+  toolViewMode = mode;
   await chrome.storage.local.set({ toolViewMode });
-  updateViewToggleBtn();
+  renderTabs();
   if (!activeTool) renderToolList();
-  closeBurgerMenu();
-});
+}
 
 function openBurgerMenu() {
   burgerMenu.classList.remove("hidden");
@@ -245,9 +314,16 @@ document.getElementById("dark-toggle").addEventListener("click", async () => {
 function setStatus(connected, customText) {
   statusDot.classList.toggle("online", connected);
   statusDot.classList.toggle("offline", !connected);
-  statusText.textContent = customText ?? (connected ? "verbunden" : "offline");
+  statusDot.title = customText ?? (connected ? "verbunden" : "offline");
   const banner = document.getElementById("offline-banner");
   if (banner) banner.classList.toggle("hidden", connected);
+}
+
+async function checkStartTool() {
+  const { startTool } = await chrome.storage.local.get("startTool");
+  if (!startTool) return;
+  await chrome.storage.local.remove("startTool");
+  if (TOOL_RENDERERS[startTool]) openTool(startTool);
 }
 
 async function checkPendingPlaylistPick() {
@@ -455,6 +531,23 @@ function renderTabs() {
     });
     tabsNav.append(b);
   }
+  const vt = el("div", { className: "view-toggle" });
+  const listBtn = el("button", {
+    type: "button",
+    className: "vt-btn first" + (toolViewMode === "list" ? " active" : ""),
+    title: "Listen-Ansicht",
+    textContent: "☰",
+  });
+  const gridBtn = el("button", {
+    type: "button",
+    className: "vt-btn last" + (toolViewMode === "grid" ? " active" : ""),
+    title: "Kachel-Ansicht",
+    textContent: "⊞",
+  });
+  listBtn.addEventListener("click", () => setViewMode("list"));
+  gridBtn.addEventListener("click", () => setViewMode("grid"));
+  vt.append(listBtn, gridBtn);
+  tabsNav.append(vt);
 }
 
 function renderToolList() {
@@ -464,7 +557,8 @@ function renderToolList() {
 
   const list = el("ul", { className: "tools " + toolViewMode });
   for (const t of group.tools) {
-    const li = el("li", { className: "tool" + (t.soon ? " soon" : "") });
+    const hasActions = Array.isArray(t.actions) && t.actions.length > 0;
+    const li = el("li", { className: "tool" + (t.soon ? " soon" : "") + (hasActions ? " has-caret" : "") });
     if (toolViewMode === "grid" && t.icon) {
       li.append(el("span", { className: "tool-icon", textContent: t.icon }));
     }
@@ -478,31 +572,215 @@ function renderToolList() {
     if (t.soon) {
       li.append(el("span", { className: "badge", textContent: "bald" }));
     } else {
-      li.addEventListener("click", () => openTool(t.id));
+      li.addEventListener("click", (e) => {
+        if (e.target.closest(".tool-caret, .tool-popover")) return;
+        openTool(t.id);
+      });
+    }
+    if (hasActions && !t.soon) {
+      const caret = el("button", { type: "button", className: "tool-caret", title: "Weitere Aktionen", textContent: "▾" });
+      const pop = el("div", { className: "tool-popover" });
+      for (const a of t.actions) {
+        const item = el("button", { type: "button", className: "tool-popover-item" });
+        item.append(
+          el("span", { className: "tpi-ico", textContent: a.icon || "▸" }),
+          el("span", { textContent: a.label }),
+        );
+        item.addEventListener("click", (e) => {
+          e.stopPropagation();
+          pop.classList.remove("open");
+          openTool(t.id, { action: a.action });
+        });
+        pop.append(item);
+      }
+      caret.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.querySelectorAll(".tool-popover.open").forEach(p => { if (p !== pop) p.classList.remove("open"); });
+        pop.classList.toggle("open");
+      });
+      li.append(caret, pop);
     }
     list.append(li);
   }
   content.append(list);
 }
 
+document.addEventListener("click", () => {
+  document.querySelectorAll(".tool-popover.open").forEach(p => p.classList.remove("open"));
+});
+
 function renderQuickActions() {
   quickActions.replaceChildren();
-  for (const t of QUICK_TOOLS) {
+
+  while (quickSlots.length < QUICK_SLOT_COUNT) quickSlots.push(null);
+  if (quickSlots.length > QUICK_SLOT_COUNT) quickSlots = quickSlots.slice(0, QUICK_SLOT_COUNT);
+
+  const row = el("div", { className: "quick-row" });
+  const allFilled = quickSlots.every((id) => !!id);
+
+  quickSlots.forEach((slotId, idx) => {
+    const opt = getQuickOption(slotId);
+    if (!opt) {
+      const plus = el("button", {
+        type: "button",
+        className: "quick-btn quick-plus",
+        title: "Slot belegen",
+      });
+      plus.append(el("span", { className: "quick-icon", textContent: "+" }));
+      plus.append(el("span", { textContent: "Slot" }));
+      plus.addEventListener("click", () => openQuickEditor(idx));
+      row.append(plus);
+      return;
+    }
     const btn = el("button", {
       type: "button",
-      className: "quick-btn" + (activeTool === t.id ? " active" : ""),
+      className: "quick-btn" + (activeTool === opt.id ? " active" : ""),
+      title: opt.label,
     });
-    if (t.icon) {
-      btn.append(el("span", { className: "quick-icon", textContent: t.icon }));
-    }
-    btn.append(el("span", { textContent: t.label }));
-    if (t.action) {
-      btn.addEventListener("click", () => t.action());
-    } else {
-      btn.addEventListener("click", () => openTool(t.id));
-    }
-    quickActions.append(btn);
+    btn.append(el("span", { className: "quick-icon", textContent: opt.icon }));
+    btn.append(el("span", { textContent: opt.label }));
+    btn.addEventListener("click", () => runQuickSlot(opt.id));
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openSlotContextMenu(e.clientX, e.clientY, idx);
+    });
+    row.append(btn);
+  });
+
+  quickActions.append(row);
+
+  if (allFilled) {
+    const edit = el("button", {
+      type: "button",
+      className: "quick-edit-trigger",
+      title: "Quick-Slots bearbeiten",
+      textContent: "✎",
+    });
+    edit.addEventListener("click", () => openQuickEditor(null));
+    quickActions.append(edit);
   }
+}
+
+async function saveQuickSlots() {
+  await chrome.storage.local.set({ quickSlots });
+  renderQuickActions();
+}
+
+function openSlotContextMenu(x, y, idx) {
+  document.querySelectorAll(".slot-context-menu").forEach((m) => m.remove());
+  const menu = el("div", { className: "slot-context-menu" });
+  const change = el("button", { type: "button", textContent: "Slot ändern…" });
+  const remove = el("button", { type: "button", textContent: "Slot leeren" });
+  change.addEventListener("click", () => { menu.remove(); openQuickEditor(idx); });
+  remove.addEventListener("click", async () => {
+    menu.remove();
+    quickSlots[idx] = null;
+    await saveQuickSlots();
+  });
+  menu.append(change, remove);
+  document.body.append(menu);
+  const rect = menu.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 8;
+  const maxY = window.innerHeight - rect.height - 8;
+  menu.style.left = Math.min(x, maxX) + "px";
+  menu.style.top = Math.min(y, maxY) + "px";
+  const close = (e) => {
+    if (menu.contains(e.target)) return;
+    menu.remove();
+    document.removeEventListener("click", close);
+    document.removeEventListener("keydown", esc);
+  };
+  const esc = (e) => { if (e.key === "Escape") { menu.remove(); document.removeEventListener("click", close); document.removeEventListener("keydown", esc); } };
+  setTimeout(() => {
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", esc);
+  }, 0);
+}
+
+function openQuickEditor(targetIdx) {
+  document.querySelectorAll(".quick-editor").forEach((e) => e.remove());
+  const editor = el("div", { className: "quick-editor" });
+  const head = el("div", { className: "quick-editor-head" });
+  const title = el("span", { className: "title",
+    textContent: targetIdx === null ? "Quick-Slots bearbeiten" : `Slot ${targetIdx + 1} belegen`,
+  });
+  const closeBtn = el("button", { type: "button", className: "close", textContent: "✕" });
+  closeBtn.addEventListener("click", () => editor.remove());
+  head.append(title, closeBtn);
+
+  const slotsRow = el("div", { className: "quick-editor-slots" });
+  function renderSlotsRow() {
+    slotsRow.replaceChildren();
+    quickSlots.forEach((slotId, idx) => {
+      const opt = getQuickOption(slotId);
+      const slot = el("button", { type: "button",
+        className: "qe-slot" + (opt ? "" : " empty") + (selectedIdx === idx ? " selected" : ""),
+        title: opt ? `Slot ${idx + 1}: ${opt.label} (klick = leeren)` : `Slot ${idx + 1} (leer)`,
+      });
+      slot.append(el("span", { className: "ico", textContent: opt ? opt.icon : "+" }));
+      slot.append(el("span", { className: "lbl", textContent: opt ? opt.label : `Slot ${idx + 1}` }));
+      slot.addEventListener("click", async () => {
+        if (opt) {
+          quickSlots[idx] = null;
+          await saveQuickSlots();
+          renderSlotsRow();
+        } else {
+          selectedIdx = idx;
+          renderSlotsRow();
+        }
+      });
+      slotsRow.append(slot);
+    });
+  }
+  let selectedIdx = targetIdx !== null ? targetIdx : quickSlots.findIndex((s) => !s);
+  if (selectedIdx < 0) selectedIdx = 0;
+  renderSlotsRow();
+
+  const hint = el("div", { className: "qe-hint",
+    textContent: "Wähle ein Tool für den markierten Slot (oder klicke einen Slot zum Leeren):",
+  });
+
+  const picker = el("div", { className: "quick-editor-picker" });
+  const used = new Set(quickSlots.filter(Boolean));
+  for (const opt of getAllQuickOptions()) {
+    const item = el("button", { type: "button", className: "qe-pick" });
+    item.append(el("span", { className: "ico", textContent: opt.icon }));
+    item.append(el("span", { className: "lbl", textContent: opt.label }));
+    if (opt.group) item.append(el("span", { className: "grp", textContent: opt.group }));
+    if (used.has(opt.id)) item.classList.add("used");
+    item.addEventListener("click", async () => {
+      const idx = selectedIdx;
+      const existing = quickSlots.indexOf(opt.id);
+      if (existing >= 0 && existing !== idx) quickSlots[existing] = null;
+      quickSlots[idx] = opt.id;
+      await saveQuickSlots();
+      const nextEmpty = quickSlots.findIndex((s) => !s);
+      if (nextEmpty >= 0) {
+        selectedIdx = nextEmpty;
+        renderSlotsRow();
+        item.classList.add("used");
+      } else {
+        editor.remove();
+      }
+    });
+    picker.append(item);
+  }
+
+  editor.append(head, slotsRow, hint, picker);
+  quickActions.after(editor);
+}
+
+let hideQuickRowOnTool = false;
+
+async function loadQuickRowPref() {
+  const { hideQuickRowOnTool: pref } = await chrome.storage.local.get("hideQuickRowOnTool");
+  hideQuickRowOnTool = !!pref;
+  applyQuickRowVisibility();
+}
+
+function applyQuickRowVisibility() {
+  if (hideQuickRowOnTool && activeTool) quickActions.classList.add("hidden");
+  else quickActions.classList.remove("hidden");
 }
 
 let pendingToolOptions = null;
@@ -527,6 +805,7 @@ function openTool(toolId, options = null) {
   pendingToolOptions = options;
   renderTabs();
   renderQuickActions();
+  applyQuickRowVisibility();
 
   content.replaceChildren();
   const view = el("section", { className: "tool-view" });
@@ -549,6 +828,7 @@ function closeTool() {
   panelTitle = null;
   panelBody = null;
   renderQuickActions();
+  applyQuickRowVisibility();
   renderToolList();
 }
 
@@ -1153,7 +1433,7 @@ async function renderTodos() {
     list.replaceChildren();
     const items = parseTodoLines(content).filter((x) => x.isTodo);
     if (!items.length) {
-      list.append(el("div", { className: "todo-empty", textContent: "Keine Todos." }));
+      list.append(el("div", { className: "todo-empty", textContent: "Noch keine Todos. Mit '+ Todo' oben hinzufügen oder im Chat 'Erinnere mich an …' sagen." }));
       return;
     }
     for (const item of items) {
@@ -1360,7 +1640,36 @@ async function renderChat() {
   const toolbar = el("div", { className: "chat-toolbar" });
   const clearBtn = el("button", { type: "button", textContent: "Verlauf löschen" });
   clearBtn.classList.add("secondary");
-  toolbar.append(clearBtn);
+
+  // Search toggle
+  const searchToggleRow = el("div", { className: "checkbox-row", title: "Volltextsuche über alle .md-Dateien (inkl. raw/) — ermöglicht gezielte Stichwort-Suche" });
+  const searchToggle = el("input", { type: "checkbox", id: "vaultSearchToggle" });
+  searchToggle.checked = true; // default until loaded from server
+  const searchToggleLabel = el("label", { htmlFor: "vaultSearchToggle", textContent: "Volltextsuche" });
+  searchToggleRow.append(searchToggle, searchToggleLabel);
+
+  // Load initial state from server
+  try {
+    const settingsRes = await fetch(`${httpBase}/settings`);
+    if (settingsRes.ok) {
+      const settingsData = await settingsRes.json();
+      if (typeof settingsData.vault_search_enabled === "boolean") {
+        searchToggle.checked = settingsData.vault_search_enabled;
+      }
+    }
+  } catch (_) {}
+
+  searchToggle.addEventListener("change", async () => {
+    try {
+      await fetch(`${httpBase}/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vault_search_enabled: searchToggle.checked }),
+      });
+    } catch (_) {}
+  });
+
+  toolbar.append(clearBtn, searchToggleRow);
 
   const status = el("div", { className: "tool-status" });
   const pageUrlRow = el("div", { className: "page-url-row", style: "display:none" });
@@ -1931,7 +2240,11 @@ async function renderVaultExplorer() {
 
   const header = el("div", { className: "chat-header" });
   const vaultSelect = el("select", { className: "vault-picker" });
-  header.append(vaultSelect);
+  const searchRow = el("div", { className: "vault-search-row" });
+  const searchInput = el("input", { type: "text", className: "vault-search-input", placeholder: "Vault durchsuchen..." });
+  const searchBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "Suchen" });
+  searchRow.append(searchInput, searchBtn);
+  header.append(vaultSelect, searchRow);
 
   const breadcrumb = el("div", { className: "vault-breadcrumb" });
   const listBox = el("div", { className: "vault-list" });
@@ -1955,6 +2268,9 @@ async function renderVaultExplorer() {
   let currentVaultId = null;
   let currentPath = "";
   let currentFile = null;
+  let canWrite = false;
+  let searchActive = false;
+  let vaultsById = {};
 
   function setStatus(text, level = "") {
     status.textContent = text;
@@ -1963,6 +2279,11 @@ async function renderVaultExplorer() {
 
   function renderBreadcrumb() {
     breadcrumb.replaceChildren();
+    if (searchActive) {
+      const q = searchInput.value.trim();
+      breadcrumb.append(el("span", { className: "vault-crumb-current", textContent: `Suche: "${q}"` }));
+      return;
+    }
     if (currentFile) {
       const back = el("a", { href: "#", textContent: "← zurück", className: "vault-back" });
       back.addEventListener("click", (e) => { e.preventDefault(); currentFile = null; renderView(); });
@@ -1999,6 +2320,8 @@ async function renderVaultExplorer() {
 
   async function navigateTo(path) {
     if (!currentVaultId) return;
+    searchActive = false;
+    searchInput.value = "";
     currentPath = path || "";
     currentFile = null;
     await renderView();
@@ -2009,6 +2332,55 @@ async function renderVaultExplorer() {
     currentFile = relPath;
     await renderView();
   }
+
+  async function doSearch() {
+    const q = searchInput.value.trim();
+    if (!q || !currentVaultId) return;
+    searchActive = true;
+    currentFile = null;
+    listBox.style.display = "";
+    viewerBox.style.display = "none";
+    listBox.replaceChildren();
+    renderBreadcrumb();
+    setStatus("suche...");
+    try {
+      const url = `${httpBase}/tools/vault_search/${encodeURIComponent(currentVaultId)}?q=${encodeURIComponent(q)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const results = data.results || [];
+      if (!results.length) {
+        listBox.append(el("div", { className: "vault-empty", textContent: `Keine Treffer für "${q}".` }));
+      }
+      for (const r of results) {
+        const row = el("div", { className: "vault-entry vault-search-result" });
+        row.append(el("span", { className: "vault-icon", textContent: "🔍" }));
+        const textWrap = el("div", { className: "vault-entry-text" });
+        textWrap.append(
+          el("span", { className: "vault-name", textContent: r.rel_path }),
+          el("span", { className: "vault-search-snippet", textContent: r.snippet })
+        );
+        row.append(textWrap);
+        row.addEventListener("click", () => {
+          searchActive = false;
+          openFile(r.rel_path);
+        });
+        listBox.append(row);
+      }
+      setStatus("");
+    } catch (err) {
+      setStatus("Suche fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  searchBtn.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+  searchInput.addEventListener("input", () => {
+    if (!searchInput.value.trim() && searchActive) {
+      searchActive = false;
+      renderView();
+    }
+  });
 
   async function renderView() {
     renderBreadcrumb();
@@ -2024,6 +2396,7 @@ async function renderVaultExplorer() {
         const data = await res.json();
         const body = el("div", { className: "vault-file-body" });
         body.innerHTML = renderMarkdown(data.content || "");
+        const viewerActions = el("div", { className: "vault-viewer-actions" });
         const chatBtn = el("button", {
           type: "button",
           className: "vault-file-chat-btn",
@@ -2036,7 +2409,14 @@ async function renderVaultExplorer() {
             sourceTitle: currentFile,
           });
         });
-        viewerBox.append(body, chatBtn);
+        viewerActions.append(chatBtn);
+        if (canWrite) {
+          const editBtn = el("button", { type: "button", className: "vault-edit-btn", textContent: "Bearbeiten" });
+          const rawContent = data.content || "";
+          editBtn.addEventListener("click", () => showEditor(rawContent));
+          viewerActions.append(editBtn);
+        }
+        viewerBox.append(body, viewerActions);
         setStatus("");
       } catch (err) {
         viewerBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
@@ -2047,6 +2427,41 @@ async function renderVaultExplorer() {
     viewerBox.style.display = "none";
     listBox.style.display = "";
     listBox.replaceChildren();
+    if (canWrite) {
+      const toolbar = el("div", { className: "vault-toolbar" });
+      const newBtn = el("button", { type: "button", className: "vault-new-btn", textContent: "+ Neue Datei" });
+      toolbar.append(newBtn);
+      const newForm = el("div", { className: "vault-new-file-row", style: "display:none" });
+      const newInput = el("input", { type: "text", className: "vault-new-input", placeholder: "dateiname.md" });
+      const newConfirm = el("button", { type: "button", textContent: "Anlegen", className: "vault-new-confirm" });
+      const newCancel = el("button", { type: "button", textContent: "×", className: "vault-new-cancel" });
+      newForm.append(newInput, newConfirm, newCancel);
+      newBtn.addEventListener("click", () => { newForm.style.display = ""; newInput.focus(); });
+      newCancel.addEventListener("click", () => { newForm.style.display = "none"; newInput.value = ""; });
+      newConfirm.addEventListener("click", async () => {
+        const name = newInput.value.trim();
+        if (!name) return;
+        const rel = currentPath ? `${currentPath}/${name}` : name;
+        newConfirm.disabled = true;
+        try {
+          const r = await fetch(
+            `${httpBase}/tools/vault_file_new/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(rel)}`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "" }) }
+          );
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${r.status}`);
+          }
+          const finalRel = rel.endsWith(".md") ? rel : rel + ".md";
+          await openFile(finalRel);
+        } catch (err) {
+          setStatus("Fehler: " + (err.message || err), "error");
+          newConfirm.disabled = false;
+        }
+      });
+      newInput.addEventListener("keydown", (e) => { if (e.key === "Enter") newConfirm.click(); });
+      listBox.append(toolbar, newForm);
+    }
     setStatus("lade Ordner...");
     try {
       const url = `${httpBase}/tools/vault_list/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentPath)}`;
@@ -2079,8 +2494,43 @@ async function renderVaultExplorer() {
     }
   }
 
+  function showEditor(initialContent) {
+    viewerBox.replaceChildren();
+    const ta = el("textarea", { className: "vault-editor-textarea" });
+    ta.value = initialContent;
+    const actionsEl = el("div", { className: "vault-editor-actions" });
+    const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "vault-save-btn" });
+    const cancelBtn = el("button", { type: "button", textContent: "Abbrechen" });
+    actionsEl.append(saveBtn, cancelBtn);
+    viewerBox.append(ta, actionsEl);
+    ta.focus();
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Speichere...";
+      try {
+        const r = await fetch(
+          `${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`,
+          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: ta.value }) }
+        );
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${r.status}`);
+        }
+        setStatus("Gespeichert.");
+        setTimeout(() => setStatus(""), 2000);
+        await openFile(currentFile);
+      } catch (err) {
+        setStatus("Fehler: " + (err.message || err), "error");
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Speichern";
+      }
+    });
+    cancelBtn.addEventListener("click", () => openFile(currentFile));
+  }
+
   vaultSelect.addEventListener("change", async () => {
     currentVaultId = vaultSelect.value;
+    canWrite = !!(vaultsById[currentVaultId]?.permissions?.write_files);
     await chrome.storage.local.set({ selectedVaultId: currentVaultId });
     currentPath = "";
     currentFile = null;
@@ -2104,18 +2554,216 @@ async function renderVaultExplorer() {
       return;
     }
     vaultSelect.replaceChildren();
-    for (const v of vaults) vaultSelect.append(el("option", { value: v.id, textContent: v.name }));
+    for (const v of vaults) {
+      vaultSelect.append(el("option", { value: v.id, textContent: v.name }));
+      vaultsById[v.id] = v;
+    }
     const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
     const wantId = initialVaultId && vaults.some((v) => v.id === initialVaultId) ? initialVaultId : null;
     currentVaultId = wantId
       || (vaults.some((v) => v.id === selectedVaultId) ? selectedVaultId : vaults[0].id);
     vaultSelect.value = currentVaultId;
+    canWrite = !!(vaultsById[currentVaultId]?.permissions?.write_files);
     if (initialFile) {
       const parentIdx = initialFile.lastIndexOf("/");
       currentPath = parentIdx === -1 ? "" : initialFile.slice(0, parentIdx);
       currentFile = initialFile;
     }
     await renderView();
+  } catch (err) {
+    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+  }
+}
+
+const VH_SEVERITY = {
+  error: { icon: "🔴", label: "Fehler" },
+  warn: { icon: "🟡", label: "Warnung" },
+  info: { icon: "🔵", label: "Info" },
+};
+
+function renderLineDiff(a, b) {
+  const A = a.split("\n"), B = b.split("\n");
+  const n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const frag = document.createDocumentFragment();
+  const addLine = (cls, prefix, text) =>
+    frag.append(el("div", { className: "vh-diff-line " + cls, textContent: prefix + text }));
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { addLine("ctx", "  ", A[i]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { addLine("del", "- ", A[i]); i++; }
+    else { addLine("add", "+ ", B[j]); j++; }
+  }
+  while (i < n) { addLine("del", "- ", A[i]); i++; }
+  while (j < m) { addLine("add", "+ ", B[j]); j++; }
+  return frag;
+}
+
+async function renderVaultHealth() {
+  panelTitle.textContent = "Vault-Gesundheit";
+  const initialVaultId = pendingToolOptions?.vaultId || null;
+  const httpBase = await getHttpBase();
+
+  const header = el("div", { className: "chat-header" });
+  const vaultSelect = el("select", { className: "vault-picker" });
+  const runBtn = el("button", { type: "button", className: "secondary", textContent: "Neu prüfen" });
+  header.append(vaultSelect, runBtn);
+
+  const summary = el("div", { className: "vh-summary" });
+  const upgradeBox = el("div", { className: "vh-upgrade", style: "display:none" });
+  const listBox = el("div", { className: "vh-list" });
+  const status = el("div", { className: "tool-status" });
+  panelBody.append(header, summary, upgradeBox, listBox, status);
+
+  let currentVaultId = null;
+
+  function setStatus(text, level = "") {
+    status.textContent = text;
+    status.className = "tool-status" + (level ? " " + level : "");
+  }
+
+  async function runAudit() {
+    if (!currentVaultId) return;
+    summary.replaceChildren();
+    listBox.replaceChildren();
+    upgradeBox.replaceChildren();
+    upgradeBox.style.display = "none";
+    setStatus("Prüfe Vault...");
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      renderReport(await res.json());
+      setStatus("");
+    } catch (err) {
+      setStatus("Audit fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  function renderReport(data) {
+    const s = data.summary || {};
+    const sev = s.by_severity || {};
+    summary.append(el("div", {
+      className: "vh-summary-line",
+      textContent: `${s.total || 0} Befunde · 🔴 ${sev.error || 0} · 🟡 ${sev.warn || 0} · 🔵 ${sev.info || 0} · ${s.files_scanned || 0} Dateien gescannt`,
+    }));
+
+    const findings = data.findings || [];
+    if (!findings.length) {
+      listBox.append(el("div", { className: "vh-empty", textContent: "Keine Befunde — der Vault ist sauber. 🎉" }));
+      return;
+    }
+
+    if (findings.some((f) => f.category === "claude_md_drift")) {
+      renderUpgradeAffordance();
+    }
+
+    for (const sevKey of ["error", "warn", "info"]) {
+      const group = findings.filter((f) => f.severity === sevKey);
+      if (!group.length) continue;
+      const meta = VH_SEVERITY[sevKey];
+      listBox.append(el("div", { className: "vh-group-title", textContent: `${meta.icon} ${meta.label} (${group.length})` }));
+      for (const f of group) {
+        const row = el("div", { className: "vh-finding vh-sev-" + sevKey });
+        const head = el("div", { className: "vh-finding-head" });
+        head.append(el("span", { className: "vh-badge", textContent: f.category }));
+        if (f.path) head.append(el("code", { className: "vh-path", textContent: f.path }));
+        row.append(head);
+        row.append(el("div", { className: "vh-msg", textContent: f.message }));
+        if (f.recommendation) row.append(el("div", { className: "vh-rec", textContent: "→ " + f.recommendation }));
+        listBox.append(row);
+      }
+    }
+  }
+
+  function renderUpgradeAffordance() {
+    upgradeBox.style.display = "";
+    upgradeBox.replaceChildren();
+    upgradeBox.append(el("div", { className: "vh-upgrade-title", textContent: "🩹 CLAUDE.md kann aktualisiert werden" }));
+    upgradeBox.append(el("div", {
+      className: "vh-upgrade-hint",
+      textContent: "Verwaltete Sektionen werden non-destruktiv aktualisiert — dein eigener Text außerhalb der Marker bleibt erhalten.",
+    }));
+    const previewBtn = el("button", { type: "button", textContent: "Diff ansehen" });
+    upgradeBox.append(previewBtn);
+    previewBtn.addEventListener("click", () => showPreview(previewBtn));
+  }
+
+  async function showPreview(previewBtn) {
+    previewBtn.disabled = true;
+    setStatus("Lade Diff...");
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/claude_md_preview`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setStatus("");
+      const box = el("div", { className: "vh-diff-box" });
+      box.append(el("div", {
+        className: "vh-diff-label",
+        textContent: data.changed ? `Sektionen: ${(data.sections || []).join(", ")}` : "Bereits aktuell — kein Diff.",
+      }));
+      if (data.changed) {
+        const pre = el("pre", { className: "vh-diff" });
+        pre.append(renderLineDiff(data.existing || "", data.merged || ""));
+        box.append(pre);
+        const applyBtn = el("button", { type: "button", className: "vault-save-btn", textContent: "Anwenden" });
+        applyBtn.addEventListener("click", () => applyUpgrade(applyBtn));
+        box.append(applyBtn);
+      }
+      upgradeBox.append(box);
+      previewBtn.style.display = "none";
+    } catch (err) {
+      previewBtn.disabled = false;
+      setStatus("Diff konnte nicht geladen werden: " + (err.message || err), "error");
+    }
+  }
+
+  async function applyUpgrade(applyBtn) {
+    applyBtn.disabled = true;
+    applyBtn.textContent = "Wende an...";
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/claude_md_apply`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus("CLAUDE.md aktualisiert.");
+      await runAudit();
+    } catch (err) {
+      applyBtn.disabled = false;
+      applyBtn.textContent = "Anwenden";
+      setStatus("Fehler beim Anwenden: " + (err.message || err), "error");
+    }
+  }
+
+  runBtn.addEventListener("click", runAudit);
+  vaultSelect.addEventListener("change", async () => {
+    currentVaultId = vaultSelect.value;
+    await chrome.storage.local.set({ selectedVaultId: currentVaultId });
+    await runAudit();
+  });
+
+  try {
+    const res = await fetch(`${httpBase}/vaults`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const vaults = (await res.json()).vaults || [];
+    if (!vaults.length) {
+      panelBody.replaceChildren();
+      const wrap = el("div", { className: "chat-empty-state" });
+      wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
+      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
+      wrap.append(btn);
+      panelBody.append(wrap);
+      return;
+    }
+    vaultSelect.replaceChildren();
+    for (const v of vaults) vaultSelect.append(el("option", { value: v.id, textContent: v.name }));
+    const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+    currentVaultId =
+      (initialVaultId && vaults.some((v) => v.id === initialVaultId) && initialVaultId) ||
+      (vaults.some((v) => v.id === selectedVaultId) ? selectedVaultId : vaults[0].id);
+    vaultSelect.value = currentVaultId;
+    await runAudit();
   } catch (err) {
     setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
   }
@@ -2453,7 +3101,7 @@ async function renderPlaylistDetail(name, saeule) {
     const items = data.items || [];
     status.textContent = "";
     if (!items.length) {
-      itemsWrap.append(el("div", { className: "empty", textContent: "(keine Videos in der Playlist)" }));
+      itemsWrap.append(el("div", { className: "empty", textContent: "Noch keine Videos. Auf YouTube Rechtsklick → 'In Playlist speichern' oder per YouTube-Transcript-Tool aus dem aktiven Tab pullen." }));
       return;
     }
     for (const it of items) {
@@ -2633,7 +3281,7 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
     }
   }
   if (!insights && !summary && !transcript) {
-    target.append(el("div", { className: "empty", textContent: "(noch keine Insights/Summary/Transcript in der Master-Page)" }));
+    target.append(el("div", { className: "empty", textContent: "Noch keine Insights, Summary oder Transcript. Werden automatisch ergänzt sobald du das Video pullst oder im Wiki-Workflow ergänzt." }));
   }
 }
 
@@ -2815,6 +3463,7 @@ let bookmarksState = { all: [], search: "", activeTag: null };
 async function renderBookmarksTool() {
   panelTitle.textContent = "Bookmarks";
   panelBody.replaceChildren();
+  const pendingAction = pendingToolOptions?.action;
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
   const toolbar = el("div", { className: "playlist-toolbar" });
@@ -2845,6 +3494,10 @@ async function renderBookmarksTool() {
   addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, vaultId, () => renderBookmarksTool()));
   captureTabsBtn.addEventListener("click", () => captureHighlightedTabs(httpBase, vaultId, captureTabsBtn, () => renderBookmarksTool()));
   copyUrlsBtn.addEventListener("click", () => copyHighlightedTabUrls(copyUrlsBtn));
+
+  if (pendingAction === "add") addBtn.click();
+  else if (pendingAction === "capture_tabs") captureTabsBtn.click();
+  else if (pendingAction === "copy_urls") copyUrlsBtn.click();
 
   status.textContent = "lade...";
   try {
@@ -3412,8 +4065,9 @@ function makeYouTubeThumb(url) {
 
 function renderPageScrape() {
   panelTitle.textContent = "Page-Scrape";
+  const pendingAction = pendingToolOptions?.action;
 
-  let scrapeMode = "content";
+  let scrapeMode = pendingAction === "scrape_full" ? "full" : "content";
 
   // URL-Anzeige des aktiven Browser-Tabs (analog YouTube-Tab)
   const urlRow = el("div", { className: "page-url-row" });
@@ -3428,7 +4082,7 @@ function renderPageScrape() {
 
   const scrapeModeRow = el("div", { className: "scrape-mode-row" });
   function makeScrapeRadio(value, label) {
-    const btn = el("button", { type: "button", className: "scrape-mode-btn" + (value === "content" ? " active" : ""), textContent: label });
+    const btn = el("button", { type: "button", className: "scrape-mode-btn" + (value === scrapeMode ? " active" : ""), textContent: label });
     btn.dataset.value = value;
     btn.addEventListener("click", () => {
       if (scrapeMode === value) return;
@@ -3870,13 +4524,18 @@ function renderColorPicker() {
 
 function renderScreenshot() {
   panelTitle.textContent = "Screenshot + Annotation";
+  const pendingAction = pendingToolOptions?.action;
+  const initialShotMode = pendingAction === "shot_area" ? "area"
+    : pendingAction === "shot_full" ? "full"
+    : "visible";
+  const autoRun = pendingAction && pendingAction.startsWith("shot_");
 
   // ── Mode row ──────────────────────────────────────────────────────────────
-  let screenshotMode = "visible";
+  let screenshotMode = initialShotMode;
   const modeRow = el("div", { className: "scrape-mode-row" });
   [["visible", "Sichtbar"], ["area", "Bereich"], ["full", "Ganze Seite"]].forEach(([value, label]) => {
     const btn = el("button", { type: "button",
-      className: "scrape-mode-btn" + (value === "visible" ? " active" : ""),
+      className: "scrape-mode-btn" + (value === initialShotMode ? " active" : ""),
       textContent: label });
     btn.dataset.value = value;
     btn.addEventListener("click", () => {
@@ -4283,6 +4942,8 @@ function renderScreenshot() {
   });
 
   panelBody.append(modeRow, runBtn, status, cropActions, toolbar, canvas, actions);
+
+  if (autoRun) setTimeout(() => runBtn.click(), 0);
 }
 
 // ── URL-Extraktor ────────────────────────────────────────────────────────────
@@ -4817,6 +5478,63 @@ async function renderImageGenerator() {
 
 // ── Guten-Morgen-Briefing ────────────────────────────────────────────────────
 
+const BRIEFING_SOURCE_TOOLTIPS = {
+  youtube_trending: "Trending-Videos der letzten 7 Tage in deiner Nische",
+  competitor_videos: "Neue Videos deiner Konkurrenz-Channels",
+  playlist_trending: "Top-Videos aus deinen Vault-Playlists (nach Views)",
+  recommendations: "LLM-generierte 'What to do'-Vorschläge aus deinem Vault-Kontext",
+  vertrags_fristen: "Kundenverträge die in den nächsten 60 Tagen auslaufen",
+  kampagnen_kickoffs: "Kampagnen-Kickoffs in den nächsten 14 Tagen",
+};
+
+const BRIEFING_SOURCE_TITLES = {
+  youtube_trending: "YouTube-Trending",
+  competitor_videos: "Konkurrenz-Videos",
+  playlist_trending: "Playlist-Trending",
+  recommendations: "Empfehlungen",
+  vertrags_fristen: "Vertrags-Fristen",
+  kampagnen_kickoffs: "Kampagnen-Kickoffs",
+};
+
+const BRIEFING_SOURCE_ICONS = {
+  wetter: "🌤",
+  todos: "✅",
+  fristen: "⏰",
+  lernstreak: "📚",
+  vertrags_fristen: "📄",
+  kampagnen_kickoffs: "🚀",
+  youtube_trending: "🔥",
+  competitor_videos: "👥",
+  playlist_trending: "🎬",
+  recommendations: "💡",
+};
+
+function briefingFormatNumber(n) {
+  if (typeof n !== "number" || !isFinite(n)) return String(n ?? "");
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n);
+}
+
+function briefingRelativeTime(isoDate) {
+  if (!isoDate) return "";
+  const then = new Date(isoDate);
+  if (isNaN(then.getTime())) return "";
+  const diffMs = Date.now() - then.getTime();
+  const days = Math.floor(diffMs / 86400000);
+  if (days < 0) return "in der Zukunft";
+  if (days === 0) {
+    const hours = Math.floor(diffMs / 3600000);
+    if (hours <= 0) return "gerade eben";
+    return `vor ${hours} Std`;
+  }
+  if (days === 1) return "vor 1 Tag";
+  if (days < 30) return `vor ${days} Tagen`;
+  const months = Math.floor(days / 30);
+  if (months === 1) return "vor 1 Monat";
+  return `vor ${months} Monaten`;
+}
+
 async function showBriefingPanel() {
   const existing = document.querySelector(".briefing-panel");
   if (existing) { existing.remove(); return; }
@@ -4828,6 +5546,15 @@ async function showBriefingPanel() {
   const dateStr = now.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   header.append(el("div", { className: "briefing-datetime", textContent: `${dateStr} · ${timeStr}` }));
+
+  const lookbackBtn = el("button", {
+    type: "button",
+    className: "briefing-lookback-btn",
+    id: "btn-briefing-lookback",
+    textContent: "📅 Was war vor… Tagen?",
+  });
+  header.append(lookbackBtn);
+
   const closeBtn = el("button", { type: "button", textContent: "×", className: "briefing-close" });
   closeBtn.addEventListener("click", () => panel.remove());
   header.append(closeBtn);
@@ -4838,29 +5565,150 @@ async function showBriefingPanel() {
   panel.append(body);
   document.body.append(panel);
 
-  try {
-    const httpBase = await getHttpBase();
-    const res = await fetch(`${httpBase}/tools/briefing?profile=default`);
-    const text = await res.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch {}
-    if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+  let currentProfile = null;
+  let currentVaultId = null;
+
+  async function loadCurrentBriefing() {
     body.replaceChildren();
-    renderBriefingSections(body, data.data || data);
-  } catch (err) {
-    body.textContent = "Fehler: " + (err.message || err);
-    body.className = "briefing-body error";
+    body.textContent = "laden...";
+    body.className = "briefing-body";
+    try {
+      const httpBase = await getHttpBase();
+      currentVaultId = await getActiveVaultId(httpBase).catch(() => null);
+      const vaultParam = currentVaultId ? `&vault_id=${encodeURIComponent(currentVaultId)}` : "";
+      const res = await fetch(`${httpBase}/tools/briefing?profile=default${vaultParam}`);
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      const briefingData = data.data || data;
+      // Profil-Order für Sektion-Reihenfolge laden
+      try {
+        const pres = await fetch(`${httpBase}/tools/briefing/profiles`);
+        const pjson = await pres.json().catch(() => ({}));
+        const profiles = (pjson.data || pjson).profiles || [];
+        currentProfile = profiles.find(p => p.id === "default") || profiles[0] || null;
+      } catch {}
+      body.replaceChildren();
+      renderBriefingSections(body, briefingData, currentProfile);
+    } catch (err) {
+      body.textContent = "Fehler: " + (err.message || err);
+      body.className = "briefing-body error";
+    }
   }
+
+  lookbackBtn.addEventListener("click", () => openBriefingLookback(body, loadCurrentBriefing, currentVaultId));
+
+  await loadCurrentBriefing();
 }
 
-function renderBriefingSections(target, briefingData) {
-  const sections = briefingData.sections || [];
+function openBriefingLookback(body, restoreFn, vaultId) {
+  const existing = body.querySelector(".briefing-lookback-modal");
+  if (existing) { existing.remove(); return; }
+
+  const modal = el("div", {
+    className: "briefing-lookback-modal",
+    style: "display:flex; gap:6px; align-items:center; padding:8px; background:var(--bg-subtle); border-radius:4px; margin-bottom:8px;",
+  });
+  modal.append(el("label", { textContent: "Vor wie vielen Tagen?", style: "font-size:11px;" }));
+  const input = el("input", { type: "number", value: "14", min: "1", max: "9999" });
+  input.style.cssText = "width:60px; font-size:12px; padding:2px 4px;";
+  const goBtn = el("button", { type: "button", textContent: "Anzeigen", className: "briefing-lookback-btn" });
+  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen", className: "briefing-lookback-btn" });
+  modal.append(input, goBtn, cancelBtn);
+
+  body.prepend(modal);
+
+  cancelBtn.addEventListener("click", () => modal.remove());
+  goBtn.addEventListener("click", async () => {
+    const days = parseInt(input.value, 10);
+    if (!days || days < 1) return;
+    goBtn.disabled = true;
+    goBtn.textContent = "lädt...";
+    try {
+      const httpBase = await getHttpBase();
+      const vaultParam = vaultId ? `&vault_id=${encodeURIComponent(vaultId)}` : "";
+      const res = await fetch(`${httpBase}/tools/briefing/lookback?days=${days}${vaultParam}`);
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      const payload = data.data || data;
+      if (payload.ok === false) {
+        modal.remove();
+        const notice = el("div", { className: "briefing-empty", textContent: payload.error || "Kein Journal-Eintrag gefunden." });
+        notice.style.cssText = "padding:12px; text-align:center;";
+        body.replaceChildren(notice);
+        const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: "← Zurück zum aktuellen Briefing" });
+        backBtn.addEventListener("click", () => restoreFn());
+        body.append(backBtn);
+        return;
+      }
+      // Render lookback
+      body.replaceChildren();
+      const header = el("div", { className: "briefing-section-title", textContent: `Briefing vom ${payload.date}` });
+      header.style.cssText = "margin-bottom:8px;";
+      body.append(header);
+      const md = el("div", { className: "briefing-lookback-md" });
+      md.innerHTML = renderMarkdown(payload.markdown || "");
+      body.append(md);
+      const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: "← Zurück zum aktuellen Briefing" });
+      backBtn.style.marginTop = "12px";
+      backBtn.addEventListener("click", () => restoreFn());
+      body.append(backBtn);
+    } catch (err) {
+      goBtn.disabled = false;
+      goBtn.textContent = "Anzeigen";
+      const err2 = el("div", { className: "briefing-error", textContent: "Fehler: " + (err.message || err) });
+      modal.append(err2);
+    }
+  });
+}
+
+function renderBriefingSections(target, briefingData, profile) {
+  let sections = briefingData.sections || [];
+
+  // Re-order nach Profil-Reihenfolge wenn vorhanden
+  if (profile && Array.isArray(profile.sources) && profile.sources.length) {
+    const order = profile.sources;
+    sections = [...sections].sort((a, b) => {
+      const ia = order.indexOf(a.type);
+      const ib = order.indexOf(b.type);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }
+
+  let quotaProblem = false;
+
   for (const sec of sections) {
     const card = el("div", { className: `briefing-section briefing-section--${sec.type}` });
-    card.append(el("h4", { className: "briefing-section-title", textContent: sec.title }));
+    const items = sec.items || [];
+
+    // Section-Header: Icon + Titel + Count
+    const titleEl = el("h4", { className: "briefing-section-title" });
+    const icon = BRIEFING_SOURCE_ICONS[sec.type];
+    const titleText = sec.title || BRIEFING_SOURCE_TITLES[sec.type] || sec.type;
+    titleEl.textContent = (icon ? icon + " " : "") + titleText + (items.length ? ` (${items.length})` : "");
+    const tooltip = BRIEFING_SOURCE_TOOLTIPS[sec.type];
+    if (tooltip) titleEl.title = tooltip;
+    card.append(titleEl);
+
+    // Per-Section-Error: Hinweis statt Items
+    if (sec.error) {
+      card.append(el("div", { className: "briefing-error", textContent: `⚠ ${sec.error}` }));
+      const errStr = String(sec.error);
+      if (/Quota|YOUTUBE_API_KEY|API[_-]?KEY/i.test(errStr) && (sec.type === "youtube_trending" || sec.type === "competitor_videos")) {
+        quotaProblem = true;
+      }
+      target.append(card);
+      continue;
+    }
 
     if (sec.type === "wetter") {
-      for (const w of sec.items || []) {
+      for (const w of items) {
         const row = el("div", { className: "briefing-wetter-row" });
         const city = el("span", { className: "briefing-wetter-city", textContent: w.stadt });
         const temp = el("span", { className: "briefing-wetter-temp", textContent: `${w.temp_c}°` });
@@ -4872,7 +5720,7 @@ function renderBriefingSections(target, briefingData) {
     } else if (sec.type === "todos") {
       const today = new Date().toISOString().slice(0, 10);
       const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-      for (const t of sec.items || []) {
+      for (const t of items) {
         if (t.done) continue;
         const row = el("div", { className: "briefing-todo-row" });
         const text = el("span", { textContent: t.text });
@@ -4885,17 +5733,8 @@ function renderBriefingSections(target, briefingData) {
       if (!card.querySelector(".briefing-todo-row")) {
         card.append(el("div", { className: "briefing-empty", textContent: "Keine offenen Todos" }));
       }
-    } else if (sec.type === "fristen") {
-      for (const f of sec.items || []) {
-        const cls = f.days_left <= 7 ? "urgent" : f.days_left <= 30 ? "warning" : "";
-        const row = el("div", { className: "frist-item" + (cls ? " " + cls : "") });
-        row.append(el("span", { textContent: f.title }));
-        row.append(el("span", { className: "frist-days", textContent: `${f.days_left}d` }));
-        card.append(row);
-      }
-      if (!card.querySelector(".frist-item")) {
-        card.append(el("div", { className: "briefing-empty", textContent: "Keine Fristen" }));
-      }
+    } else if (sec.type === "fristen" || sec.type === "vertrags_fristen" || sec.type === "kampagnen_kickoffs") {
+      renderBriefingFristenLike(card, items, sec.type);
     } else if (sec.type === "lernstreak") {
       const msg = sec.days_ago === 0
         ? "Heute schon gelernt"
@@ -4903,12 +5742,137 @@ function renderBriefingSections(target, briefingData) {
           ? `Letztes Video: "${sec.last_video_title}" — vor ${sec.days_ago} Tag${sec.days_ago === 1 ? "" : "en"}`
           : "Heute noch kein Video";
       card.append(el("div", { textContent: msg }));
+    } else if (sec.type === "youtube_trending" || sec.type === "competitor_videos" || sec.type === "playlist_trending") {
+      renderBriefingVideoCards(card, items, sec.type);
+    } else if (sec.type === "recommendations") {
+      renderBriefingRecommendations(card, items);
+    } else {
+      // Unbekannter Section-Typ: roher Fallback
+      if (items.length) {
+        for (const item of items) {
+          card.append(el("div", { textContent: typeof item === "string" ? item : (item.text || item.title || JSON.stringify(item)) }));
+        }
+      } else {
+        card.append(el("div", { className: "briefing-empty", textContent: "Keine Daten" }));
+      }
     }
 
     target.append(card);
   }
+
+  if (quotaProblem) {
+    const notice = el("div", { className: "briefing-quota-notice" });
+    const link = el("a", { textContent: "⚙ YouTube-API-Key in den Optionen setzen", href: "#" });
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.runtime.openOptionsPage();
+    });
+    notice.append(link);
+    target.append(notice);
+  }
+
   if (!sections.length) {
     target.append(el("div", { className: "briefing-empty", textContent: "Keine Daten" }));
+  }
+}
+
+function renderBriefingFristenLike(card, items, type) {
+  // type: fristen | vertrags_fristen | kampagnen_kickoffs
+  const emptyText = {
+    fristen: "Keine Fristen",
+    vertrags_fristen: "Keine auslaufenden Verträge",
+    kampagnen_kickoffs: "Keine anstehenden Kickoffs",
+  }[type] || "Keine Einträge";
+
+  for (const f of items) {
+    // Shape-Toleranz: title/titel, days_left/tage_offen, date/datum
+    const title = f.title || f.titel || f.name || "?";
+    const daysLeft = f.days_left !== undefined ? f.days_left : (f.tage_offen !== undefined ? f.tage_offen : null);
+    const cls = daysLeft !== null && daysLeft <= 7 ? "urgent" : daysLeft !== null && daysLeft <= 30 ? "warning" : "";
+    const row = el("div", { className: "frist-item" + (cls ? " " + cls : "") });
+    row.append(el("span", { textContent: title }));
+    if (daysLeft !== null) {
+      row.append(el("span", { className: "frist-days", textContent: `${daysLeft}d` }));
+    } else if (f.date || f.datum) {
+      row.append(el("span", { className: "frist-days", textContent: f.date || f.datum }));
+    }
+    card.append(row);
+  }
+  if (!card.querySelector(".frist-item")) {
+    card.append(el("div", { className: "briefing-empty", textContent: emptyText }));
+  }
+}
+
+function renderBriefingVideoCards(card, items, type) {
+  if (!items.length) {
+    card.append(el("div", { className: "briefing-empty", textContent: "Keine Videos" }));
+    return;
+  }
+
+  const MAX_VISIBLE = 5;
+  const visible = items.slice(0, MAX_VISIBLE);
+  const hidden = items.slice(MAX_VISIBLE);
+
+  const appendVideoCard = (parent, v) => {
+    const cardEl = el("a", { className: "briefing-video-card", href: v.url || "#" });
+    cardEl.target = "_blank";
+    cardEl.rel = "noopener";
+    cardEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (v.url) window.open(v.url, "_blank", "noopener");
+    });
+
+    // Thumbnail (optional)
+    if (v.thumbnail) {
+      const img = el("img", { className: "briefing-video-thumb", src: v.thumbnail, alt: "" });
+      img.loading = "lazy";
+      img.addEventListener("error", () => img.remove());
+      cardEl.append(img);
+    } else if (type !== "playlist_trending") {
+      // Platzhalter nur bei video-typischen Sections, nicht bei playlist
+      const ph = el("div", { className: "briefing-video-thumb" });
+      cardEl.append(ph);
+    }
+
+    const meta = el("div", { className: "briefing-video-meta" });
+    meta.append(el("div", { className: "briefing-video-title", textContent: v.title || "Ohne Titel" }));
+    if (v.channel_title) {
+      meta.append(el("div", { className: "briefing-video-channel", textContent: v.channel_title }));
+    }
+    const statsParts = [];
+    if (typeof v.views === "number") statsParts.push(`${briefingFormatNumber(v.views)} Views`);
+    if (typeof v.likes === "number") statsParts.push(`${briefingFormatNumber(v.likes)} Likes`);
+    if (v.published_at) statsParts.push(briefingRelativeTime(v.published_at));
+    if (statsParts.length) {
+      meta.append(el("div", { className: "briefing-video-stats", textContent: statsParts.join(" • ") }));
+    }
+    cardEl.append(meta);
+    parent.append(cardEl);
+  };
+
+  for (const v of visible) appendVideoCard(card, v);
+
+  if (hidden.length) {
+    const details = el("details", { className: "briefing-show-more" });
+    const summary = el("summary", { textContent: `+ ${hidden.length} weitere anzeigen` });
+    details.append(summary);
+    for (const v of hidden) appendVideoCard(details, v);
+    card.append(details);
+  }
+}
+
+function renderBriefingRecommendations(card, items) {
+  if (!items.length) {
+    card.append(el("div", { className: "briefing-empty", textContent: "Keine Empfehlungen" }));
+    return;
+  }
+  const kindIcons = { artikel: "📝", video: "🎬", tipp: "💡" };
+  for (const r of items) {
+    const row = el("div", { className: "briefing-reco-card" });
+    const icon = kindIcons[r.kind] || "💡";
+    row.append(el("span", { className: "briefing-reco-icon", textContent: icon }));
+    row.append(el("p", { className: "briefing-reco-text", textContent: r.text || "" }));
+    card.append(row);
   }
 }
 

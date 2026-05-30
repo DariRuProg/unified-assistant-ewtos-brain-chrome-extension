@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "blueprint_id": "empty",
+  "blueprint_name": "Leer (minimal)",
+  "blueprint_version": "1.0.0",
+  "author": "ewtos.com",
+  "license": "MIT",
+  "description": "Minimal: nur eine inbox/ und eine agents.md mit Schema-Hinweis. Ausgangspunkt für komplett eigene Setups via Setup-Agent.",
+  "tags": ["minimal", "leer"],
+  "extends": [],
+  "folders": [
+    { "path": "inbox", "kind": "system" }
+  ],
+  "files": [
+    { "path": "agents.md", "template": "empty/agents.md.j2", "merge_policy": "skip_if_exists" }
+  ],
+  "bases": [],
+  "claude_md_sections": [],
+  "briefing_sources": [],
+  "permissions_defaults": { "write_raw": false, "write_playlists": false }
+}

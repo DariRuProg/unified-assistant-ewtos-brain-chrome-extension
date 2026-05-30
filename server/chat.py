@@ -12,13 +12,14 @@ from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
 
+import paths
 import settings
 from llm_client import effective_llm_config, get_backend
-from tools import bookmarks, notes_file, playlists, raw_promoter, videos, wiki_reader
+from tools import bookmarks, notes_file, playlists, raw_promoter, vault_audit, videos, wiki_reader
 
 log = logging.getLogger("ewtosbrain.chat")
 
-CHAT_DIR = Path(__file__).parent
+CHAT_DIR = paths.chat_dir()
 DEFAULT_MODEL = "claude-opus-4-7"
 DEFAULT_MAX_TURNS = 20
 MAX_TOOL_ITERATIONS = 15
@@ -29,6 +30,8 @@ BASE_SYSTEM_PROMPT = """Du bist ein Assistent für einen Markdown-Vault. Du hilf
 ## Vault-Lese-Tools
 - `list_folder(path)` — listet .md-Dateien und Unterordner. Pfad relativ zum Vault-Root. Leer = Vault-Root.
 - `read_file(path)` — liest eine .md-Datei. Pfad relativ zum Vault-Root.
+- `search_vault(q)` — case-insensitive Volltextsuche über alle .md-Dateien (inkl. raw/). Gibt Treffer-Pfade + Snippets zurück. Danach gezielt mit `read_file` die relevanten Treffer lesen.
+- `audit_vault()` — read-only Health-Check: Orphans, un-ingestete raw-Dateien, kaputte Wikilinks, fehlende Frontmatter, CLAUDE.md-Drift. Nutze bei „prüf/checke/lint meinen Vault". Du führst KEINE Reparaturen selbst aus — du berichtest die Befunde und empfiehlst den CLAUDE.md-Upgrade-Button im Sidepanel.
 
 ## Notiz-Tools (vault-übergreifend, eine zentrale Inbox)
 
@@ -72,9 +75,10 @@ DEFAULT_TAIL = """\n\n(Kein CLAUDE.md im Vault gefunden — navigiere bestmögli
 
 PROMPT_GENERATOR_INSTRUCTION = """Du bekommst gleich die CLAUDE.md eines Vaults (typischerweise ein Obsidian-Vault, oft nach Karpathy-Methode aufgebaut). Deine Aufgabe: schreib einen System-Prompt für einen anderen Assistenten (auch ein LLM), der diesen Vault als Wissensquelle nutzen soll, um Fragen seines Owners zu beantworten.
 
-Der Assistent hat zwei Tools:
+Der Assistent hat drei Tools:
 - `list_folder(path)` — listet .md-Dateien und Unterordner an einem Pfad (leer = Vault-Root)
 - `read_file(path)` — liest eine .md-Datei (Pfad relativ zum Vault-Root)
+- `search_vault(q)` — case-insensitive Volltextsuche über alle .md-Dateien inkl. raw/
 
 Der System-Prompt soll dem Assistenten klar machen:
 1. Was im Vault liegt (Themen, Struktur, Konventionen, eventuelle Tagging-Logik)
@@ -82,7 +86,8 @@ Der System-Prompt soll dem Assistenten klar machen:
 3. Welchen Schreibstil/Tonfall der Owner pflegt (Sprache, formell/informell, siezen/duzen, Fluff vs. knapp etc.)
 4. Wie er Quellen zitiert (z.B. "Quelle: <pfad>")
 5. Dass er ehrlich ist wenn er etwas im Vault nicht findet — nichts erfinden
-6. WICHTIG: der Assistent ist NICHT der Vault-Owner. Er hilft dem Owner, Informationen aus dem Vault zu finden. Er soll nicht denken er sei selbst die Person die im Vault beschrieben wird.
+6. Bei konkreten Stichwort-/Themen-Fragen ZUERST `search_vault` aufrufen, dann Treffer mit `read_file` lesen. Index-Navigation bleibt für Überblicks-Fragen. Wenn die Vault-CLAUDE.md "Grep" erwähnt → `search_vault` ist dieses Grep.
+7. WICHTIG: der Assistent ist NICHT der Vault-Owner. Er hilft dem Owner, Informationen aus dem Vault zu finden. Er soll nicht denken er sei selbst die Person die im Vault beschrieben wird.
 
 Antworte ausschließlich mit dem fertigen System-Prompt — kein Drumherum, keine Erklärung, kein "Hier ist der Prompt:".
 
@@ -130,6 +135,22 @@ def _trim_history(messages: list[dict], max_turns: int) -> list[dict]:
     return [m for pair in kept for m in pair]
 
 
+SEARCH_TOOL_DEF = {
+    "name": "search_vault",
+    "description": "Case-insensitive Volltextsuche über alle .md-Dateien des Vaults (inkl. raw/). Gibt Treffer-Pfade + Kontext-Snippets zurück. Danach gezielt mit read_file die relevanten Dateien vollständig lesen.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "q": {"type": "string", "description": "Suchbegriff (wird case-insensitive gematcht)"},
+            "max_results": {"type": "integer", "description": "Maximale Treffer-Anzahl (Default: 30)"},
+        },
+        "required": ["q"],
+    },
+}
+
+SEARCH_INSTRUCTION = """\n\n## Such-Strategie
+Bei konkreten Stichwort- oder Themen-Fragen ("was macht X", "finde Y", "gibt es was zu Z", "erkläre mir Z") ZUERST `search_vault` aufrufen, dann die Treffer-Dateien mit `read_file` vollständig lesen und dann antworten. Index-/Wikilink-Navigation bleibt für Überblicks-Fragen ("welche Themen", "was hast du alles"). Wenn die Vault-CLAUDE.md "Grep" erwähnt — `search_vault` ist dieses Grep."""
+
 TOOL_DEFS = [
     {
         "name": "list_folder",
@@ -154,6 +175,11 @@ TOOL_DEFS = [
             },
             "required": ["path"],
         },
+    },
+    {
+        "name": "audit_vault",
+        "description": "Read-only Health-Check des Vaults: findet Orphans (Pages nicht im Index), un-ingestete raw-Dateien, kaputte Wikilinks, fehlende Pflicht-Frontmatter und veraltete CLAUDE.md-Sektionen. Nutze bei 'prüf/checke/lint meinen Vault', 'ist mein Vault sauber', 'was stimmt nicht'.",
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "list_todos",
@@ -398,6 +424,31 @@ def _format_todos(items: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_SEVERITY_ICON = {"error": "🔴", "warn": "🟡", "info": "🔵"}
+
+
+def _format_audit(report: dict) -> str:
+    s = report.get("summary", {})
+    sev = s.get("by_severity", {})
+    lines = [
+        f"**Vault-Audit:** {s.get('total', 0)} Befunde "
+        f"({sev.get('error', 0)} 🔴, {sev.get('warn', 0)} 🟡, {sev.get('info', 0)} 🔵) "
+        f"— {s.get('files_scanned', 0)} Dateien gescannt.",
+    ]
+    findings = report.get("findings", [])
+    if not findings:
+        return "Vault-Audit: keine Befunde — alles sauber."
+    for f in findings:
+        icon = _SEVERITY_ICON.get(f["severity"], "•")
+        path = f" `{f['path']}`" if f.get("path") else ""
+        lines.append(f"- {icon} [{f['category']}]{path}: {f['message']} → {f['recommendation']}")
+    has_claude = any(f["category"] == "claude_md_drift" for f in findings)
+    if has_claude:
+        lines.append("\n_CLAUDE.md-Upgrade ist verfügbar — der Nutzer kann es im Sidepanel "
+                     "('Vault-Gesundheit' → CLAUDE.md aktualisieren) mit Diff-Vorschau anwenden._")
+    return "\n".join(lines)
+
+
 def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -> tuple[str, bool]:
     log.info("Tool: %s input=%s", name, {k: (str(v)[:60] if isinstance(v, str) else v) for k, v in tool_input.items()})
     try:
@@ -407,6 +458,15 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -
         if name == "read_file":
             path = tool_input.get("path", "")
             return wiki_reader.read_file(vault_path, path), False
+        if name == "search_vault":
+            q = tool_input.get("q", "")
+            hits = wiki_reader.search_files(vault_path, q, tool_input.get("max_results", 30))
+            if not hits:
+                return f"Keine Treffer für '{q}'.", False
+            return "\n".join(f"- {h['rel_path']}: …{h['snippet']}…" for h in hits), False
+        if name == "audit_vault":
+            report = vault_audit.audit_vault(vault_id)
+            return _format_audit(report), False
         if name == "list_todos":
             return _format_todos(notes_file.list_todos(vault_id=vault_id)), False
         if name == "add_todo":
@@ -556,10 +616,14 @@ def send(vault_id: str, user_message: str, page_context: str | None = None) -> d
     _, model = effective_llm_config()
     model = model or DEFAULT_MODEL
     max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
+    search_on = bool(settings.get("vault_search_enabled", True))
     system_prompt, _ = _build_system_prompt(vault)
+    if search_on:
+        system_prompt += SEARCH_INSTRUCTION
     if page_context:
         system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
     vault_path = vault["path"]
+    active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
 
     history = _load_history(vault_id)
     history.append({"role": "user", "content": user_message})
@@ -580,7 +644,7 @@ def send(vault_id: str, user_message: str, page_context: str | None = None) -> d
             system=[
                 {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
             ],
-            tools=TOOL_DEFS,
+            tools=active_tools,
             messages=api_messages,
         )
 
@@ -801,10 +865,14 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
         _, model = effective_llm_config()
         model = model or DEFAULT_MODEL
         max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
+        search_on = bool(settings.get("vault_search_enabled", True))
         system_prompt, _ = _build_system_prompt(vault)
+        if search_on:
+            system_prompt += SEARCH_INSTRUCTION
         if page_context:
             system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
         vault_path = vault["path"]
+        active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
 
         history = _load_history(vault_id)
         history.append({"role": "user", "content": user_message})
@@ -830,7 +898,7 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
                 model=model,
                 max_tokens=MAX_TOKENS_RESPONSE,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
-                tools=TOOL_DEFS,
+                tools=active_tools,
                 messages=api_messages,
             )
             for chunk in stream:

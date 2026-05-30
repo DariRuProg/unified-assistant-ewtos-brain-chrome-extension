@@ -17,7 +17,9 @@ import { runAutoBrain } from "./tools/auto_brain.js";
 
 const DEFAULT_SERVER_URL = "ws://localhost:9988/ws";
 const DEFAULT_HTTP_BASE = "http://localhost:9988";
-const RECONNECT_MS = 3000;
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 30000;
+const RECONNECT_FACTOR = 1.7;
 const PING_MS = 25000;
 const KEEPALIVE_NAME = "ewtos-keepalive";
 
@@ -25,6 +27,7 @@ let socket = null;
 let reconnectTimer = null;
 let pingTimer = null;
 let connecting = false;
+let reconnectDelay = RECONNECT_MIN_MS;
 
 const TOOL_HANDLERS = {
   youtube_transcript: runYoutubeTranscript,
@@ -321,8 +324,13 @@ async function connect() {
   ws.onopen = () => {
     if (socket !== ws) return;
     connecting = false;
+    reconnectDelay = RECONNECT_MIN_MS;
     try {
-      ws.send(JSON.stringify({ type: "hello", client: "extension", version: "0.1.0" }));
+      ws.send(JSON.stringify({
+        type: "hello",
+        client: "extension",
+        version: chrome.runtime.getManifest().version,
+      }));
     } catch {}
     broadcastStatus(true);
     startPing();
@@ -334,6 +342,12 @@ async function connect() {
     try {
       msg = JSON.parse(event.data);
     } catch {
+      return;
+    }
+    if (msg.type === "hello_ack") {
+      if (msg.compatible === false) {
+        broadcastStatus(false, { incompatible: true, serverVersion: msg.server_version });
+      }
       return;
     }
     if (msg.type === "tool_call") {
@@ -357,7 +371,8 @@ async function connect() {
 
 function scheduleReconnect() {
   clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(connect, RECONNECT_MS);
+  reconnectTimer = setTimeout(connect, reconnectDelay);
+  reconnectDelay = Math.min(Math.round(reconnectDelay * RECONNECT_FACTOR), RECONNECT_MAX_MS);
 }
 
 function startPing() {
@@ -380,6 +395,7 @@ function forceReconnect() {
   const old = socket;
   socket = null;
   connecting = false;
+  reconnectDelay = RECONNECT_MIN_MS;
   if (old) {
     // Detach handlers so the close event doesn't trigger a side-effect on
     // the new connection we're about to open.
@@ -415,8 +431,8 @@ function sendResult(requestId, ok, data, error) {
   socket.send(JSON.stringify(payload));
 }
 
-function broadcastStatus(connected) {
-  chrome.runtime.sendMessage({ type: "connection_status", connected }).catch(() => {});
+function broadcastStatus(connected, extra) {
+  chrome.runtime.sendMessage({ type: "connection_status", connected, ...(extra || {}) }).catch(() => {});
 }
 
 // --- HTTP helper for direct REST calls (not via WS tool-loop) ---

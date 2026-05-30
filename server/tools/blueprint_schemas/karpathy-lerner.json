@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "blueprint_id": "karpathy-lerner",
+  "blueprint_name": "Karpathy-Lerner",
+  "blueprint_version": "1.0.0",
+  "author": "ewtos.com",
+  "license": "MIT",
+  "description": "Fokus auf Lern-Pipeline: erbt karpathy-para-base und ergänzt CLAUDE.md-Routinen (Ingest/Query/Check/Lint) sowie Playlist-Trending im Briefing.",
+  "tags": ["karpathy", "lerner", "video"],
+  "extends": ["karpathy-para-base"],
+  "folders": [],
+  "files": [],
+  "bases": [],
+  "claude_md_sections": [
+    {
+      "id": "karpathy-routinen",
+      "order": 30,
+      "title": "Karpathy-Routinen",
+      "content": "Vier wiederkehrende Operationen auf diesem Vault:\n\n- **🟢 Ingest** — neue Quelle aus `raw/` in eine Master-Page unter `wiki/resources/videos/` (oder dem passenden Asset-Ordner) überführen. Creator-Page aktualisieren, Trending-Liste pflegen, `log.md` ergänzen.\n- **🔵 Query** — Frage stellen → `index.md` → Bucket-Index → konkrete Seite → Antwort mit Wikilinks belegen.\n- **🟡 Check** — Stichproben auf Frontmatter-Konsistenz, gültige Wikilinks, Tool-Verlinkung.\n- **🔴 Lint** — Voll-Scan auf Widersprüche, Orphans, kaputte Links, fehlende Master-Pages.\n\nDateinamen kebab-case, Datum ISO 8601, Tags englisch.",
+      "merge_policy": "replace_if_marker"
+    }
+  ],
+  "briefing_sources": ["playlist_trending", "lernstreak"],
+  "permissions_defaults": {}
+}

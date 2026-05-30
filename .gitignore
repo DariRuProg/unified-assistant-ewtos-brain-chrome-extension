@@ -26,6 +26,12 @@ server/settings.json
 server/chat.json
 server/chat-*.json
 server/generated_images/
+server/setup_sessions/*.json
+
+# PyInstaller / Build-Artefakte
+build/
+dist/
+*.manifest
 
 # Claude Code local state
 .claude/
