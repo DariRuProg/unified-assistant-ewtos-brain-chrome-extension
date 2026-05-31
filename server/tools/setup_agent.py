@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -572,6 +573,100 @@ def _execute_tool(state: dict, name: str, tool_input: dict) -> dict:
 
 # --- Public API -----------------------------------------------------------
 
+# --- Reverse-Blueprint: Struktur aus bestehendem Fremd-Vault ableiten -------
+
+_INFER_IGNORE = {".git", ".obsidian", ".ewtosbrain", ".trash", "node_modules", "__pycache__"}
+_INFER_KIND_BY_NAME = {"inbox": "system", "raw": "raw", "journal": "journal"}
+_FM_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)\s*:", re.MULTILINE)
+
+
+def _frontmatter_keys(text: str) -> set[str]:
+    if not text.startswith("---"):
+        return set()
+    end = text.find("\n---", 3)
+    if end == -1:
+        return set()
+    return set(_FM_KEY_RE.findall(text[3:end]))
+
+
+def _detect_required_frontmatter(vault_path: Path) -> list[str]:
+    """Schnittmenge der Top-Level-Frontmatter-Keys über die wiki/-Seiten = die
+    tatsächlich gelebte Konvention des Vaults (Stichprobe max. 80 Seiten)."""
+    wiki = vault_path / "wiki"
+    if not wiki.exists():
+        return []
+    key_sets: list[set[str]] = []
+    for p in wiki.rglob("*.md"):
+        if p.name == "index.md":
+            continue
+        if any(part.startswith(".") for part in p.relative_to(vault_path).parts):
+            continue
+        try:
+            keys = _frontmatter_keys(p.read_text(encoding="utf-8"))
+        except Exception:
+            keys = set()
+        if keys:
+            key_sets.append(keys)
+        if len(key_sets) >= 80:
+            break
+    if not key_sets:
+        return []
+    common = set(key_sets[0])
+    for ks in key_sets[1:]:
+        common &= ks
+    return sorted(common)
+
+
+def _infer_blueprint_from_disk(vault_path: Path) -> dict:
+    """Baut ein Working-Blueprint aus der vorhandenen Vault-Struktur (Fremd-Vault
+    ohne Snapshot): vorhandene Ordner (Top-Level + eine Ebene tiefer) + gelebte
+    Frontmatter-Keys. KEINE files/claude_md_sections → commit scaffoldet nichts
+    drüber, CLAUDE.md bleibt unberührt."""
+    bp = _empty_blueprint()
+    bp["blueprint_id"] = "inferred"
+    bp["blueprint_name"] = "Abgeleitet von bestehender Struktur"
+    bp["description"] = "Aus der vorhandenen Vault-Struktur abgeleitet (extend-Modus, Fremd-Vault)."
+
+    folders: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(rel: str, name: str) -> None:
+        if rel in seen:
+            return
+        seen.add(rel)
+        entry: dict = {"path": rel}
+        kind = _INFER_KIND_BY_NAME.get(name)
+        if kind:
+            entry["kind"] = kind
+        folders.append(entry)
+
+    try:
+        top = sorted(
+            (p for p in vault_path.iterdir()
+             if p.is_dir() and p.name not in _INFER_IGNORE and not p.name.startswith(".")),
+            key=lambda p: p.name,
+        )
+    except OSError:
+        top = []
+    for d in top:
+        _add(d.name, d.name)
+        try:
+            subs = sorted(
+                (p for p in d.iterdir() if p.is_dir() and not p.name.startswith(".")),
+                key=lambda p: p.name,
+            )
+        except OSError:
+            subs = []
+        for sub in subs:
+            _add(f"{d.name}/{sub.name}", sub.name)
+
+    bp["folders"] = folders
+    fm = _detect_required_frontmatter(vault_path)
+    if fm:
+        bp["vars"] = {**(bp.get("vars") or {}), "frontmatter_required": fm}
+    return bp
+
+
 def start_session(
     vault_id: str,
     *,
@@ -589,20 +684,16 @@ def start_session(
     session_id = uuid.uuid4().hex
     now = datetime.utcnow().isoformat()
 
-    extend_fallback = False
+    inferred = False
     if mode == "extend":
         existing = blueprint_tool.export_vault_blueprint(vault_id)
         if existing:
             working = dict(existing)
         else:
-            mode = "fresh"
-            extend_fallback = True
-            working = _empty_blueprint()
-            try:
-                addition = _load_template_resolved("karpathy-para-base")
-                working = _merge_into_working(working, addition)
-            except blueprint_tool.BlueprintError as e:
-                log.warning("Fallback-Template 'karpathy-para-base' nicht ladbar: %s", e)
+            # Fremd-Vault ohne Snapshot: echte Struktur ableiten statt PARA aufzwingen.
+            vault_path = Path(settings.get_vault(vault_id)["path"])
+            working = _infer_blueprint_from_disk(vault_path)
+            inferred = True
     else:
         working = _empty_blueprint()
         for tid in (templates or []):
@@ -613,9 +704,14 @@ def start_session(
                 log.warning("Template '%s' nicht ladbar: %s", tid, e)
 
     opener_bits = []
-    if extend_fallback:
-        opener_bits.append("Hi — dieser Vault hatte noch keinen Blueprint, deshalb starten wir frisch mit der Karpathy+PARA-Basis als Startpunkt.")
-        opener_bits.append("Was soll dazu? (eigene Ordner, CRM-Tabellen, Mitarbeiter, Briefing-Quellen …)")
+    if inferred:
+        nf = len(working.get("folders") or [])
+        fmk = (working.get("vars") or {}).get("frontmatter_required") or []
+        intro = f"Hi — ich habe deinen bestehenden Vault eingelesen: {nf} vorhandene Ordner"
+        if fmk:
+            intro += f", Frontmatter-Konvention {', '.join(fmk)}"
+        opener_bits.append(intro + ".")
+        opener_bits.append("Ich erweitere nur additiv und scaffolde NICHTS über deine Struktur. Was soll dazukommen? (neue Kategorie, Ordner, Briefing-Quelle …)")
     elif mode == "fresh":
         opener_bits.append("Hi — ich helfe dir, deinen Vault einzurichten.")
         if templates:
