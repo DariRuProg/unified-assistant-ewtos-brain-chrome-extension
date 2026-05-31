@@ -2174,26 +2174,33 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
 
 /* Vault Editor */
 .vault-editor-wrap { position: relative; width: 100%; }
-.vault-editor-textarea {
+/* .vault-editor-wrap-Praefix schlaegt die generische ".tool-body textarea"-Regel
+   (Klasse+Element, hoehere Spezifitaet). Sonst bliebe das Textarea opak (bg-card)
+   und verdeckte die Marks, und Schrift/Umbruch wichen von der Backdrop ab. */
+.vault-editor-wrap .vault-editor-textarea {
   display: block;
   position: relative;
   z-index: 1;
   width: 100%;
   min-height: 300px;
+  margin: 0;
   padding: 8px;
-  border: 1px solid var(--border, #ddd);
+  border: 1px solid var(--border-input, var(--border, #ddd));
   border-radius: 6px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: ui-monospace, "Consolas", monospace;
   line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   resize: vertical;
   background: transparent;
-  color: var(--fg, inherit);
+  color: var(--text, var(--fg, inherit));
   box-sizing: border-box;
   scrollbar-gutter: stable;
 }
 /* Highlight-Ebene hinter dem Textarea — Metriken MUESSEN identisch sein. */
-.vault-editor-backdrop {
+.vault-editor-wrap .vault-editor-backdrop {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -2201,16 +2208,16 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: ui-monospace, "Consolas", monospace;
   line-height: 1.5;
-  box-sizing: border-box;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
+  box-sizing: border-box;
   overflow: hidden;
   scrollbar-gutter: stable;
   color: transparent;
-  background: var(--bg, #fff);
+  background: var(--bg-card, var(--bg, #fff));
   pointer-events: none;
 }
 .vault-editor-backdrop mark { background: #ffe34d; color: transparent; border-radius: 2px; }
