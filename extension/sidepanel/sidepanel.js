@@ -2599,8 +2599,8 @@ async function renderVaultExplorer() {
     // gemachten) Textarea, scroll-synchron.
     const findBar = el("div", { className: "vault-find-bar" });
     const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: "In Datei suchen…" });
-    const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "‹", title: "Vorheriger Treffer" });
-    const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: "Nächster Treffer" });
+    const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "↑", title: "Vorheriger Treffer (Shift+Enter)" });
+    const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "↓", title: "Nächster Treffer (Enter)" });
     const findCount = el("span", { className: "vault-find-count" });
     findBar.append(findInput, findPrev, findNext, findCount);
 
