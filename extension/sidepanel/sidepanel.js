@@ -2271,6 +2271,7 @@ async function renderVaultExplorer() {
   let canWrite = false;
   let searchActive = false;
   let vaultsById = {};
+  let pendingFind = "";
 
   function setStatus(text, level = "") {
     status.textContent = text;
@@ -2318,6 +2319,49 @@ async function renderVaultExplorer() {
     return idx === -1 ? p : p.slice(idx + 1);
   }
 
+  function clearFindHighlights(container) {
+    container.querySelectorAll("mark.vault-find-hit").forEach((m) => {
+      m.replaceWith(document.createTextNode(m.textContent));
+    });
+    container.normalize();
+  }
+
+  // Markiert alle Vorkommen von query (case-insensitive) im gerenderten Datei-Body
+  // gelb. Läuft über Text-Nodes (TreeWalker), damit HTML/Tags intakt bleiben.
+  function applyFindHighlights(container, query) {
+    clearFindHighlights(container);
+    const marks = [];
+    const q = (query || "").toLowerCase();
+    if (!q) return marks;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) =>
+        node.nodeValue && node.nodeValue.toLowerCase().includes(q)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT,
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      const lower = text.toLowerCase();
+      const frag = document.createDocumentFragment();
+      let from = 0;
+      let idx;
+      while ((idx = lower.indexOf(q, from)) !== -1) {
+        if (idx > from) frag.appendChild(document.createTextNode(text.slice(from, idx)));
+        const mark = document.createElement("mark");
+        mark.className = "vault-find-hit";
+        mark.textContent = text.slice(idx, idx + q.length);
+        frag.appendChild(mark);
+        marks.push(mark);
+        from = idx + q.length;
+      }
+      if (from < text.length) frag.appendChild(document.createTextNode(text.slice(from)));
+      node.replaceWith(frag);
+    }
+    return marks;
+  }
+
   async function navigateTo(path) {
     if (!currentVaultId) return;
     searchActive = false;
@@ -2327,9 +2371,10 @@ async function renderVaultExplorer() {
     await renderView();
   }
 
-  async function openFile(relPath) {
+  async function openFile(relPath, findQuery = "") {
     if (!currentVaultId) return;
     currentFile = relPath;
+    pendingFind = findQuery || "";
     await renderView();
   }
 
@@ -2363,7 +2408,7 @@ async function renderVaultExplorer() {
         row.append(textWrap);
         row.addEventListener("click", () => {
           searchActive = false;
-          openFile(r.rel_path);
+          openFile(r.rel_path, q);
         });
         listBox.append(row);
       }
@@ -2396,6 +2441,53 @@ async function renderVaultExplorer() {
         const data = await res.json();
         const body = el("div", { className: "vault-file-body" });
         body.innerHTML = renderMarkdown(data.content || "");
+
+        // In-Datei-Suche (Strg+F): markiert alle Treffer gelb, springt durch.
+        const findBar = el("div", { className: "vault-find-bar" });
+        const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: "In Datei suchen…" });
+        const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "‹", title: "Vorheriger Treffer" });
+        const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: "Nächster Treffer" });
+        const findCount = el("span", { className: "vault-find-count" });
+        findBar.append(findInput, findPrev, findNext, findCount);
+
+        let hits = [];
+        let currentHit = -1;
+        function jumpTo(i) {
+          if (!hits.length) return;
+          if (currentHit >= 0 && hits[currentHit]) hits[currentHit].classList.remove("current");
+          currentHit = ((i % hits.length) + hits.length) % hits.length;
+          const m = hits[currentHit];
+          m.classList.add("current");
+          m.scrollIntoView({ block: "center", behavior: "smooth" });
+          findCount.textContent = `${currentHit + 1}/${hits.length}`;
+        }
+        function runFind() {
+          const qf = findInput.value.trim();
+          hits = applyFindHighlights(body, qf);
+          currentHit = -1;
+          if (!qf) { findCount.textContent = ""; return; }
+          findCount.textContent = hits.length ? `${hits.length} Treffer` : "kein Treffer";
+          if (hits.length) jumpTo(0);
+        }
+        findInput.addEventListener("input", runFind);
+        findInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); jumpTo(currentHit + (e.shiftKey ? -1 : 1)); }
+        });
+        findPrev.addEventListener("click", () => jumpTo(currentHit - 1));
+        findNext.addEventListener("click", () => jumpTo(currentHit + 1));
+
+        // Strg+F fokussiert die In-Datei-Suche (leak-frei: alten Handler ersetzen).
+        if (panelBody._vaultFindKeyHandler) {
+          document.removeEventListener("keydown", panelBody._vaultFindKeyHandler);
+        }
+        const onFindKey = (e) => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+            if (findInput.isConnected) { e.preventDefault(); findInput.focus(); findInput.select(); }
+          }
+        };
+        panelBody._vaultFindKeyHandler = onFindKey;
+        document.addEventListener("keydown", onFindKey);
+
         const viewerActions = el("div", { className: "vault-viewer-actions" });
         const chatBtn = el("button", {
           type: "button",
@@ -2416,7 +2508,12 @@ async function renderVaultExplorer() {
           editBtn.addEventListener("click", () => showEditor(rawContent));
           viewerActions.append(editBtn);
         }
-        viewerBox.append(body, viewerActions);
+        viewerBox.append(findBar, body, viewerActions);
+        if (pendingFind) {
+          findInput.value = pendingFind;
+          pendingFind = "";
+          runFind();
+        }
         setStatus("");
       } catch (err) {
         viewerBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));

@@ -2007,6 +2007,54 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   border-bottom: 1px dashed var(--accent);
 }
 .vault-file-body a.wiki-link:hover { border-bottom-style: solid; }
+
+/* In-Datei-Suche */
+.vault-find-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 6px 0;
+  background: var(--bg, #fff);
+}
+.vault-find-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg, #fff);
+  color: var(--fg, inherit);
+}
+.vault-find-nav {
+  padding: 4px 9px;
+  font-size: 14px;
+  line-height: 1;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg, inherit);
+  cursor: pointer;
+}
+.vault-find-nav:hover { background: var(--bg-subtle, rgba(0,0,0,0.06)); }
+.vault-find-count {
+  font-size: 11px;
+  opacity: 0.7;
+  min-width: 56px;
+  text-align: right;
+}
+.vault-file-body mark.vault-find-hit {
+  background: #ffe34d;
+  color: #000;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.vault-file-body mark.vault-find-hit.current {
+  background: #ff9f1a;
+  box-shadow: 0 0 0 2px rgba(255,159,26,0.4);
+}
 .chat-msg a.wiki-link {
   color: var(--accent);
   text-decoration: none;
