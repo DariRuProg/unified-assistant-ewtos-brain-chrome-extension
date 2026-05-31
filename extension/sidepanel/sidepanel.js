@@ -2593,13 +2593,94 @@ async function renderVaultExplorer() {
 
   function showEditor(initialContent) {
     viewerBox.replaceChildren();
+
+    // In-Datei-Suche auch im Editor (Strg+F). Textareas koennen keine <mark> tragen,
+    // daher Backdrop-Technik: deckungsgleiche Highlight-Ebene hinter dem (transparent
+    // gemachten) Textarea, scroll-synchron.
+    const findBar = el("div", { className: "vault-find-bar" });
+    const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: "In Datei suchen…" });
+    const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "‹", title: "Vorheriger Treffer" });
+    const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: "Nächster Treffer" });
+    const findCount = el("span", { className: "vault-find-count" });
+    findBar.append(findInput, findPrev, findNext, findCount);
+
+    const wrap = el("div", { className: "vault-editor-wrap" });
+    const backdrop = el("div", { className: "vault-editor-backdrop" });
     const ta = el("textarea", { className: "vault-editor-textarea" });
     ta.value = initialContent;
+    wrap.append(backdrop, ta);
+
+    let matches = [];
+    let curMatch = -1;
+    const escHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    function renderBackdrop() {
+      const text = ta.value;
+      const q = findInput.value;
+      if (!q) {
+        backdrop.textContent = text;
+        matches = [];
+        curMatch = -1;
+        findCount.textContent = "";
+        return;
+      }
+      const lower = text.toLowerCase();
+      const ql = q.toLowerCase();
+      matches = [];
+      let from = 0;
+      let idx;
+      while ((idx = lower.indexOf(ql, from)) !== -1) { matches.push([idx, idx + ql.length]); from = idx + ql.length; }
+      let html = "";
+      let pos = 0;
+      matches.forEach(([s, e], i) => {
+        html += escHtml(text.slice(pos, s));
+        html += `<mark${i === curMatch ? ' class="current"' : ""}>${escHtml(text.slice(s, e))}</mark>`;
+        pos = e;
+      });
+      html += escHtml(text.slice(pos));
+      backdrop.innerHTML = html + (text.endsWith("\n") ? " " : "");
+      findCount.textContent = matches.length
+        ? (curMatch >= 0 ? `${curMatch + 1}/${matches.length}` : `${matches.length} Treffer`)
+        : "kein Treffer";
+    }
+    function syncScroll() { backdrop.scrollTop = ta.scrollTop; backdrop.scrollLeft = ta.scrollLeft; }
+    function jumpTo(i) {
+      if (!matches.length) return;
+      curMatch = ((i % matches.length) + matches.length) % matches.length;
+      renderBackdrop();
+      const markEl = backdrop.querySelector("mark.current");
+      if (markEl) {
+        ta.scrollTop = Math.max(0, markEl.offsetTop - ta.clientHeight / 2);
+        syncScroll();
+      }
+      findCount.textContent = `${curMatch + 1}/${matches.length}`;
+    }
+    function runFind() { curMatch = -1; renderBackdrop(); if (matches.length) jumpTo(0); }
+    findInput.addEventListener("input", runFind);
+    findInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); jumpTo(curMatch + (e.shiftKey ? -1 : 1)); }
+    });
+    findPrev.addEventListener("click", () => jumpTo(curMatch - 1));
+    findNext.addEventListener("click", () => jumpTo(curMatch + 1));
+    ta.addEventListener("input", renderBackdrop);
+    ta.addEventListener("scroll", syncScroll);
+    backdrop.textContent = ta.value;
+
+    if (panelBody._vaultFindKeyHandler) {
+      document.removeEventListener("keydown", panelBody._vaultFindKeyHandler);
+    }
+    const onFindKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+        if (findInput.isConnected) { e.preventDefault(); findInput.focus(); findInput.select(); }
+      }
+    };
+    panelBody._vaultFindKeyHandler = onFindKey;
+    document.addEventListener("keydown", onFindKey);
+
     const actionsEl = el("div", { className: "vault-editor-actions" });
     const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "vault-save-btn" });
     const cancelBtn = el("button", { type: "button", textContent: "Abbrechen" });
     actionsEl.append(saveBtn, cancelBtn);
-    viewerBox.append(ta, actionsEl);
+    viewerBox.append(findBar, wrap, actionsEl);
     ta.focus();
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;

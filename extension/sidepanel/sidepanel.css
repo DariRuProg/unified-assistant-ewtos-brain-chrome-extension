@@ -2172,7 +2172,11 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
 }
 
 /* Vault Editor */
+.vault-editor-wrap { position: relative; width: 100%; }
 .vault-editor-textarea {
+  display: block;
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 300px;
   padding: 8px;
@@ -2182,10 +2186,34 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   font-family: monospace;
   line-height: 1.5;
   resize: vertical;
-  background: var(--bg, #fff);
+  background: transparent;
   color: var(--fg, inherit);
   box-sizing: border-box;
+  scrollbar-gutter: stable;
 }
+/* Highlight-Ebene hinter dem Textarea — Metriken MUESSEN identisch sein. */
+.vault-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  line-height: 1.5;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  color: transparent;
+  background: var(--bg, #fff);
+  pointer-events: none;
+}
+.vault-editor-backdrop mark { background: #ffe34d; color: transparent; border-radius: 2px; }
+.vault-editor-backdrop mark.current { background: #ff9f1a; }
 .vault-editor-actions {
   display: flex;
   gap: 8px;
