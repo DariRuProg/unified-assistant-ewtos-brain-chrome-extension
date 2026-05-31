@@ -2015,10 +2015,11 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   align-items: center;
   gap: 6px;
   position: sticky;
-  top: 0;
-  z-index: 3;
-  padding: 6px 0;
-  background: var(--bg, #fff);
+  top: 0; /* per JS auf .tool-header-Hoehe gesetzt, damit die Bar darunter klebt */
+  z-index: 4;
+  padding: 8px 0;
+  background: var(--bg-card, var(--bg, #fff));
+  border-bottom: 1px solid var(--border);
 }
 .vault-find-input {
   flex: 1;

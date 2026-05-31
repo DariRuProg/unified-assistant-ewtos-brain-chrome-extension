@@ -2449,6 +2449,8 @@ async function renderVaultExplorer() {
         const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: "Nächster Treffer" });
         const findCount = el("span", { className: "vault-find-count" });
         findBar.append(findInput, findPrev, findNext, findCount);
+        // Unter dem sticky .tool-header kleben (sonst verschwindet die Bar dahinter).
+        findBar.style.top = (document.querySelector(".tool-header")?.offsetHeight || 41) + "px";
 
         let hits = [];
         let currentHit = -1;
@@ -2603,6 +2605,8 @@ async function renderVaultExplorer() {
     const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "↓", title: "Nächster Treffer (Enter)" });
     const findCount = el("span", { className: "vault-find-count" });
     findBar.append(findInput, findPrev, findNext, findCount);
+    // Unter dem sticky .tool-header kleben (sonst verschwindet die Bar dahinter).
+    findBar.style.top = (document.querySelector(".tool-header")?.offsetHeight || 41) + "px";
 
     const wrap = el("div", { className: "vault-editor-wrap" });
     const backdrop = el("div", { className: "vault-editor-backdrop" });
