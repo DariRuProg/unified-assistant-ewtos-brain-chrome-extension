@@ -1372,6 +1372,25 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
   font-weight: 400;
 }
 
+.briefing-profile-select {
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  border: 1px solid var(--border, #444);
+  background: var(--bg-card, #2a2a2a);
+  color: var(--text, inherit);
+  max-width: 130px;
+}
+
+.briefing-scratch-line {
+  font-size: 12px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border, rgba(0,0,0,0.08));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.briefing-journal-date { font-size: 11px; opacity: 0.7; margin-bottom: 4px; }
+
 .briefing-close {
   background: none;
   border: none;

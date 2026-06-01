@@ -419,33 +419,49 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "vault-added") refreshVaults();
 });
 
-// ----- Briefing profiles -----
+// ----- Briefing profiles (Baustein-Komposer) -----
+
+// Quellen-Spec: Label + konfigurierbare Parameter je Baustein.
+const BRIEFING_SOURCE_SPECS = {
+  wetter:             { label: "Wetter", params: [{ key: "standorte", label: "Standorte (kommagetrennt)", type: "csv", placeholder: "Paderborn, Kavala" }] },
+  todos:              { label: "Offene Todos", params: [] },
+  recent_videos:      { label: "Neueste Videos", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
+  recent_pages:       { label: "Zuletzt geändert", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }, { key: "bucket", label: "Ordner (optional)", type: "text", placeholder: "z.B. areas" }] },
+  active_projects:    { label: "Aktive Projekte", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
+  scratchpad:         { label: "Scratchpad", params: [{ key: "limit", label: "Zeilen", type: "number", default: 10 }] },
+  last_journal:       { label: "Letztes Journal", params: [] },
+  fristen:            { label: "Fristen & Deadlines", params: [] },
+  lernstreak:         { label: "Lernstreak", params: [] },
+  vertrags_fristen:   { label: "Vertrags-Fristen", params: [] },
+  kampagnen_kickoffs: { label: "Kampagnen-Kickoffs", params: [] },
+  youtube_trending:   { label: "YouTube-Trending", params: [{ key: "youtube_nische", label: "Nische (Suchbegriffe)", type: "text", placeholder: "n8n automation tutorial" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
+  competitor_videos:  { label: "Konkurrenz-Videos", params: [{ key: "competitor_channels", label: "Channel-IDs (eine pro Zeile)", type: "lines", placeholder: "UCxxxxxxxxxxxxxxxxxxxxxx" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
+  playlist_trending:  { label: "Playlist-Trending", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
+  recommendations:    { label: "Empfehlungen", params: [{ key: "recommendations_lookback_days", label: "Lookback (Tage)", type: "number", default: 14 }] },
+};
+
+// Spiegelt den Backend-Shim _params_for: alte flache Felder als Fallback.
+const BRIEFING_LEGACY_FIELDS = {
+  wetter: ["standorte"],
+  youtube_trending: ["youtube_nische"],
+  competitor_videos: ["competitor_channels"],
+  recommendations: ["recommendations_lookback_days"],
+};
+
+let briefingEditId = null;
+let briefingBlocks = []; // [{ source, params }]
 
 async function loadBriefingProfiles() {
   const base = await getHttpBase();
   try {
     const res = await fetch(`${base}/tools/briefing/profiles`);
     const json = await res.json();
-    renderBriefingProfiles((json.data || json).profiles || []);
+    const profiles = Array.isArray(json.data) ? json.data : (json.data?.profiles || []);
+    renderBriefingProfiles(profiles);
   } catch {
     document.getElementById("briefing-profiles-list").textContent = "Server nicht erreichbar";
   }
 }
-
-const BRIEFING_SOURCE_LABELS = {
-  wetter: "Wetter",
-  todos: "Todos",
-  fristen: "Fristen",
-  lernstreak: "Lernstreak",
-  vertrags_fristen: "Vertrags-Fristen",
-  kampagnen_kickoffs: "Kampagnen-Kickoffs",
-  youtube_trending: "YouTube-Trending",
-  competitor_videos: "Konkurrenz-Videos",
-  playlist_trending: "Playlist-Trending",
-  recommendations: "Empfehlungen",
-};
-
-let briefingEditId = null;
 
 function renderBriefingProfiles(profiles) {
   const list = document.getElementById("briefing-profiles-list");
@@ -456,19 +472,19 @@ function renderBriefingProfiles(profiles) {
   }
   for (const p of profiles) {
     const card = el("div", { className: "vault-card" });
-
     const header = el("div", { className: "vault-header", style: "cursor: default;" });
     const title = el("div", { className: "vault-title" });
     title.append(el("strong", { textContent: p.name }));
 
     const sourceTags = el("div", { className: "source-tags" });
     for (const s of (p.sources || [])) {
-      sourceTags.append(el("span", { className: "source-tag", textContent: BRIEFING_SOURCE_LABELS[s] || s }));
+      sourceTags.append(el("span", { className: "source-tag", textContent: BRIEFING_SOURCE_SPECS[s]?.label || s }));
     }
     title.append(sourceTags);
 
-    if (p.sources?.includes("wetter") && p.standorte?.length) {
-      title.append(el("div", { className: "vault-path-summary", textContent: p.standorte.join(", ") }));
+    const standorte = p.params?.wetter?.standorte || p.standorte;
+    if (p.sources?.includes("wetter") && standorte?.length) {
+      title.append(el("div", { className: "vault-path-summary", textContent: standorte.join(", ") }));
     }
 
     const actions = el("div", { style: "display:flex; gap:6px;" });
@@ -492,52 +508,128 @@ function renderBriefingProfiles(profiles) {
   }
 }
 
-function updateBriefingConditionalFields() {
-  const form = document.getElementById("briefing-new-form");
-  if (!form) return;
-  const checked = (val) => !!form.querySelector(`input[type='checkbox'][value='${val}']:checked`);
-  const toggle = (id, show) => { document.getElementById(id).style.display = show ? "" : "none"; };
-  toggle("briefing-standorte-field", checked("wetter"));
-  toggle("briefing-nische-field", checked("youtube_trending"));
-  toggle("briefing-competitor-field", checked("competitor_videos"));
-  toggle("briefing-recommendations-field", checked("recommendations"));
+function _specDefaults(source) {
+  const out = {};
+  for (const pr of (BRIEFING_SOURCE_SPECS[source]?.params || [])) {
+    if (pr.default !== undefined) out[pr.key] = pr.default;
+  }
+  return out;
+}
+
+function _paramsFromProfile(profile, source) {
+  const p = { ...(profile.params?.[source] || {}) };
+  for (const f of (BRIEFING_LEGACY_FIELDS[source] || [])) {
+    if (p[f] === undefined && profile[f] !== undefined) p[f] = profile[f];
+  }
+  for (const pr of (BRIEFING_SOURCE_SPECS[source]?.params || [])) {
+    if (p[pr.key] === undefined && pr.default !== undefined) p[pr.key] = pr.default;
+  }
+  return p;
+}
+
+function _paramToInput(pr, val) {
+  if (pr.type === "csv") return (val || []).join(", ");
+  if (pr.type === "lines") return (val || []).join("\n");
+  return val ?? (pr.default ?? "");
+}
+
+function _inputToParam(pr, raw) {
+  if (pr.type === "csv") return raw.split(",").map(s => s.trim()).filter(Boolean);
+  if (pr.type === "lines") return raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (pr.type === "number") return parseInt(raw, 10) || pr.default || 0;
+  return raw.trim();
+}
+
+function renderBriefingBlocks() {
+  const list = document.getElementById("briefing-blocks-list");
+  if (!list) return;
+  list.replaceChildren();
+  briefingBlocks.forEach((block, idx) => {
+    const spec = BRIEFING_SOURCE_SPECS[block.source] || { label: block.source, params: [] };
+    const row = el("div", { className: "briefing-block" });
+
+    const head = el("div", { className: "briefing-block-head" });
+    const up = el("button", { type: "button", className: "briefing-block-btn", textContent: "↑", title: "nach oben" });
+    up.disabled = idx === 0;
+    up.addEventListener("click", () => { [briefingBlocks[idx - 1], briefingBlocks[idx]] = [briefingBlocks[idx], briefingBlocks[idx - 1]]; renderBriefingBlocks(); });
+    const down = el("button", { type: "button", className: "briefing-block-btn", textContent: "↓", title: "nach unten" });
+    down.disabled = idx === briefingBlocks.length - 1;
+    down.addEventListener("click", () => { [briefingBlocks[idx + 1], briefingBlocks[idx]] = [briefingBlocks[idx], briefingBlocks[idx + 1]]; renderBriefingBlocks(); });
+    const label = el("strong", { textContent: spec.label, style: "flex:1;" });
+    const rm = el("button", { type: "button", className: "briefing-block-btn danger", textContent: "×", title: "entfernen" });
+    rm.addEventListener("click", () => { briefingBlocks.splice(idx, 1); renderBriefingBlocks(); refreshSourcePicker(); });
+    head.append(up, down, label, rm);
+    row.append(head);
+
+    if (spec.params.length) {
+      const pbox = el("div", { className: "briefing-block-params" });
+      for (const pr of spec.params) {
+        const field = el("label", { className: "briefing-param" });
+        field.append(el("span", { textContent: pr.label || pr.key }));
+        const input = pr.type === "lines" ? el("textarea", { rows: 2 }) : el("input", { type: pr.type === "number" ? "number" : "text" });
+        if (pr.placeholder) input.placeholder = pr.placeholder;
+        if (pr.type === "number") input.min = "1";
+        input.value = _paramToInput(pr, block.params[pr.key]);
+        input.addEventListener("input", () => { block.params[pr.key] = _inputToParam(pr, input.value); });
+        field.append(input);
+        pbox.append(field);
+      }
+      row.append(pbox);
+    }
+    list.append(row);
+  });
+}
+
+function refreshSourcePicker() {
+  const picker = document.getElementById("briefing-source-picker");
+  const addBtn = document.getElementById("briefing-add-source");
+  if (!picker) return;
+  const used = new Set(briefingBlocks.map(b => b.source));
+  picker.replaceChildren();
+  let any = false;
+  for (const [src, spec] of Object.entries(BRIEFING_SOURCE_SPECS)) {
+    if (used.has(src)) continue;
+    picker.append(el("option", { value: src, textContent: spec.label }));
+    any = true;
+  }
+  picker.disabled = !any;
+  if (addBtn) addBtn.disabled = !any;
 }
 
 function resetBriefingForm() {
   briefingEditId = null;
   document.getElementById("briefing-new-name").value = "";
-  document.getElementById("briefing-new-standorte").value = "";
-  document.getElementById("briefing-new-nische").value = "";
-  document.getElementById("briefing-new-competitor").value = "";
-  document.getElementById("briefing-new-recommendations-days").value = "14";
-  const form = document.getElementById("briefing-new-form");
-  form.querySelectorAll("input[type='checkbox']").forEach(cb => {
-    cb.checked = ["wetter", "todos", "fristen", "lernstreak"].includes(cb.value);
-  });
+  briefingBlocks = ["wetter", "todos", "recent_pages", "fristen"].map(s => ({ source: s, params: _specDefaults(s) }));
+  const w = briefingBlocks.find(b => b.source === "wetter");
+  if (w) w.params.standorte = ["Paderborn"];
+  renderBriefingBlocks();
+  refreshSourcePicker();
   const saveBtn = document.getElementById("briefing-save-new");
   if (saveBtn) saveBtn.textContent = "Profil speichern";
-  updateBriefingConditionalFields();
 }
 
 function openBriefingEditor(profile) {
   briefingEditId = profile.id;
   document.getElementById("briefing-new-name").value = profile.name || "";
-  const sources = profile.sources || [];
-  const form = document.getElementById("briefing-new-form");
-  form.querySelectorAll("input[type='checkbox']").forEach(cb => {
-    cb.checked = sources.includes(cb.value);
-  });
-  document.getElementById("briefing-new-standorte").value = (profile.standorte || []).join(", ");
-  document.getElementById("briefing-new-nische").value = profile.youtube_nische || "";
-  document.getElementById("briefing-new-competitor").value = (profile.competitor_channels || []).join("\n");
-  document.getElementById("briefing-new-recommendations-days").value = profile.recommendations_lookback_days || 14;
+  briefingBlocks = (profile.sources || []).map(src => ({ source: src, params: _paramsFromProfile(profile, src) }));
+  renderBriefingBlocks();
+  refreshSourcePicker();
   const saveBtn = document.getElementById("briefing-save-new");
   if (saveBtn) saveBtn.textContent = "Änderungen speichern";
-  updateBriefingConditionalFields();
+  const form = document.getElementById("briefing-new-form");
   form.style.display = "block";
   document.getElementById("briefing-add-btn").style.display = "none";
   form.scrollIntoView({ behavior: "smooth", block: "center" });
 }
+
+document.getElementById("briefing-add-source")?.addEventListener("click", () => {
+  const picker = document.getElementById("briefing-source-picker");
+  const src = picker?.value;
+  if (!src || briefingBlocks.some(b => b.source === src)) return;
+  briefingBlocks.push({ source: src, params: _specDefaults(src) });
+  renderBriefingBlocks();
+  refreshSourcePicker();
+});
 
 document.getElementById("briefing-add-btn")?.addEventListener("click", () => {
   resetBriefingForm();
@@ -551,26 +643,16 @@ document.getElementById("briefing-cancel-new")?.addEventListener("click", () => 
   resetBriefingForm();
 });
 
-document.querySelectorAll("#briefing-new-form input[type='checkbox']").forEach(cb => {
-  cb.addEventListener("change", updateBriefingConditionalFields);
-});
-
 document.getElementById("briefing-save-new")?.addEventListener("click", async () => {
   const name = document.getElementById("briefing-new-name").value.trim();
-  if (!name) return;
-  const sources = [...document.querySelectorAll("#briefing-new-form input[type='checkbox']:checked")].map(c => c.value);
-  const standorteRaw = document.getElementById("briefing-new-standorte").value;
-  const standorte = standorteRaw.split(",").map(s => s.trim()).filter(Boolean);
-  const youtubeNische = document.getElementById("briefing-new-nische").value.trim();
-  const competitorRaw = document.getElementById("briefing-new-competitor").value;
-  const competitorChannels = competitorRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  const recommendationsLookbackDays = parseInt(document.getElementById("briefing-new-recommendations-days").value, 10) || 14;
-
-  const payload = { name, sources, standorte };
+  if (!name || !briefingBlocks.length) return;
+  const sources = briefingBlocks.map(b => b.source);
+  const params = {};
+  for (const b of briefingBlocks) {
+    if (b.params && Object.keys(b.params).length) params[b.source] = b.params;
+  }
+  const payload = { name, sources, params };
   if (briefingEditId) payload.id = briefingEditId;
-  if (sources.includes("youtube_trending") && youtubeNische) payload.youtube_nische = youtubeNische;
-  if (sources.includes("competitor_videos") && competitorChannels.length) payload.competitor_channels = competitorChannels;
-  if (sources.includes("recommendations")) payload.recommendations_lookback_days = recommendationsLookbackDays;
 
   const base = await getHttpBase();
   await fetch(`${base}/tools/briefing/profiles`, {

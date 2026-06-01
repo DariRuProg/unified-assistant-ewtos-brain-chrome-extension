@@ -5701,6 +5701,11 @@ const BRIEFING_SOURCE_TITLES = {
   recommendations: "Empfehlungen",
   vertrags_fristen: "Vertrags-Fristen",
   kampagnen_kickoffs: "Kampagnen-Kickoffs",
+  recent_videos: "Neueste Videos",
+  recent_pages: "Zuletzt geändert",
+  active_projects: "Aktive Projekte",
+  scratchpad: "Scratchpad",
+  last_journal: "Letztes Journal",
 };
 
 const BRIEFING_SOURCE_ICONS = {
@@ -5714,6 +5719,11 @@ const BRIEFING_SOURCE_ICONS = {
   competitor_videos: "👥",
   playlist_trending: "🎬",
   recommendations: "💡",
+  recent_videos: "🎬",
+  recent_pages: "📄",
+  active_projects: "📁",
+  scratchpad: "📝",
+  last_journal: "📓",
 };
 
 function briefingFormatNumber(n) {
@@ -5754,6 +5764,9 @@ async function showBriefingPanel() {
   const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   header.append(el("div", { className: "briefing-datetime", textContent: `${dateStr} · ${timeStr}` }));
 
+  const profileSelect = el("select", { className: "briefing-profile-select", title: "Briefing-Profil" });
+  header.append(profileSelect);
+
   const lookbackBtn = el("button", {
     type: "button",
     className: "briefing-lookback-btn",
@@ -5774,6 +5787,26 @@ async function showBriefingPanel() {
 
   let currentProfile = null;
   let currentVaultId = null;
+  let allProfiles = [];
+  let selectedProfileId = "default";
+
+  async function loadProfiles() {
+    try {
+      const httpBase = await getHttpBase();
+      const pres = await fetch(`${httpBase}/tools/briefing/profiles`);
+      const pjson = await pres.json().catch(() => ({}));
+      allProfiles = Array.isArray(pjson.data) ? pjson.data : (pjson.data?.profiles || []);
+    } catch { allProfiles = []; }
+    if (!allProfiles.some(p => p.id === selectedProfileId)) {
+      selectedProfileId = allProfiles[0]?.id || "default";
+    }
+    profileSelect.replaceChildren();
+    for (const p of allProfiles) {
+      profileSelect.append(el("option", { value: p.id, textContent: p.name || p.id }));
+    }
+    profileSelect.value = selectedProfileId;
+    profileSelect.style.display = allProfiles.length > 1 ? "" : "none";
+  }
 
   async function loadCurrentBriefing() {
     body.replaceChildren();
@@ -5783,19 +5816,13 @@ async function showBriefingPanel() {
       const httpBase = await getHttpBase();
       currentVaultId = await getActiveVaultId(httpBase).catch(() => null);
       const vaultParam = currentVaultId ? `&vault_id=${encodeURIComponent(currentVaultId)}` : "";
-      const res = await fetch(`${httpBase}/tools/briefing?profile=default${vaultParam}`);
+      const res = await fetch(`${httpBase}/tools/briefing?profile=${encodeURIComponent(selectedProfileId)}${vaultParam}`);
       const text = await res.text();
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       const briefingData = data.data || data;
-      // Profil-Order für Sektion-Reihenfolge laden
-      try {
-        const pres = await fetch(`${httpBase}/tools/briefing/profiles`);
-        const pjson = await pres.json().catch(() => ({}));
-        const profiles = (pjson.data || pjson).profiles || [];
-        currentProfile = profiles.find(p => p.id === "default") || profiles[0] || null;
-      } catch {}
+      currentProfile = allProfiles.find(p => p.id === selectedProfileId) || null;
       body.replaceChildren();
       renderBriefingSections(body, briefingData, currentProfile);
     } catch (err) {
@@ -5804,8 +5831,14 @@ async function showBriefingPanel() {
     }
   }
 
+  profileSelect.addEventListener("change", () => {
+    selectedProfileId = profileSelect.value;
+    loadCurrentBriefing();
+  });
+
   lookbackBtn.addEventListener("click", () => openBriefingLookback(body, loadCurrentBriefing, currentVaultId));
 
+  await loadProfiles();
   await loadCurrentBriefing();
 }
 
@@ -5951,6 +5984,26 @@ function renderBriefingSections(target, briefingData, profile) {
       card.append(el("div", { textContent: msg }));
     } else if (sec.type === "youtube_trending" || sec.type === "competitor_videos" || sec.type === "playlist_trending") {
       renderBriefingVideoCards(card, items, sec.type);
+    } else if (sec.type === "recent_videos") {
+      renderBriefingPageList(card, items, { emptyText: "Keine Videos", asLink: true });
+    } else if (sec.type === "recent_pages" || sec.type === "active_projects") {
+      renderBriefingPageList(card, items, { emptyText: sec.type === "active_projects" ? "Keine aktiven Projekte" : "Keine Änderungen" });
+    } else if (sec.type === "scratchpad") {
+      if (!items.length) {
+        card.append(el("div", { className: "briefing-empty", textContent: "Scratchpad leer" }));
+      } else {
+        for (const it of items) card.append(el("div", { className: "briefing-scratch-line", textContent: it.text }));
+      }
+    } else if (sec.type === "last_journal") {
+      if (!items.length) {
+        card.append(el("div", { className: "briefing-empty", textContent: "Kein Journal-Eintrag" }));
+      } else {
+        const it = items[0];
+        card.append(el("div", { className: "briefing-journal-date", textContent: it.date }));
+        const md = el("div", { className: "briefing-lookback-md" });
+        md.innerHTML = renderMarkdown(it.preview || "");
+        card.append(md);
+      }
     } else if (sec.type === "recommendations") {
       renderBriefingRecommendations(card, items);
     } else {
@@ -6007,6 +6060,31 @@ function renderBriefingFristenLike(card, items, type) {
   }
   if (!card.querySelector(".frist-item")) {
     card.append(el("div", { className: "briefing-empty", textContent: emptyText }));
+  }
+}
+
+function renderBriefingPageList(card, items, opts) {
+  const { emptyText = "Keine Einträge", asLink = false } = opts || {};
+  if (!items.length) {
+    card.append(el("div", { className: "briefing-empty", textContent: emptyText }));
+    return;
+  }
+  for (const it of items) {
+    const row = el("div", { className: "frist-item" });
+    const label = it.title || it.file || "?";
+    if (asLink && it.url) {
+      const a = el("a", { textContent: label, href: it.url });
+      a.target = "_blank"; a.rel = "noopener";
+      a.addEventListener("click", (e) => { e.preventDefault(); window.open(it.url, "_blank", "noopener"); });
+      row.append(a);
+    } else {
+      const extra = it.status && it.status !== "—" ? ` · ${it.status}` : "";
+      row.append(el("span", { textContent: label + extra }));
+    }
+    if (it.days_ago !== null && it.days_ago !== undefined) {
+      row.append(el("span", { className: "frist-days", textContent: `${it.days_ago}d` }));
+    }
+    card.append(row);
   }
 }
 

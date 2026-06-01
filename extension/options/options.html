@@ -193,6 +193,25 @@
       background: var(--bg-subtle, #f3f4f6); color: var(--text-muted, #6b7280);
       border: 1px solid var(--border, #e5e7eb);
     }
+    .briefing-block {
+      border: 1px solid var(--border-input, #e5e7eb); border-radius: 6px;
+      padding: 8px 10px; background: var(--bg, #fff);
+    }
+    .briefing-block-head { display: flex; align-items: center; gap: 6px; }
+    .briefing-block-btn {
+      padding: 2px 7px; font-size: 13px; line-height: 1; border-radius: 4px;
+      border: 1px solid var(--border-input, #ddd); background: transparent;
+      color: var(--text, inherit); cursor: pointer; width: auto;
+    }
+    .briefing-block-btn:hover:not(:disabled) { background: var(--bg-hover, rgba(0,0,0,0.05)); }
+    .briefing-block-btn:disabled { opacity: 0.35; cursor: default; }
+    .briefing-block-btn.danger { color: #e5534b; border-color: #e5534b; }
+    .briefing-block-params {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+      padding-left: 4px;
+    }
+    .briefing-param { display: flex; flex-direction: column; gap: 2px; font-size: 11px; font-weight: normal; flex: 1; min-width: 120px; }
+    .briefing-param input, .briefing-param textarea { font-size: 12px; padding: 4px 6px; }
   </style>
 </head>
 <body>
@@ -332,35 +351,12 @@
       <input type="text" id="briefing-new-name" placeholder="z.B. Morgen-Briefing">
     </div>
     <div class="field">
-      <label>Inhalte</label>
-      <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="wetter" checked> Wetter</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="todos" checked> Offene Todos</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="fristen" checked> Fristen &amp; Deadlines</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="lernstreak" checked> Lernstreak</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="vertrags_fristen"> Vertrags-Fristen</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="kampagnen_kickoffs"> Kampagnen-Kickoffs</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="youtube_trending"> YouTube-Trending</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="competitor_videos"> Konkurrenz-Videos</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="playlist_trending"> Playlist-Trending</label>
-        <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;"><input type="checkbox" value="recommendations"> Empfehlungen ("What to do")</label>
+      <label>Bausteine <span class="hint" style="display:inline; font-weight:normal;">(Reihenfolge = Anzeige-Reihenfolge im Briefing)</span></label>
+      <div id="briefing-blocks-list" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;"></div>
+      <div id="briefing-add-row" style="display:flex; gap:6px; margin-top:8px;">
+        <select id="briefing-source-picker" style="flex:1;"></select>
+        <button type="button" id="briefing-add-source" class="secondary">+ hinzufügen</button>
       </div>
-    </div>
-    <div class="field" id="briefing-standorte-field">
-      <label for="briefing-new-standorte">Wetter-Standorte <span class="hint" style="display:inline; font-weight:normal;">(kommagetrennt)</span></label>
-      <input type="text" id="briefing-new-standorte" placeholder="Paderborn, Kavala">
-    </div>
-    <div class="field" id="briefing-nische-field" style="display:none;">
-      <label for="briefing-new-nische">YouTube-Nische <span class="hint" style="display:inline; font-weight:normal;">(Suchbegriffe für Trending)</span></label>
-      <input type="text" id="briefing-new-nische" placeholder="n8n automation tutorial">
-    </div>
-    <div class="field" id="briefing-competitor-field" style="display:none;">
-      <label for="briefing-new-competitor">Konkurrenz-Channel-IDs <span class="hint" style="display:inline; font-weight:normal;">(eine pro Zeile, Format <code>UCxxx...</code>)</span></label>
-      <textarea id="briefing-new-competitor" rows="3" placeholder="UCxxxxxxxxxxxxxxxxxxxxxx"></textarea>
-    </div>
-    <div class="field" id="briefing-recommendations-field" style="display:none;">
-      <label for="briefing-new-recommendations-days">Empfehlungen-Lookback <span class="hint" style="display:inline; font-weight:normal;">(Tage)</span></label>
-      <input type="number" id="briefing-new-recommendations-days" min="1" max="90" value="14">
     </div>
     <div class="vault-actions">
       <button type="button" id="briefing-save-new">Profil speichern</button>

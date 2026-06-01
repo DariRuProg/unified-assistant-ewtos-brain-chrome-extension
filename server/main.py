@@ -628,7 +628,7 @@ class BriefingProfileSaveRequest(BaseModel):
     id: str | None = None
     name: str
     sources: list[str]
-    standorte: list[str] | None = None
+    params: dict[str, dict] = {}
 
 
 @app.post("/tools/briefing/profiles")
