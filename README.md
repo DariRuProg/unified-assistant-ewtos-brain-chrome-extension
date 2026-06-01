@@ -62,10 +62,15 @@ Extension-Icons neu generieren (bei Brand-Änderung): `python extension\images\m
 
 ## Features
 
-- **Note-Taker** — Globaler Scratchpad, autosave, exportierbar
-- **Todos** — Klickbare Liste mit Due-Dates (`@2026-05-04 14:00`-Syntax)
-- **Chat mit Vault** — Karpathy-Navigation: LLM liest `wiki/index.md` und navigiert iterativ
+- **Chat mit Vault** — Karpathy-Navigation: LLM liest `wiki/index.md` und navigiert iterativ; Multi-LLM-Provider (Anthropic, OpenAI, Ollama, Mistral) per Setting umschaltbar
+- **Vault-Explorer** — Ordner/Dateien durchsuchen, Volltextsuche, Markdown-Editor, In-Datei-Suche (Strg+F, gelbe Treffer)
+- **Vault-Gesundheit** — Audit (Orphans, kaputte Wikilinks, Frontmatter, Struktur-Drift) mit Auto-Repair für sichere Fälle
+- **Setup-Wizard + Blueprints** — geführtes Vault-Onboarding; Reverse-Blueprint leitet bei bestehenden Fremd-Vaults die Struktur ab statt sie zu überschreiben
+- **Briefing „Guten Morgen"** — Tagesbriefing mit Wetter, Todos, Fristen, Lernstreak (profil-konfigurierbar)
+- **Note-Taker & Todos** — Globaler Scratchpad (autosave, exportierbar), klickbare Todos mit Due-Dates (`@2026-05-04 14:00`); Inbox-Inhalte nach `raw/` promotebar
+- **Bookmarks & Playlists** — Quellen sammeln, YouTube-Playlists pflegen (Auto-Index)
 - **Browser-Tools** — YouTube-Transcript, Page-Scrape, SEO-Check, Screenshot, Color-Picker, Image-Analyse
+- **Claude-Code-Integration** — MCP-Server exponiert Vault-/Notes-/Audit-Tools für Claude Code
 
 ## Architektur
 
