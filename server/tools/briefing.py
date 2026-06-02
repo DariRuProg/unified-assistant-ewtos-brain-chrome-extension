@@ -706,6 +706,111 @@ def _build_last_journal(ctx: BriefingCtx) -> dict:
     return {"type": "last_journal", "title": "Letztes Journal", "items": [], "error": None}
 
 
+def _rel(md: Path, vault_path: str) -> str:
+    try:
+        return str(md.relative_to(Path(vault_path))).replace("\\", "/")
+    except ValueError:
+        return md.name
+
+
+def _iter_wiki_md(vault_path: str):
+    scan = _scan_dir(vault_path)
+    for md in scan.rglob("*.md"):
+        if any(part in wiki_reader.IGNORED_NAMES or part.startswith(".") for part in md.parts):
+            continue
+        yield md
+
+
+_WORKSHOP_DATE_FIELDS = ("termin", "datum", "start", "datum_von", "workshop")
+
+
+def _build_workshops(ctx: BriefingCtx) -> dict:
+    """Anstehende Workshops/Events (typ:workshop|event) mit Datum im Fenster."""
+    within = int(ctx.params.get("within") or 60)
+    today = date.today()
+    items = []
+    try:
+        for md in _iter_wiki_md(ctx.vault_path):
+            try:
+                fm = _parse_frontmatter(md.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(fm.get("typ", "")).lower() not in ("workshop", "event"):
+                continue
+            d = None
+            for f in _WORKSHOP_DATE_FIELDS:
+                v = fm.get(f)
+                if v:
+                    try:
+                        d = date.fromisoformat(str(v))
+                        break
+                    except ValueError:
+                        continue
+            if d is None:
+                continue
+            days_left = (d - today).days
+            if 0 <= days_left <= within:
+                items.append({"title": _page_title(md, fm), "date": d.isoformat(),
+                              "days_left": days_left, "file": _rel(md, ctx.vault_path)})
+    except Exception as exc:
+        return {"type": "workshops", "title": "Workshops", "items": [], "error": str(exc)}
+    items.sort(key=lambda x: x["date"])
+    return {"type": "workshops", "title": "Workshops", "items": items, "error": None}
+
+
+_ANNIVERSARY_FIELDS = ("jahrestag", "anniversary", "kunde_seit", "gegruendet", "geburtstag")
+
+
+def _next_anniversary(d0: date, today: date) -> date:
+    """Nächstes jährliches Vorkommen von d0 (Monat/Tag) ab heute. 29.2.→28.2."""
+    def _on(year: int) -> date:
+        try:
+            return d0.replace(year=year)
+        except ValueError:
+            return d0.replace(year=year, day=28)
+    nxt = _on(today.year)
+    if nxt < today:
+        nxt = _on(today.year + 1)
+    return nxt
+
+
+def _build_anniversaries(ctx: BriefingCtx) -> dict:
+    """Jährliche Jahrestage (kunde_seit/gegruendet/geburtstag/jahrestag) im Fenster."""
+    within = int(ctx.params.get("within") or 30)
+    today = date.today()
+    items = []
+    try:
+        for md in _iter_wiki_md(ctx.vault_path):
+            try:
+                fm = _parse_frontmatter(md.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            d0 = None
+            for f in _ANNIVERSARY_FIELDS:
+                v = fm.get(f)
+                if v:
+                    try:
+                        d0 = date.fromisoformat(str(v))
+                        break
+                    except ValueError:
+                        continue
+            if d0 is None:
+                continue
+            nxt = _next_anniversary(d0, today)
+            days_left = (nxt - today).days
+            if 0 <= days_left <= within:
+                years = nxt.year - d0.year
+                title = _page_title(md, fm)
+                if years > 0:
+                    title = f"{title} ({years}. Jahrestag)"
+                items.append({"title": title, "date": nxt.isoformat(),
+                              "days_left": days_left, "file": _rel(md, ctx.vault_path)})
+    except Exception as exc:
+        return {"type": "anniversaries", "title": "Jahrestage", "items": [], "error": str(exc)}
+    items.sort(key=lambda x: x["days_left"])
+    return {"type": "anniversaries", "title": "Jahrestage", "items": items, "error": None}
+
+
 # Source-Registry: key -> {fn, async, needs_vault, title}. Reihenfolge im Profil
 # (sources-Liste) bestimmt die Render-Reihenfolge.
 SOURCE_REGISTRY: dict[str, dict] = {
@@ -724,6 +829,8 @@ SOURCE_REGISTRY: dict[str, dict] = {
     "recommendations":    {"fn": _build_recommendations,    "async": True,  "needs_vault": True,  "title": "Empfehlungen"},
     "vertrags_fristen":   {"fn": _build_vertrags_fristen,   "async": False, "needs_vault": True,  "title": "Vertrags-Fristen"},
     "kampagnen_kickoffs": {"fn": _build_kampagnen_kickoffs, "async": False, "needs_vault": True,  "title": "Kampagnen-Kickoffs"},
+    "workshops":          {"fn": _build_workshops,          "async": False, "needs_vault": True,  "title": "Workshops"},
+    "anniversaries":      {"fn": _build_anniversaries,      "async": False, "needs_vault": True,  "title": "Jahrestage"},
 }
 
 
@@ -757,7 +864,7 @@ def _render_section_md(section: dict) -> str:
         for it in section.get("items") or []:
             due = it.get("due") or "ohne Frist"
             out.append(f"- [ ] {it.get('text', '')} ({due})")
-    elif stype in ("fristen", "vertrags_fristen", "kampagnen_kickoffs"):
+    elif stype in ("fristen", "vertrags_fristen", "kampagnen_kickoffs", "workshops", "anniversaries"):
         for it in section.get("items") or []:
             out.append(f"- {it['date']} ({it['days_left']} Tage): {it['title']} — `{it.get('file', '')}`")
     elif stype == "lernstreak":

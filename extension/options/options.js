@@ -434,6 +434,8 @@ const BRIEFING_SOURCE_SPECS = {
   lernstreak:         { label: "Lernstreak", params: [] },
   vertrags_fristen:   { label: "Vertrags-Fristen", params: [] },
   kampagnen_kickoffs: { label: "Kampagnen-Kickoffs", params: [] },
+  workshops:          { label: "Workshops", params: [{ key: "within", label: "Zeitfenster (Tage)", type: "number", default: 60 }] },
+  anniversaries:      { label: "Jahrestage", params: [{ key: "within", label: "Zeitfenster (Tage)", type: "number", default: 30 }] },
   youtube_trending:   { label: "YouTube-Trending", params: [{ key: "youtube_nische", label: "Nische (Suchbegriffe)", type: "text", placeholder: "n8n automation tutorial" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
   competitor_videos:  { label: "Konkurrenz-Videos", params: [{ key: "competitor_channels", label: "Channel-IDs (eine pro Zeile)", type: "lines", placeholder: "UCxxxxxxxxxxxxxxxxxxxxxx" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
   playlist_trending:  { label: "Playlist-Trending", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },

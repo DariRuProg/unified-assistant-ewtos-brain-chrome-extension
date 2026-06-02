@@ -5706,6 +5706,8 @@ const BRIEFING_SOURCE_TITLES = {
   active_projects: "Aktive Projekte",
   scratchpad: "Scratchpad",
   last_journal: "Letztes Journal",
+  workshops: "Workshops",
+  anniversaries: "Jahrestage",
 };
 
 const BRIEFING_SOURCE_ICONS = {
@@ -5724,6 +5726,8 @@ const BRIEFING_SOURCE_ICONS = {
   active_projects: "📁",
   scratchpad: "📝",
   last_journal: "📓",
+  workshops: "📅",
+  anniversaries: "🎉",
 };
 
 function briefingFormatNumber(n) {
@@ -5973,7 +5977,7 @@ function renderBriefingSections(target, briefingData, profile) {
       if (!card.querySelector(".briefing-todo-row")) {
         card.append(el("div", { className: "briefing-empty", textContent: "Keine offenen Todos" }));
       }
-    } else if (sec.type === "fristen" || sec.type === "vertrags_fristen" || sec.type === "kampagnen_kickoffs") {
+    } else if (sec.type === "fristen" || sec.type === "vertrags_fristen" || sec.type === "kampagnen_kickoffs" || sec.type === "workshops" || sec.type === "anniversaries") {
       renderBriefingFristenLike(card, items, sec.type);
     } else if (sec.type === "lernstreak") {
       const msg = sec.days_ago === 0
@@ -6044,6 +6048,8 @@ function renderBriefingFristenLike(card, items, type) {
     fristen: "Keine Fristen",
     vertrags_fristen: "Keine auslaufenden Verträge",
     kampagnen_kickoffs: "Keine anstehenden Kickoffs",
+    workshops: "Keine anstehenden Workshops",
+    anniversaries: "Keine Jahrestage",
   }[type] || "Keine Einträge";
 
   for (const f of items) {
