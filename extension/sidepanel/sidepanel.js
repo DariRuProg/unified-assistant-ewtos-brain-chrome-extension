@@ -5989,10 +5989,12 @@ function renderBriefingSections(target, briefingData, profile) {
     } else if (sec.type === "recent_pages" || sec.type === "active_projects") {
       renderBriefingPageList(card, items, { emptyText: sec.type === "active_projects" ? "Keine aktiven Projekte" : "Keine Änderungen" });
     } else if (sec.type === "scratchpad") {
-      if (!items.length) {
+      if (!sec.markdown || !sec.markdown.trim()) {
         card.append(el("div", { className: "briefing-empty", textContent: "Scratchpad leer" }));
       } else {
-        for (const it of items) card.append(el("div", { className: "briefing-scratch-line", textContent: it.text }));
+        const md = el("div", { className: "briefing-lookback-md" });
+        md.innerHTML = renderMarkdown(sec.markdown);
+        card.append(md);
       }
     } else if (sec.type === "last_journal") {
       if (!items.length) {

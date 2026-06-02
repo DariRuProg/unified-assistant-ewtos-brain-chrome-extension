@@ -663,15 +663,22 @@ def _build_active_projects(ctx: BriefingCtx) -> dict:
 
 
 def _build_scratchpad(ctx: BriefingCtx) -> dict:
+    """Auszug aus dem Scratchpad als Markdown-Block (Originalformatierung erhalten,
+    wird im UI gerendert) — die letzten `limit` nicht-leeren Zeilen samt Kontext."""
     limit = int(ctx.params.get("limit") or 10)
     try:
         data = notes_file.read_scratchpad(vault_id=ctx.vault_id)
         content = data.get("content") or ""
     except Exception as exc:
-        return {"type": "scratchpad", "title": "Scratchpad", "items": [], "error": str(exc)}
-    lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
-    items = [{"text": ln} for ln in lines[-limit:]]
-    return {"type": "scratchpad", "title": "Scratchpad", "items": items, "error": None}
+        return {"type": "scratchpad", "title": "Scratchpad", "markdown": "", "items": [], "error": str(exc)}
+    lines = content.splitlines()
+    non_empty = [i for i, ln in enumerate(lines) if ln.strip()]
+    if non_empty:
+        start = non_empty[max(0, len(non_empty) - limit)]
+        markdown = "\n".join(lines[start:]).strip()
+    else:
+        markdown = ""
+    return {"type": "scratchpad", "title": "Scratchpad", "markdown": markdown, "items": [], "error": None}
 
 
 def _build_last_journal(ctx: BriefingCtx) -> dict:
@@ -773,8 +780,7 @@ def _render_section_md(section: dict) -> str:
             extra = f" ({it['status']})" if it.get("status") and it["status"] != "—" else ""
             out.append(f"- {it.get('title', '')}{extra} — vor {ago} — `{it.get('file', '')}`")
     elif stype == "scratchpad":
-        for it in section.get("items") or []:
-            out.append(f"- {it.get('text', '')}")
+        out.append(section.get("markdown") or "_(leer)_")
     elif stype == "last_journal":
         for it in section.get("items") or []:
             out.append(f"**{it.get('date', '')}**")
