@@ -76,6 +76,18 @@ def templates_dir() -> Path:
     return bundle_dir() / "tools" / "blueprint_templates"
 
 
+def skills_dir() -> Path:
+    """Gebuendelte Agent-Skill-Trees (kepano obsidian-skills), die Blueprints
+    nach <vault>/.claude/skills/ scaffolden koennen."""
+    return bundle_dir() / "tools" / "blueprint_templates" / "_skills"
+
+
+def commands_dir() -> Path:
+    """Gebuendelte Claude-Code-Slash-Command-Prompts, die Blueprints nach
+    <vault>/.claude/commands/<name>.md scaffolden koennen."""
+    return bundle_dir() / "tools" / "blueprint_templates" / "_commands"
+
+
 def trusted_keys_file() -> Path:
     return bundle_dir() / "blueprint_trusted_keys.json"
 

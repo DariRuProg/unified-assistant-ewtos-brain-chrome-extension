@@ -1,0 +1,52 @@
+---
+typ: anleitung
+---
+
+# Anleitung — {{ vault_name }}
+
+Dein Zweites Gehirn auf einen Blick: Struktur, Vorlagen, Commands, Skills und Farming. Diese Datei ist nur für dich (Orientierung), nicht Teil des Wikis.
+
+## Struktur (PARA + Kontext)
+
+- `kontext/` — **wer du bist**: Über mich, Zielgruppe, Angebot, Schreibstil, Branding. Die KI liest das vor inhaltlichen Aufgaben.
+- `inbox/` — Schnell-Notizen (`scratchpad.md`, `todos.md`).
+- `wiki/` — kuratiertes Wissen nach PARA: `projects/` (endlich), `areas/` (laufend), `resources/` (Referenz), `archive/` (abgeschlossen).
+- `journal/` — Daily Notes / Briefings.
+- `templates/` — Vorlagen pro Notiztyp (siehe unten).
+- `anleitung.md` — diese Datei. `agents.md` / `CLAUDE.md` — Schema & Regeln für die KI.
+
+## Kontext-Profil zuerst
+
+Bevor du Content, Mails oder Angebote erstellst: die relevanten `kontext/`-Dateien lesen (lassen). Profil-Wissen („merk dir das") gehört dorthin, nicht verstreut in den Vault.
+
+## Seiten-Vorlagen (`templates/`)
+
+Neue Seiten **nach der passenden Vorlage** bauen — Frontmatter + Sektionen exakt übernehmen, dann füllen:
+
+- `wissensseite.md`, `projekt.md`, `bereich.md`, `kunde.md`, `quelle.md` (immer da)
+- **Farming** (nach „Farming aktivieren"): `video.md`, `creator.md`, `playlist.md`
+
+Die Video-Vorlage enthält: Titel, Video-URL, Video-ID, **Thumbnail-URL (im Body gerendert)**, Aufrufe, Likes, Dauer, Upload-Datum, Analyse-Datum sowie `## Beschreibung` / `## Zusammenfassung` / `## Transkript`.
+
+## Index-Hubs (automatisch)
+
+`index.md`-Hubs mit `## Pages` entstehen **automatisch nur dort, wo Inhalt ist**: im `wiki/`-Root, in Buckets und in Themen-Ordnern (eine Ebene unter einem Bucket). Leere Ordner bekommen keinen Hub. Du musst Indexe nicht von Hand pflegen — `/rebuild-index` macht das.
+
+## Slash-Commands (`.claude/commands/`, in Claude Code)
+
+- `/lint` — Vault-Hygiene (Orphans, kaputte Links, fehlende Hubs, MOCs, Frontmatter).
+- `/rebuild-index` — Index-Hubs + `## Pages` neu aufbauen, leere entfernen.
+- `/audit` — read-only Health-Report.
+- **Farming:** `/ingest <quelle>` (raw → Wiki-Seite via Vorlage), `/query <frage>` (Wiki befragen, mit `[[links]]` belegt), `/farm <url>` (neue Quelle in `raw/` anlegen).
+
+## Skills (`.claude/skills/`)
+
+Obsidian-Skills sind installiert: obsidian-markdown, obsidian-bases, obsidian-cli, json-canvas, defuddle. Claude Code nutzt sie beim Bearbeiten von `.md`, `.base`, `.canvas`.
+
+## Farming aktivieren
+
+Video/Creator/Playlist-Vorlagen, `raw/`-Ordner, `resources/creators|videos|playlists` und die Farming-Commands sind **optional**. Aktivieren: Extension → **Optionen → Vault-Karte → „Farming aktivieren"** (non-destruktiv).
+
+## Explorer-Einstellungen
+
+Extension → Optionen → **Explorer**: „Versteckte Dateien/Ordner anzeigen" und „Löschen erlauben" (Löschen benötigt zusätzlich die Vault-Berechtigung `write_files`).

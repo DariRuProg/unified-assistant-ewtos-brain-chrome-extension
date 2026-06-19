@@ -34,9 +34,10 @@ def _safe_resolve(vault_path: str, rel_path: str) -> Path:
     return candidate
 
 
-def list_folder(vault_path: str, rel_path: str = "") -> dict:
+def list_folder(vault_path: str, rel_path: str = "", show_hidden: bool = False) -> dict:
     """List .md files and subfolders inside a folder. Path is relative to
-    the vault root. Empty path = vault root."""
+    the vault root. Empty path = vault root. show_hidden=True zeigt versteckte/
+    ignorierte Eintraege (.obsidian, .claude, Dotfiles)."""
     target = _safe_resolve(vault_path, rel_path)
     if not target.exists():
         raise FileNotFoundError(f"Ordner nicht gefunden: {rel_path}")
@@ -46,7 +47,7 @@ def list_folder(vault_path: str, rel_path: str = "") -> dict:
     folders: list[str] = []
     files: list[str] = []
     for entry in target.iterdir():
-        if entry.name.startswith(".") or entry.name in IGNORED_NAMES:
+        if not show_hidden and (entry.name.startswith(".") or entry.name in IGNORED_NAMES):
             continue
         try:
             rel = str(entry.relative_to(root)).replace("\\", "/")
@@ -116,6 +117,47 @@ def create_file(vault_path: str, rel_path: str, content: str = "") -> None:
         raise FileExistsError(f"Datei existiert bereits: {rel_path}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
+
+
+_ASSET_MIMES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+}
+
+
+def read_asset(vault_path: str, rel_path: str) -> tuple[bytes, str]:
+    """Liest eine Binär-Asset-Datei (Bild) aus dem Vault. Returns (bytes, mime).
+    Pfad-Traversal-geschützt via _safe_resolve; nur Bild-Endungen erlaubt."""
+    p = _safe_resolve(vault_path, rel_path)
+    ext = p.suffix.lower()
+    if ext not in _ASSET_MIMES:
+        raise ValueError(f"Dateityp nicht erlaubt: {ext or '(keine)'}")
+    if not p.exists() or not p.is_file():
+        raise FileNotFoundError(f"Asset nicht gefunden: {rel_path}")
+    return p.read_bytes(), _ASSET_MIMES[ext]
+
+
+def delete_path(vault_path: str, rel_path: str) -> str:
+    """Loescht eine Datei oder einen LEEREN Ordner. Schuetzt gegen Parent-Escape
+    und gegen Loeschen des Vault-Roots. Returns 'file' oder 'dir'."""
+    if not rel_path or not rel_path.strip():
+        raise ValueError("Kein Pfad angegeben")
+    p = _safe_resolve(vault_path, rel_path)
+    root = resolve_dir(vault_path).resolve()
+    if p == root:
+        raise ValueError("Vault-Root kann nicht geloescht werden")
+    if not p.exists():
+        raise FileNotFoundError(f"Nicht gefunden: {rel_path}")
+    if p.is_file():
+        p.unlink()
+        return "file"
+    if p.is_dir():
+        try:
+            p.rmdir()  # nur leere Ordner
+        except OSError:
+            raise ValueError(f"Ordner ist nicht leer: {rel_path}")
+        return "dir"
+    raise ValueError(f"Weder Datei noch Ordner: {rel_path}")
 
 
 def find_claude_md(vault_path: str) -> str | None:

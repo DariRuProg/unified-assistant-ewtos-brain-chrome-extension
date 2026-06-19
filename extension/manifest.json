@@ -38,6 +38,9 @@
     "default_path": "sidepanel/sidepanel.html"
   },
   "options_page": "options/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data: https: http://127.0.0.1:* http://localhost:*; media-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*"
+  },
   "commands": {
     "capture-highlighted-tabs": {
       "description": "Markierte Tabs als Bookmarks erfassen (Multi-Tab)"

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import settings
-from tools import notes_file
+from tools import notes_file, saeulen
 
 ALLOWED_SUBFOLDERS_PREFIX = ("artikel", "eigene-notizen", "kunden-input", "chat-archive")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -238,6 +238,13 @@ def save_raw_content(
     target_subfolder: str,
     description: str | None = None,
     filename_slug: str | None = None,
+    url: str | None = None,
+    meta_title: str | None = None,
+    meta_beschreibung: str | None = None,
+    og_bild: str | None = None,
+    canonical: str | None = None,
+    h1: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Save arbitrary content to vault/raw/<subfolder>/<date>-<slug>.md.
 
@@ -252,7 +259,7 @@ def save_raw_content(
             f"In den Einstellungen aktivieren: 'EwtosBrain darf in raw/ schreiben'."
         )
 
-    subfolder = _validate_subfolder(target_subfolder)
+    subfolder = saeulen.safe_raw_subpath(target_subfolder)
     today = date.today().isoformat()
     slug = filename_slug or _slugify(title or "inhalt")
 
@@ -278,6 +285,20 @@ def save_raw_content(
     ]
     if description:
         frontmatter_lines.append(f"beschreibung: {description.strip()}")
+    if tags:
+        frontmatter_lines.append(f"tags: [{', '.join(tags)}]")
+    if url:
+        frontmatter_lines.append(f"url: {url}")
+    if canonical and canonical != url:
+        frontmatter_lines.append(f"canonical: {canonical}")
+    if meta_title:
+        frontmatter_lines.append(f"meta_titel: {meta_title}")
+    if meta_beschreibung:
+        frontmatter_lines.append(f"meta_beschreibung: {meta_beschreibung}")
+    if og_bild:
+        frontmatter_lines.append(f"og_bild: {og_bild}")
+    if h1:
+        frontmatter_lines.append(f"h1: {h1}")
     frontmatter_lines.append("---")
     frontmatter = "\n".join(frontmatter_lines)
 
@@ -305,10 +326,19 @@ def save_video_to_raw(
     saeule: str,
     playlist_name: str,
     tags: list[str] | None = None,
+    channel: str | None = None,
+    duration: str | None = None,
+    views: int | None = None,
+    likes: int | None = None,
+    upload_date: str | None = None,
+    thumbnail_url: str | None = None,
+    description: str | None = None,
 ) -> dict[str, Any]:
     """Save a video transcript to vault/raw/<saeule>/<date>-<slug>.md.
 
     Permissions: requires `write_raw` on the target vault.
+    Optionale Metadaten (kanal/dauer/aufrufe/likes/upload/thumbnail/beschreibung)
+    werden nur geschrieben wenn vorhanden — sonst ehrlich weggelassen.
     Returns {raw_path, slug, vault}.
     """
     vault = settings.get_vault(vault_id)
@@ -320,6 +350,7 @@ def save_video_to_raw(
             f"In den Einstellungen aktivieren: 'EwtosBrain darf in raw/ schreiben'."
         )
 
+    saeule = saeulen.safe_raw_subpath(saeule)
     today = date.today().isoformat()
     slug = _slugify(title or url)
 
@@ -347,11 +378,31 @@ def save_video_to_raw(
         f"target_playlist: {playlist_name.strip() if playlist_name else ''}",
         f"tags: [{', '.join(tag_list)}]",
         "typ: video",
-        "---",
     ]
+    if channel:
+        frontmatter_lines.append(f"kanal: {channel}")
+    if duration:
+        frontmatter_lines.append(f"dauer: {duration}")
+    if views is not None:
+        frontmatter_lines.append(f"aufrufe: {views}")
+    if likes is not None:
+        frontmatter_lines.append(f"likes: {likes}")
+    if upload_date:
+        frontmatter_lines.append(f"upload_datum: {upload_date}")
+    if thumbnail_url:
+        frontmatter_lines.append(f"thumbnail_url: {thumbnail_url}")
+    frontmatter_lines.append("---")
     frontmatter = "\n".join(frontmatter_lines)
 
-    body = f"# {title.strip() if title else url}\n\n{transcript.strip()}\n" if transcript else f"# {title.strip() if title else url}\n"
+    heading = f"# {title.strip() if title else url}"
+    parts = [heading]
+    if thumbnail_url:
+        parts.append(f"![Thumbnail]({thumbnail_url})")
+    if description:
+        parts.append("## Beschreibung\n\n" + description.strip())
+    if transcript:
+        parts.append("## Transkript\n\n" + transcript.strip())
+    body = "\n\n".join(parts) + "\n"
     raw_file.write_text(f"{frontmatter}\n\n{body}", encoding="utf-8")
 
     raw_rel = f"raw/{saeule}/{raw_file.name}"

@@ -74,6 +74,7 @@ const TOOL_RENDERERS = {
   }),
   todos: renderTodos,
   chat: renderChat,
+  chat_web: renderChat,
   vault_explorer: renderVaultExplorer,
   vault_health: renderVaultHealth,
   playlists: renderPlaylistsTool,
@@ -89,37 +90,64 @@ const TOOL_RENDERERS = {
 
 const GROUPS = [
   {
+    id: "chat",
+    label: "Chat",
+    icon: "💬",
+    tools: [
+      { id: "chat", label: "Chat mit Vault", hint: "Fragen an den Vault (Karpathy-Methode)", icon: "📚" },
+      { id: "chat_web", label: "Chat mit Seite", hint: "Mit dem Inhalt des aktiven Tabs chatten", icon: "🌐", openOptions: { startMode: "page" } },
+    ],
+  },
+  {
     id: "vault",
     label: "Vault",
+    icon: "📚",
     tools: [
-      { id: "vault_explorer", label: "Explorer", hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
-      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
-      { id: "todos", label: "Todos", hint: "klickbare Liste mit Due-Dates", icon: "✅" },
-      { id: "playlists", label: "Playlists", hint: "Video-Sammlungen pro Säule", icon: "🎵" },
-      { id: "vault_health", label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
-      { id: "bookmarks", label: "Bookmarks", hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
+      { id: "vault_explorer", label: "Explorer",         hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
+      { id: "scratchpad",     label: "Note-Taker",       hint: "globaler Scratchpad", icon: "📝" },
+      { id: "todos",          label: "Todos",            hint: "klickbare Liste mit Due-Dates", icon: "✅" },
+      { id: "playlists",      label: "Playlists",        hint: "Video-Sammlungen pro Säule", icon: "🎵" },
+      { id: "bookmarks",      label: "Bookmarks",        hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
         actions: [
           { label: "Neuen Bookmark", icon: "+", action: "add" },
           { label: "Markierte Tabs erfassen", icon: "⇲", action: "capture_tabs" },
           { label: "URLs der Tabs kopieren", icon: "⧉", action: "copy_urls" },
         ],
       },
+      { id: "vault_health", label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
     ],
   },
   {
     id: "web",
     label: "Web",
+    icon: "🌐",
     tools: [
-      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
       { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄",
         actions: [
           { label: "Nur Inhalt scrapen", icon: "▸", action: "scrape_content" },
           { label: "Komplette Seite scrapen", icon: "▸", action: "scrape_full" },
         ],
       },
-      { id: "seo_check", label: "SEO-Check", hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
+      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
+      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
+    ],
+  },
+  {
+    id: "analyse",
+    label: "Analyse",
+    icon: "🔬",
+    tools: [
+      { id: "seo_check",     label: "SEO-Check",     hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
       { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
-      { id: "color_picker", label: "Color-Picker", hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
+    ],
+  },
+  {
+    id: "studio",
+    label: "Studio",
+    icon: "🎨",
+    tools: [
+      { id: "image_generator", label: "Image-Gen", hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
+      { id: "color_picker",  label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
       { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸",
         actions: [
           { label: "Sichtbar", icon: "▸", action: "shot_visible" },
@@ -127,8 +155,6 @@ const GROUPS = [
           { label: "Ganze Seite", icon: "▸", action: "shot_full" },
         ],
       },
-      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
-      { id: "image_generator", label: "Image-Gen", hint: "Bild erzeugen + editieren (Gemini Nano Banana)", icon: "🪄" },
     ],
   },
 ];
@@ -146,7 +172,7 @@ function getQuickOption(id) {
     return { id, label: QUICK_SPECIAL[id].label, icon: QUICK_SPECIAL[id].icon, special: true };
   }
   for (const g of GROUPS) {
-    const t = g.tools.find((x) => x.id === id);
+    const t = g.tools.find((x) => !x.separator && x.id === id);
     if (t) return { id: t.id, label: t.label, icon: t.icon || "•", special: false };
   }
   return null;
@@ -159,7 +185,7 @@ function getAllQuickOptions() {
   }
   for (const g of GROUPS) {
     for (const t of g.tools) {
-      if (t.soon) continue;
+      if (t.separator || t.soon) continue;
       opts.push({ id: t.id, label: t.label, icon: t.icon || "•", group: g.label });
     }
   }
@@ -208,6 +234,15 @@ document.addEventListener("click", async (e) => {
   const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
   if (!selectedVaultId) return;
   openTool("vault_explorer", { initialFile: rel, vaultId: selectedVaultId });
+});
+
+// Externe Links (https) im Sidepanel via chrome.tabs.create öffnen —
+// target="_blank" funktioniert in MV3-Sidepanels nicht zuverlässig.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.ext-link");
+  if (!a) return;
+  e.preventDefault();
+  chrome.tabs.create({ url: a.href });
 });
 
 chrome.runtime.sendMessage({ type: "get_connection_status" }, (resp) => {
@@ -521,13 +556,16 @@ function renderTabs() {
     const b = el("button", {
       type: "button",
       className: "tab" + (g.id === activeTab ? " active" : ""),
-      textContent: g.label,
+      textContent: (g.icon ? g.icon + " " : "") + g.label,
     });
     b.addEventListener("click", () => {
       activeTab = g.id;
       activeTool = null;
       renderTabs();
       renderToolList();
+      if (g.autoOpen && g.tools.filter(t => !t.separator).length === 1) {
+        openTool(g.tools.find(t => !t.separator).id);
+      }
     });
     tabsNav.append(b);
   }
@@ -557,6 +595,10 @@ function renderToolList() {
 
   const list = el("ul", { className: "tools " + toolViewMode });
   for (const t of group.tools) {
+    if (t.separator) {
+      list.append(el("li", { className: "tool-separator", textContent: t.label }));
+      continue;
+    }
     const hasActions = Array.isArray(t.actions) && t.actions.length > 0;
     const li = el("li", { className: "tool" + (t.soon ? " soon" : "") + (hasActions ? " has-caret" : "") });
     if (toolViewMode === "grid" && t.icon) {
@@ -574,7 +616,7 @@ function renderToolList() {
     } else {
       li.addEventListener("click", (e) => {
         if (e.target.closest(".tool-caret, .tool-popover")) return;
-        openTool(t.id);
+        openTool(t.id, t.openOptions || null);
       });
     }
     if (hasActions && !t.soon) {
@@ -832,6 +874,8 @@ function closeTool() {
   renderToolList();
 }
 
+let lastFetchData = null;
+
 function renderYoutubeTranscript() {
   panelTitle.textContent = "YouTube-Transcript";
 
@@ -875,10 +919,8 @@ function renderYoutubeTranscript() {
     chrome.tabs.onUpdated.removeListener(onUpdated);
   };
   const runBtn = el("button", { textContent: "Transcript holen" });
-  const brainBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
-  brainBtn.style.marginLeft = "6px";
-  brainBtn.title = "Transcript ins Vault speichern (Säule, Playlist, Tags)";
   const status = el("div", { className: "tool-status" });
+  const metaCard = el("div", { className: "yt-meta-card hidden" });
   const output = el("textarea", { placeholder: "Ergebnis erscheint hier...", readOnly: true });
 
   // Fallback-Row: erscheint nur, wenn Browser + Server-Fallback beide fail liefern
@@ -921,7 +963,6 @@ function renderYoutubeTranscript() {
       return null;
     }
     runBtn.disabled = true;
-    brainBtn.disabled = true;
     status.textContent = "läuft... (Server-API zuerst, Browser als Fallback)";
     status.className = "tool-status";
     output.value = "";
@@ -938,6 +979,31 @@ function renderYoutubeTranscript() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       output.value = data?.transcript || "";
+      lastFetchData = data;
+      // Metadaten-Karte befüllen
+      metaCard.replaceChildren();
+      const rows = [
+        data?.title ? ["Titel", el("b", { textContent: data.title })] : null,
+        data?.channel ? ["Kanal", data.channel] : null,
+        (data?.duration || data?.views || data?.likes)
+          ? ["Info", [data?.duration, data?.views ? `${data.views} Aufrufe` : null, data?.likes ? `${data.likes} Likes` : null].filter(Boolean).join(" · ")]
+          : null,
+        data?.upload_date ? ["Upload", data.upload_date] : null,
+      ].filter(Boolean);
+      for (const [label, val] of rows) {
+        const row = el("div", { className: "yt-meta-row" });
+        const lspan = el("span", { textContent: label + ":" });
+        row.append(lspan, " ");
+        if (typeof val === "string") row.append(val);
+        else row.append(val);
+        metaCard.append(row);
+      }
+      if (data?.description) {
+        const descRow = el("div", { className: "yt-meta-row yt-meta-desc" });
+        descRow.append(el("span", { textContent: "Beschreibung:" }), el("div", { className: "yt-desc-text", textContent: data.description }));
+        metaCard.append(descRow);
+      }
+      metaCard.classList.remove("hidden");
       let src;
       if (data?.source === "server_api") src = `fertig (Server-API${data?.lang ? ", " + data.lang : ""})`;
       else if (data?.source === "extension") src = "fertig (Browser-Fallback)";
@@ -952,42 +1018,10 @@ function renderYoutubeTranscript() {
       return null;
     } finally {
       runBtn.disabled = false;
-      brainBtn.disabled = false;
     }
   }
 
   runBtn.addEventListener("click", fetchTranscript);
-
-  brainBtn.addEventListener("click", async () => {
-    const url = urlInput.value.trim();
-    if (!url) {
-      status.textContent = "URL angeben";
-      status.className = "tool-status error";
-      return;
-    }
-
-    // 1. Transcript holen falls noch nicht da
-    let transcript = output.value.trim();
-    if (!transcript) {
-      const data = await fetchTranscript();
-      transcript = (data?.transcript || "").trim();
-      if (!transcript) return;  // Fehler-Status ist schon gesetzt
-    }
-
-    // 2. Title aus aktivem Tab wenn URL passt — sonst undefined (showBrainModal nimmt URL)
-    let title;
-    try {
-      const [tab] = await new Promise((resolve) =>
-        chrome.tabs.query({ active: true, currentWindow: true }, resolve)
-      );
-      if (tab?.url === url && tab.title) {
-        title = tab.title.replace(/ - YouTube$/, "").trim();
-      }
-    } catch {}
-
-    // 3. Modal mit prefetched → ueberspringt auto_brain, ruft nur auto_tag
-    await showBrainModal({ url, prefetched: { transcript, title } });
-  });
 
   const chatBtn = el("button", { textContent: "💬 Chat mit Transcript", className: "secondary" });
   chatBtn.style.marginLeft = "6px";
@@ -1007,11 +1041,144 @@ function renderYoutubeTranscript() {
     });
   });
 
+  const tagsInput = el("input", { type: "text", placeholder: "Tags (kommagetrennt, optional)" });
+  tagsInput.className = "yt-tags-input";
+  const parseTags = (s) => (s || "").split(",").map(t => t.trim()).filter(Boolean);
+
+  const saveRawBtn = el("button", { textContent: "📥 In Raw speichern", className: "secondary" });
+  saveRawBtn.style.marginLeft = "6px";
+  saveRawBtn.title = "Transcript als Raw-Datei im aktiven Vault speichern";
+  saveRawBtn.addEventListener("click", async () => {
+    if (!lastFetchData || !urlInput.value.trim()) {
+      status.textContent = "Erst Transcript holen";
+      status.className = "tool-status error";
+      return;
+    }
+    const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+    if (!selectedVaultId) {
+      status.textContent = "Kein Vault ausgewählt — zuerst in den Einstellungen einen Vault verbinden";
+      status.className = "tool-status error";
+      return;
+    }
+    saveRawBtn.disabled = true;
+    status.textContent = "speichere...";
+    status.className = "tool-status";
+    try {
+      const httpBase = await getHttpBase();
+      const res = await fetch(`${httpBase}/tools/raw/save_video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault_id: selectedVaultId,
+          url: urlInput.value.trim(),
+          title: lastFetchData.title || "",
+          transcript: lastFetchData.transcript || output.value || "",
+          channel: lastFetchData.channel || null,
+          duration: lastFetchData.duration || null,
+          views: lastFetchData.views || null,
+          likes: lastFetchData.likes || null,
+          upload_date: lastFetchData.upload_date || null,
+          thumbnail_url: lastFetchData.thumbnail_url || null,
+          description: lastFetchData.description || null,
+          tags: parseTags(tagsInput.value),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        status.textContent = "Kein Schreibrecht auf raw/ — in den Einstellungen aktivieren";
+        status.className = "tool-status error";
+      } else if (!res.ok) {
+        throw new Error(data?.detail || `HTTP ${res.status}`);
+      } else {
+        status.textContent = `In Raw gespeichert: ${data.raw_path || ""}`;
+        status.className = "tool-status success";
+      }
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+    } finally {
+      saveRawBtn.disabled = false;
+    }
+  });
+
+  const batchToggle = el("button", { textContent: "Batch", className: "secondary" });
+  batchToggle.style.marginLeft = "6px";
+  batchToggle.title = "Zwischen Einzel- und Batch-Modus umschalten";
+
+  const batchArea = el("textarea", { placeholder: "Eine URL pro Zeile\nhttps://youtube.com/watch?v=..." });
+  batchArea.style.cssText = "display:none;min-height:100px;resize:vertical;margin-top:8px;";
+
+  const farmAllBtn = el("button", { textContent: "Farm All" });
+  farmAllBtn.style.display = "none";
+
+  const batchResults = el("div");
+  batchResults.style.marginTop = "8px";
+
+  let batchMode = false;
+  batchToggle.addEventListener("click", () => {
+    batchMode = !batchMode;
+    urlRow.style.display = batchMode ? "none" : "";
+    runBtn.style.display = batchMode ? "none" : "";
+    batchArea.style.display = batchMode ? "" : "none";
+    farmAllBtn.style.display = batchMode ? "" : "none";
+    batchToggle.textContent = batchMode ? "Einzeln" : "Batch";
+    if (!batchMode) batchResults.replaceChildren();
+  });
+
+  farmAllBtn.addEventListener("click", async () => {
+    const urls = batchArea.value.split("\n").map(u => u.trim()).filter(u => u.startsWith("http"));
+    if (!urls.length) { status.textContent = "Keine URLs"; status.className = "tool-status error"; return; }
+    const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+    if (!selectedVaultId) { status.textContent = "Kein Vault gewählt"; status.className = "tool-status error"; return; }
+    const httpBase = await getHttpBase();
+    const results = [];
+    batchResults.replaceChildren();
+    farmAllBtn.disabled = true;
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      status.textContent = `${i + 1}/${urls.length}: ziehe Transcript...`;
+      status.className = "tool-status";
+      try {
+        const transcRes = await fetch(`${httpBase}/tools/youtube_transcript`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        if (!transcRes.ok) throw new Error(`HTTP ${transcRes.status}`);
+        const data = await transcRes.json();
+        const saveRes = await fetch(`${httpBase}/tools/raw/save_video`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vault_id: selectedVaultId, url,
+            title: data.title || "", transcript: data.transcript || "",
+            channel: data.channel || null, duration: data.duration || null,
+            views: data.views || null, likes: data.likes || null,
+            upload_date: data.upload_date || null, thumbnail_url: data.thumbnail_url || null,
+            description: data.description || null,
+            tags: parseTags(tagsInput.value),
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok) throw new Error(saveData.detail || `HTTP ${saveRes.status}`);
+        const row = el("div", { className: "batch-result-row success", textContent: `✓ ${saveData.data?.raw_path || url}` });
+        batchResults.append(row);
+        results.push({ url, ok: true });
+      } catch (err) {
+        const row = el("div", { className: "batch-result-row error", textContent: `✗ ${url}: ${err.message}` });
+        batchResults.append(row);
+        results.push({ url, ok: false });
+      }
+    }
+    const ok = results.filter(r => r.ok).length;
+    status.textContent = `${ok}/${urls.length} erfolgreich`;
+    status.className = ok === urls.length ? "tool-status success" : "tool-status";
+    farmAllBtn.disabled = false;
+  });
+
   const btnRow = el("div");
   btnRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;";
-  btnRow.append(runBtn, brainBtn, chatBtn);
+  btnRow.append(runBtn, chatBtn, saveRawBtn, batchToggle);
 
-  panelBody.append(urlRow, btnRow, status, output, fallbackRow);
+  panelBody.append(urlRow, btnRow, status, metaCard, tagsInput, output, fallbackRow, batchArea, farmAllBtn, batchResults);
 }
 
 async function renderNotesFile(kind, opts) {
@@ -1649,6 +1816,7 @@ async function renderChat() {
   searchToggleRow.append(searchToggle, searchToggleLabel);
 
   // Load initial state from server
+  let ttsEnabled = false;
   try {
     const settingsRes = await fetch(`${httpBase}/settings`);
     if (settingsRes.ok) {
@@ -1656,6 +1824,7 @@ async function renderChat() {
       if (typeof settingsData.vault_search_enabled === "boolean") {
         searchToggle.checked = settingsData.vault_search_enabled;
       }
+      ttsEnabled = settingsData.chat_tts_enabled === true;
     }
   } catch (_) {}
 
@@ -1674,6 +1843,7 @@ async function renderChat() {
   const status = el("div", { className: "tool-status" });
   const pageUrlRow = el("div", { className: "page-url-row", style: "display:none" });
 
+  const startMode = pendingToolOptions?.startMode || null;
   let chatMode = "vault";
   let scrapeMode = "content"; // "content" | "full"
   let strictPage = true;
@@ -1835,6 +2005,11 @@ async function renderChat() {
     applySourceMode(initialSource);
   }
 
+  // Über die "Chat mit Seite"-Kachel geöffnet: direkt in Seiten-Modus
+  if (!scrapedPage?.markdown && !initialSource && startMode === "page") {
+    pageBtn.click();
+  }
+
 
   let busy = false;
   let currentVaultId = null;
@@ -1850,6 +2025,7 @@ async function renderChat() {
       const bubble = el("div", { className: "chat-msg " + m.role });
       if (m.role === "assistant") {
         bubble.innerHTML = renderMarkdown(m.content);
+        addTtsButton(bubble);
       } else {
         bubble.textContent = m.content;
       }
@@ -1875,6 +2051,15 @@ async function renderChat() {
     panelBody.append(wrap);
   }
 
+  async function loadVaultHistory(vaultId) {
+    try {
+      const res = await fetch(`${httpBase}/vaults/${encodeURIComponent(vaultId)}/chat/history`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.messages || [];
+    } catch { return []; }
+  }
+
   async function loadVaultChat(vaultId) {
     currentVaultId = vaultId;
     await chrome.storage.local.set({ selectedVaultId: vaultId });
@@ -1891,7 +2076,8 @@ async function renderChat() {
         default: "Default-Prompt (keine CLAUDE.md)",
       }[data.prompt_source] || data.prompt_source || "?";
       meta.textContent = `${data.vault?.name || vaultId} · Modell: ${data.model} · max ${data.max_user_turns} Paare · ${sourceLabel}`;
-      renderLog(data.messages || []);
+      const history = await loadVaultHistory(vaultId);
+      renderLog(history.length ? history : (data.messages || []));
       setStatus("");
       inputArea.focus();
     } catch (err) {
@@ -1908,6 +2094,38 @@ async function renderChat() {
     log.append(bubble);
     log.scrollTop = log.scrollHeight;
     return bubble;
+  }
+
+  // 🔊 Vorlesen-Button (ElevenLabs) auf Assistant-Bubbles, wenn aktiviert
+  function addTtsButton(bubble) {
+    if (!ttsEnabled || !bubble) return;
+    const speakText = (bubble.textContent || "").trim();
+    if (!speakText) return;
+    const b = el("button", { type: "button", className: "tts-btn", textContent: "🔊", title: "Vorlesen" });
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      const prev = b.textContent;
+      b.textContent = "…";
+      try {
+        const r = await fetch(`${httpBase}/tools/tts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: speakText.slice(0, 5000) }),
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.detail || `HTTP ${r.status}`);
+        }
+        const audio = new Audio(URL.createObjectURL(await r.blob()));
+        audio.play();
+      } catch (err) {
+        setStatus("Vorlesen fehlgeschlagen: " + (err.message || err), "error");
+      } finally {
+        b.disabled = false;
+        b.textContent = prev;
+      }
+    });
+    bubble.appendChild(b);
   }
 
   async function send(message) {
@@ -2010,6 +2228,7 @@ async function renderChat() {
           assistantBubble.classList.remove("streaming");
           if (assistantText.trim()) {
             assistantBubble.innerHTML = renderMarkdown(assistantText);
+            addTtsButton(assistantBubble);
           } else {
             assistantBubble.textContent = "(keine Textantwort)";
           }
@@ -2243,7 +2462,32 @@ async function renderVaultExplorer() {
   const searchRow = el("div", { className: "vault-search-row" });
   const searchInput = el("input", { type: "text", className: "vault-search-input", placeholder: "Vault durchsuchen..." });
   const searchBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "Suchen" });
-  searchRow.append(searchInput, searchBtn);
+  const guideBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "📖", title: "Anleitung öffnen" });
+  guideBtn.addEventListener("click", () => openFile("anleitung.md"));
+  const newFileBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "+ Datei", title: "Neue Datei anlegen" });
+  newFileBtn.addEventListener("click", async () => {
+    if (!currentVaultId) return;
+    const name = prompt("Dateiname (z.B. meine-notiz.md):");
+    if (!name || !name.trim()) return;
+    const rel = name.trim().endsWith(".md") ? name.trim() : name.trim() + ".md";
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_file_new/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(rel)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "" }),
+      });
+      if (res.ok) {
+        currentFile = null;
+        await renderView();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Fehler: " + (err.detail || "Unbekannt"));
+      }
+    } catch (err) {
+      alert("Fehler: " + (err.message || err));
+    }
+  });
+  searchRow.append(searchInput, searchBtn, guideBtn, newFileBtn);
   header.append(vaultSelect, searchRow);
 
   const breadcrumb = el("div", { className: "vault-breadcrumb" });
@@ -2272,10 +2516,38 @@ async function renderVaultExplorer() {
   let searchActive = false;
   let vaultsById = {};
   let pendingFind = "";
+  let explorerShowHidden = false;
+  let explorerAllowDelete = false;
+  const expandedPaths = new Set();
+  let savedScrollTop = 0;
+  let revealPath = null;
+  try {
+    const _p = await chrome.storage.local.get(["explorerShowHidden", "explorerAllowDelete"]);
+    explorerShowHidden = !!_p.explorerShowHidden;
+    explorerAllowDelete = !!_p.explorerAllowDelete;
+  } catch {}
 
   function setStatus(text, level = "") {
     status.textContent = text;
     status.className = "tool-status" + (level ? " " + level : "");
+  }
+
+  function makeDeleteBtn(relPath, onDone) {
+    const b = el("span", { className: "vault-row-delete", textContent: "✕", title: "Löschen" });
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Löschen?\n\n${relPath}\n\nKann nicht rückgängig gemacht werden.`)) return;
+      try {
+        const r = await fetch(`${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(relPath)}`, { method: "DELETE" });
+        if (!r.ok) { const er = await r.json().catch(() => ({})); throw new Error(er.detail || `HTTP ${r.status}`); }
+        expandedPaths.delete(relPath);
+        setStatus("Gelöscht: " + relPath);
+        if (onDone) await onDone();
+      } catch (err) {
+        setStatus("Löschen fehlgeschlagen: " + (err.message || err), "error");
+      }
+    });
+    return b;
   }
 
   function renderBreadcrumb() {
@@ -2287,7 +2559,16 @@ async function renderVaultExplorer() {
     }
     if (currentFile) {
       const back = el("a", { href: "#", textContent: "← zurück", className: "vault-back" });
-      back.addEventListener("click", (e) => { e.preventDefault(); currentFile = null; renderView(); });
+      back.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (currentFile) {
+          revealPath = currentFile;  // beim Schließen zur Datei springen + markieren
+          let acc = "";
+          for (const seg of currentFile.split("/").slice(0, -1)) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); }
+        }
+        currentFile = null;
+        renderView();
+      });
       breadcrumb.append(back);
       const sep = el("span", { className: "vault-crumb-sep", textContent: " · " });
       const fileLabel = el("span", { className: "vault-crumb-file", textContent: currentFile });
@@ -2317,6 +2598,68 @@ async function renderVaultExplorer() {
   function basename(p) {
     const idx = p.lastIndexOf("/");
     return idx === -1 ? p : p.slice(idx + 1);
+  }
+
+  // Baut den Vault-Baum lazy auf: Ordner laden ihre Kinder erst beim Aufklappen.
+  // expandedPaths hält offene Ordner über Re-Renders (z.B. Datei schließen) hinweg.
+  async function buildTreeInto(container, relPath, depth) {
+    let data;
+    try {
+      const url = `${httpBase}/tools/vault_list/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(relPath)}&show_hidden=${explorerShowHidden}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } catch (err) {
+      container.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
+      return;
+    }
+    const folders = data.folders || [];
+    const files = data.files || [];
+    if (depth === 0 && !folders.length && !files.length) {
+      container.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
+      return;
+    }
+    for (const f of folders) {
+      const row = el("div", { className: "vault-entry vault-folder" });
+      row.dataset.path = f;
+      row.style.paddingLeft = (depth * 14 + 4) + "px";
+      const caret = el("span", { className: "vault-caret", textContent: "▸" });
+      row.append(caret, el("span", { className: "vault-icon", textContent: "📁" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      if (canWrite && explorerAllowDelete) row.append(makeDeleteBtn(f, () => renderView()));
+      const childBox = el("div", { className: "vault-tree-children", style: "display:none" });
+      let loaded = false;
+      async function expand() {
+        childBox.style.display = "";
+        caret.textContent = "▾";
+        expandedPaths.add(f);
+        if (!loaded) {
+          loaded = true;
+          caret.textContent = "…";
+          await buildTreeInto(childBox, f, depth + 1);
+          caret.textContent = "▾";
+        }
+      }
+      function collapse() {
+        childBox.style.display = "none";
+        caret.textContent = "▸";
+        expandedPaths.delete(f);
+      }
+      row.addEventListener("click", async () => {
+        if (childBox.style.display !== "none") collapse();
+        else await expand();
+      });
+      container.append(row, childBox);
+      if (expandedPaths.has(f)) await expand();  // Zustand wiederherstellen
+    }
+    for (const f of files) {
+      const row = el("div", { className: "vault-entry vault-file" });
+      row.dataset.path = f;
+      row.style.paddingLeft = (depth * 14 + 20) + "px";
+      row.append(el("span", { className: "vault-icon", textContent: "📄" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      if (canWrite && explorerAllowDelete) row.append(makeDeleteBtn(f, () => renderView()));
+      row.addEventListener("click", () => openFile(f));
+      container.append(row);
+    }
   }
 
   function clearFindHighlights(container) {
@@ -2373,6 +2716,7 @@ async function renderVaultExplorer() {
 
   async function openFile(relPath, findQuery = "") {
     if (!currentVaultId) return;
+    savedScrollTop = listBox.scrollTop || 0;  // Scroll für Rückkehr merken
     currentFile = relPath;
     pendingFind = findQuery || "";
     await renderView();
@@ -2441,6 +2785,12 @@ async function renderVaultExplorer() {
         const data = await res.json();
         const body = el("div", { className: "vault-file-body" });
         body.innerHTML = renderMarkdown(data.content || "");
+        // Lokale Vault-Bilder über den Asset-Endpoint laden
+        body.querySelectorAll("img.md-image[data-vault-src]").forEach((img) => {
+          const rel = img.getAttribute("data-vault-src");
+          img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(currentVaultId)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
+          img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[Bild nicht gefunden: ${rel}]`)); });
+        });
 
         // In-Datei-Suche (Strg+F): markiert alle Treffer gelb, springt durch.
         const findBar = el("div", { className: "vault-find-bar" });
@@ -2510,6 +2860,22 @@ async function renderVaultExplorer() {
           editBtn.addEventListener("click", () => showEditor(rawContent));
           viewerActions.append(editBtn);
         }
+        if (canWrite && explorerAllowDelete) {
+          const delFileBtn = el("button", { type: "button", className: "vault-delete-btn", textContent: "🗑 Löschen" });
+          delFileBtn.addEventListener("click", async () => {
+            if (!confirm(`Datei löschen?\n\n${currentFile}\n\nKann nicht rückgängig gemacht werden.`)) return;
+            try {
+              const r = await fetch(`${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`, { method: "DELETE" });
+              if (!r.ok) { const er = await r.json().catch(() => ({})); throw new Error(er.detail || `HTTP ${r.status}`); }
+              expandedPaths.delete(currentFile);
+              currentFile = null;
+              await renderView();
+            } catch (err) {
+              setStatus("Löschen fehlgeschlagen: " + (err.message || err), "error");
+            }
+          });
+          viewerActions.append(delFileBtn);
+        }
         viewerBox.append(findBar, body, viewerActions);
         if (pendingFind) {
           findInput.value = pendingFind;
@@ -2561,35 +2927,22 @@ async function renderVaultExplorer() {
       newInput.addEventListener("keydown", (e) => { if (e.key === "Enter") newConfirm.click(); });
       listBox.append(toolbar, newForm);
     }
-    setStatus("lade Ordner...");
-    try {
-      const url = `${httpBase}/tools/vault_list/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentPath)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const folders = data.folders || [];
-      const files = data.files || [];
-      if (!folders.length && !files.length) {
-        listBox.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
+    setStatus("lade Vault...");
+    const treeRoot = el("div", { className: "vault-tree" });
+    listBox.append(treeRoot);
+    await buildTreeInto(treeRoot, "", 0);
+    setStatus("");
+    if (revealPath) {
+      const sel = (window.CSS && CSS.escape) ? CSS.escape(revealPath) : revealPath.replace(/"/g, '\\"');
+      const target = treeRoot.querySelector(`[data-path="${sel}"]`);
+      revealPath = null;
+      if (target) {
+        treeRoot.querySelectorAll(".vault-active").forEach((e2) => e2.classList.remove("vault-active"));
+        target.classList.add("vault-active");
+        target.scrollIntoView({ block: "center" });
       }
-      for (const f of folders) {
-        const row = el("div", { className: "vault-entry vault-folder" });
-        row.append(el("span", { className: "vault-icon", textContent: "📁" }));
-        row.append(el("span", { className: "vault-name", textContent: basename(f) }));
-        row.addEventListener("click", () => navigateTo(f));
-        listBox.append(row);
-      }
-      for (const f of files) {
-        const row = el("div", { className: "vault-entry vault-file" });
-        row.append(el("span", { className: "vault-icon", textContent: "📄" }));
-        row.append(el("span", { className: "vault-name", textContent: basename(f) }));
-        row.addEventListener("click", () => openFile(f));
-        listBox.append(row);
-      }
-      setStatus("");
-    } catch (err) {
-      listBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
-      setStatus("Ordner konnte nicht geladen werden", "error");
+    } else if (savedScrollTop) {
+      listBox.scrollTop = savedScrollTop; savedScrollTop = 0;
     }
   }
 
@@ -2985,7 +3338,54 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+function buildNestedList(lines, ordered) {
+  const items = lines.map((l) => {
+    const m = ordered
+      ? l.match(/^(\s*)\d+\.\s+(.+)$/)
+      : l.match(/^(\s*)[-*]\s+(\[[ xX]\]\s+)?(.+)$/);
+    if (!m) return null;
+    const indent = m[1].length;
+    const text = ordered ? m[2] : (m[3] || m[2]);
+    return { indent, text };
+  }).filter(Boolean);
+  if (!items.length) return "";
+  function buildGroup(group) {
+    let html = "";
+    let i = 0;
+    while (i < group.length) {
+      const item = group[i];
+      const children = [];
+      let j = i + 1;
+      while (j < group.length && group[j].indent > item.indent) {
+        children.push(group[j]);
+        j++;
+      }
+      const childHtml = children.length ? buildGroup(children) : "";
+      const tag = ordered ? "ol" : "ul";
+      html += `<li>${inlineMd(item.text)}${childHtml ? `<${tag}>${childHtml}</${tag}>` : ""}</li>`;
+      i = j;
+    }
+    return html;
+  }
+  const tag = ordered ? "ol" : "ul";
+  return `<${tag}>${buildGroup(items)}</${tag}>`;
+}
+
 function renderMarkdown(text) {
+  // Strip YAML frontmatter and render as a collapsible key-value table.
+  let fmHtml = "";
+  text = text.replace(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/, (_, yaml) => {
+    const rows = yaml.trim().split("\n").map((line) => {
+      const m = line.match(/^([\w][\w-]*):\s*(.*)/);
+      if (!m) return "";
+      return `<tr><th>${escapeHtml(m[1])}</th><td>${escapeHtml(m[2].trim())}</td></tr>`;
+    }).filter(Boolean);
+    if (rows.length) {
+      fmHtml = `<details class="fm-block" open><summary class="fm-toggle">Metadaten</summary><table class="fm-table"><tbody>${rows.join("")}</tbody></table></details>`;
+    }
+    return "";
+  });
+
   // Preserve fenced code blocks before any other processing.
   const codeBlocks = [];
   let src = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -3035,29 +3435,21 @@ function renderMarkdown(text) {
       return `<blockquote>${renderMarkdown(inner)}</blockquote>`;
     }
 
-    // Ordered list
-    if (lines.every((l) => /^\d+\.\s+/.test(l))) {
-      const items = lines.map((l) => {
-        const m = l.match(/^\d+\.\s+(.+)$/);
-        return m ? `<li>${inlineMd(m[1])}</li>` : "";
-      }).join("");
-      return `<ol>${items}</ol>`;
+    // Ordered list (supports nesting via indentation)
+    if (lines.every((l) => /^\s*\d+\.\s+/.test(l))) {
+      return buildNestedList(lines, true);
     }
 
-    // Unordered list
+    // Unordered list (supports nesting via indentation)
     if (lines.every((l) => /^\s*[-*]\s+/.test(l))) {
-      const items = lines.map((l) => {
-        const m = l.match(/^\s*[-*]\s+(\[[ xX]\]\s+)?(.+)$/);
-        return m ? `<li>${inlineMd(m[2])}</li>` : "";
-      }).join("");
-      return `<ul>${items}</ul>`;
+      return buildNestedList(lines, false);
     }
 
     // Paragraph (single newlines → <br>)
     return `<p>${lines.map(inlineMd).join("<br>")}</p>`;
   }).join("");
 
-  return html.replace(/\x00CODEBLOCK(\d+)\x00/g, (_, i) => codeBlocks[Number(i)]);
+  return fmHtml + html.replace(/\x00CODEBLOCK(\d+)\x00/g, (_, i) => codeBlocks[Number(i)]);
 }
 
 function inlineMd(s) {
@@ -3074,16 +3466,31 @@ function inlineMd(s) {
   s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
   s = s.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  // Bilder ZUERST (vor Wikilinks/Links): externe URL, lokaler Pfad, Obsidian-Embed
+  s = s.replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g, '<img class="md-image" src="$2" alt="$1" loading="lazy">');
+  s = s.replace(/!\[\[([^\]]+?)\]\]/g, (_m, p) => {
+    const rel = p.trim().replace(/"/g, "&quot;");
+    return `<img class="md-image" data-vault-src="${rel}" alt="${rel}" loading="lazy">`;
+  });
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, rel) => {
+    const r = rel.trim().replace(/"/g, "&quot;");
+    return `<img class="md-image" data-vault-src="${r}" alt="${alt}" loading="lazy">`;
+  });
   // Obsidian wikilinks [[path|alias]] / [[path#heading]] / [[path]] → öffnen Datei im Vault-Explorer
   s = s.replace(/\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_match, path, alias) => {
     const display = (alias || path).trim();
     const rel = path.trim().replace(/"/g, "&quot;");
     return `<a href="#" class="wiki-link" data-rel="${rel}">${display}</a>`;
   });
-  // Links [text](url) — only allow http(s) for safety
-  s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Relative .md links → Vault-Explorer (gleicher Handler wie wikilinks)
+  s = s.replace(/\[([^\]]+)\]\((?!https?:\/\/)([^)#\s]+\.md)(?:#[^)]*)?\)/g, (_m, text, path) => {
+    const rel = path.replace(/"/g, "&quot;");
+    return `<a href="#" class="wiki-link" data-rel="${rel}">${text}</a>`;
+  });
+  // Links [text](url) — https
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" class="ext-link" rel="noopener noreferrer">$1</a>');
   // Auto-link bare URLs
-  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)(?=[\s.,)!?]|$)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)(?=[\s.,)!?]|$)/g, '$1<a href="$2" class="ext-link" rel="noopener noreferrer">$2</a>');
   // Restore code spans
   s = s.replace(/\x01CODE(\d+)\x01/g, (_, i) => codes[Number(i)]);
   return s;
@@ -4376,6 +4783,17 @@ function renderPageScrape() {
   ["artikel", "eigene-notizen", "chat-archive"].forEach(s => promoteSub.append(new Option(s, s)));
   const promoteDesc = el("textarea", { placeholder: "Beschreibung (optional)" });
   promoteDesc.style.cssText = "min-height:52px;resize:vertical;margin-top:6px;font-size:12px;";
+
+  const promoteTags = el("input", { type: "text", placeholder: "Tags (kommagetrennt, optional)" });
+  promoteTags.className = "promote-tags-input";
+  promoteTags.style.marginTop = "6px";
+
+  const seoCheckboxRow = el("div");
+  seoCheckboxRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;";
+  const seoCheckbox = el("input", { type: "checkbox" });
+  seoCheckbox.checked = true;
+  seoCheckboxRow.append(seoCheckbox, el("span", { textContent: "SEO-Metadaten hinzufügen" }));
+
   const promoteHint = el("div", { className: "tool-status" });
   const promoteSubBtn = el("button", { textContent: "Speichern" });
   const promoteCancelBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
@@ -4387,10 +4805,21 @@ function renderPageScrape() {
   promoteActRow.style.marginTop = "8px";
   promoteActRow.append(promoteSubBtn, promoteCancelBtn);
 
-  promoteForm.append(promoteTitle, promoteSubLabel, promoteSub, promoteDesc, promoteHint, promoteActRow);
+  promoteForm.append(promoteTitle, promoteSubLabel, promoteSub, promoteDesc, promoteTags, seoCheckboxRow, promoteHint, promoteActRow);
 
-  promoteBtn.addEventListener("click", () => {
-    promoteForm.style.display = promoteForm.style.display === "none" ? "block" : "none";
+  promoteBtn.addEventListener("click", async () => {
+    const opening = promoteForm.style.display === "none";
+    promoteForm.style.display = opening ? "block" : "none";
+    if (opening && !promoteDesc.value.trim()) {
+      try {
+        const httpBase = await getHttpBase();
+        const sres = await fetch(`${httpBase}/tools/seo_check`, { method: "POST" });
+        if (sres.ok) {
+          const sd = await sres.json();
+          if (sd.description && !promoteDesc.value.trim()) promoteDesc.value = sd.description;
+        }
+      } catch {}
+    }
   });
   promoteCancelBtn.addEventListener("click", () => {
     promoteForm.style.display = "none";
@@ -4406,6 +4835,13 @@ function renderPageScrape() {
       const httpBase = await getHttpBase();
       const vaultId = await getActiveVaultId(httpBase);
       if (!vaultId) throw new Error("Kein Vault konfiguriert");
+      let seoData = null;
+      if (seoCheckbox.checked) {
+        try {
+          const seoRes = await fetch(`${httpBase}/tools/seo_check`, { method: "POST" });
+          if (seoRes.ok) seoData = await seoRes.json();
+        } catch {}
+      }
       const res = await fetch(`${httpBase}/tools/raw/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4415,6 +4851,13 @@ function renderPageScrape() {
           content: lastMarkdown,
           target_subfolder: promoteSub.value,
           description: promoteDesc.value.trim() || null,
+          url: seoData?.url || lastUrl || null,
+          meta_title: seoData?.title || null,
+          meta_beschreibung: seoData?.description || null,
+          og_bild: seoData?.og_image || null,
+          canonical: seoData?.canonical || null,
+          h1: seoData?.h1?.[0] || null,
+          tags: (promoteTags.value || "").split(",").map(t => t.trim()).filter(Boolean),
         }),
       });
       const text = await res.text();
@@ -4428,6 +4871,7 @@ function renderPageScrape() {
       promoteHint.className = "tool-status success";
       promoteTitle.value = "";
       promoteDesc.value = "";
+      promoteTags.value = "";
       promoteForm.style.display = "none";
     } catch (err) {
       promoteHint.innerHTML = err.message || String(err);

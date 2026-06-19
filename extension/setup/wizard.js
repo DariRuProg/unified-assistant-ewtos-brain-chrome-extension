@@ -143,6 +143,7 @@ async function navigate(dir) {
     // Existing-Vault: Extend-Agent als Opt-in anbieten (überschreibt nichts).
     const showExtend = vaultMode === 'existing' && !isAddVaultMode;
     document.getElementById('btn-extend-agent').style.display = showExtend ? 'inline-flex' : 'none';
+    document.getElementById('btn-scaffold-base').style.display = showExtend ? 'inline-flex' : 'none';
     document.getElementById('extend-hint').style.display = showExtend ? 'block' : 'none';
   }
 }
@@ -274,9 +275,9 @@ async function loadTemplates() {
     const blueprints = Array.isArray(data) ? data : (data.blueprints || []);
     renderTemplates(blueprints);
 
-    // Default-Auswahl: karpathy-para-base
+    // Default-Auswahl: kontext-base (Kontext-Profil als gemeinsame Basis)
     if (selectedTemplates.size === 0) {
-      const def = blueprints.find(b => b.id === 'karpathy-para-base') || blueprints[0];
+      const def = blueprints.find(b => b.id === 'kontext-base') || blueprints[0];
       if (def) {
         selectedTemplates.add(def.id);
         const card = list.querySelector(`[data-template-id="${def.id}"]`);
@@ -314,7 +315,7 @@ function renderTemplates(blueprints) {
     return;
   }
 
-  for (const bp of blueprints) {
+  const makeCard = (bp) => {
     const card = document.createElement('div');
     card.className = 'template-card';
     card.dataset.templateId = bp.id;
@@ -332,27 +333,9 @@ function renderTemplates(blueprints) {
 
     const desc = document.createElement('div');
     desc.className = 'template-desc';
-    desc.textContent = bp.description || 'Keine Beschreibung.';
+    desc.textContent = bp.when_to_use || bp.description || 'Keine Beschreibung.';
 
-    const tags = document.createElement('div');
-    tags.className = 'template-tags';
-    const sourceTag = document.createElement('span');
-    sourceTag.className = 'template-tag ' + (bp.source === 'builtin' ? 'builtin' : 'imported');
-    sourceTag.textContent = bp.source === 'builtin' ? 'Built-in' : 'Importiert';
-    tags.append(sourceTag);
-    if (bp.trusted) {
-      const trust = document.createElement('span');
-      trust.className = 'template-tag trusted';
-      trust.textContent = '✓ Signiert';
-      tags.append(trust);
-    } else if (bp.source !== 'builtin') {
-      const warn = document.createElement('span');
-      warn.className = 'template-tag imported';
-      warn.textContent = '⚠ Unsigniert';
-      tags.append(warn);
-    }
-
-    body.append(name, desc, tags);
+    body.append(name, desc);
     card.append(check, body);
 
     card.addEventListener('click', () => {
@@ -365,8 +348,26 @@ function renderTemplates(blueprints) {
       }
       updateTemplatesNextBtn();
     });
+    return card;
+  };
 
-    list.append(card);
+  const cat = (bp) => bp.category || ((bp.extends && bp.extends.length) ? 'addon' : 'base');
+  const bases = blueprints.filter((b) => cat(b) === 'base');
+  const addons = blueprints.filter((b) => cat(b) === 'addon');
+  const groupHeader = (text) => {
+    const h = document.createElement('div');
+    h.className = 'template-group-header';
+    h.textContent = text;
+    h.style.cssText = 'font-weight:600;opacity:0.7;font-size:13px;margin:14px 0 6px;';
+    list.append(h);
+  };
+  if (bases.length) {
+    groupHeader('Basis — der Grundaufbau');
+    for (const bp of bases) list.append(makeCard(bp));
+  }
+  if (addons.length) {
+    groupHeader('Erweiterungen — optional dazu');
+    for (const bp of addons) list.append(makeCard(bp));
   }
 
   // Buttons-Row anhängen
@@ -426,21 +427,23 @@ async function skipSetupAgent() {
     status.style.display = 'block';
     return;
   }
+  const chosen = [...selectedTemplates];
+  if (!chosen.length) chosen.push('kontext-base');
   status.className = 'info-box neutral';
-  status.textContent = 'Wende Standard-Blueprint an…';
+  status.textContent = 'Wende gewählte Module an…';
   status.style.display = 'block';
   try {
-    const bpRes = await fetch(httpBase() + '/blueprints/karpathy-para-base');
-    if (!bpRes.ok) throw new Error('Blueprint nicht gefunden: HTTP ' + bpRes.status);
-    const blueprint = await bpRes.json();
-    const commitRes = await fetch(httpBase() + `/vaults/${savedVaultId}/blueprint/commit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blueprint }),
-    });
-    if (!commitRes.ok) {
-      const errText = await commitRes.text();
-      throw new Error('Commit fehlgeschlagen: ' + errText);
+    // Jedes gewählte Blueprint non-destruktiv anwenden (löst extends selbst auf).
+    for (const blueprint_id of chosen) {
+      const res = await fetch(httpBase() + `/vaults/${savedVaultId}/apply_blueprint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blueprint_id }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Anwenden von ${blueprint_id} fehlgeschlagen: ` + errText);
+      }
     }
     // Weiter zu Step 6 (Fertig)
     document.getElementById('step-5').classList.remove('active');
@@ -599,6 +602,28 @@ document.getElementById('btn-open-settings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 document.getElementById('btn-extend-agent').addEventListener('click', () => openSetupAgent('extend'));
+document.getElementById('btn-scaffold-base').addEventListener('click', async () => {
+  if (!savedVaultId) return;
+  const btn = document.getElementById('btn-scaffold-base');
+  const hint = document.getElementById('extend-hint');
+  btn.disabled = true;
+  try {
+    const res = await fetch(httpBase() + `/vaults/${encodeURIComponent(savedVaultId)}/scaffold`, { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const created = (data.created || []).length;
+    const skills = (data.copied_skills || []).length;
+    hint.className = 'info-box success';
+    hint.innerHTML = `<strong>Basis-Struktur angelegt.</strong> ${created} Eintraege erstellt, ${skills} Skills. CLAUDE.md, index, kontext/ und .claude/skills/ liegen jetzt im Vault. Fuer persoenliche Inhalte den Setup-Agenten starten.`;
+    hint.style.display = 'block';
+  } catch (e) {
+    hint.className = 'info-box error';
+    hint.textContent = 'Fehler: ' + e.message;
+    hint.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+});
 const QC_TOOL = { 'qc-youtube': 'youtube_transcript', 'qc-chat': 'chat', 'qc-notes': 'scratchpad' };
 Object.keys(QC_TOOL).forEach(id => {
   document.getElementById(id).addEventListener('click', () => {

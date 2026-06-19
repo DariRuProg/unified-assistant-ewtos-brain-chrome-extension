@@ -269,8 +269,9 @@
       <option value="openai">OpenAI (GPT)</option>
       <option value="ollama">Ollama (lokal)</option>
       <option value="mistral">Mistral</option>
+      <option value="openrouter">OpenRouter (beliebiges Modell)</option>
     </select>
-    <input id="setupAgentModel" type="text" placeholder="z.B. claude-opus-4-7" autocomplete="off" />
+    <input id="setupAgentModel" type="text" placeholder="z.B. claude-opus-4-7 oder anthropic/claude-sonnet-4.6" autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
@@ -293,6 +294,7 @@
       <option value="openai">OpenAI (GPT) — Backend Stufe 4</option>
       <option value="ollama">Ollama (lokal, DSGVO) — Backend Stufe 5</option>
       <option value="mistral">Mistral — Backend Stufe 6</option>
+      <option value="openrouter">OpenRouter (beliebiges Modell)</option>
     </select>
   </div>
 
@@ -331,10 +333,59 @@
     <input id="mistralApiKey" type="password" placeholder="..." autocomplete="off" />
   </div>
 
+  <div class="field provider-field hidden" data-provider="openrouter">
+    <label for="openrouterApiKey">OpenRouter API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert. Modell oben frei wählbar (Slug, z.B. <code>anthropic/claude-sonnet-4.6</code>, <code>openai/gpt-4o</code>, <code>google/gemini-2.0-flash</code>). <span id="openrouterApiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="openrouterApiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
+  </div>
+
+  <div class="field provider-field hidden" data-provider="openrouter">
+    <label for="openrouterBaseUrl">OpenRouter Base-URL (optional)</label>
+    <div class="hint">Standard: <code>https://openrouter.ai/api/v1</code>. Nur ändern bei Proxy/Self-Host.</div>
+    <input id="openrouterBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1" autocomplete="off" />
+  </div>
+
   <div class="field">
     <label for="maxUserTurns">Max Verlauf (Nachrichten-Paare)</label>
     <div class="hint">Wieviele User-Assistant-Paare im Verlauf bleiben. Default: 20.</div>
     <input id="maxUserTurns" type="number" min="1" max="100" placeholder="20" />
+  </div>
+
+  <div class="field">
+    <label for="chatHeavyOpsMode">Aktionen im Chat</label>
+    <div class="hint">Steuert, wie der Sidepanel-Chat teure Aktionen (Ingest/Kuratierung, Zusammenfassungen) behandelt. Mechanisches (Transkript ziehen, Datei schreiben) läuft immer.</div>
+    <select id="chatHeavyOpsMode">
+      <option value="full">Vollmodus — alles im Chat ausführen (läuft über deinen LLM-Key)</option>
+      <option value="hint">Hinweis-Modus — vor teurer Kuratierung Kosten-Hinweis + Claude-Code-Empfehlung</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="chatShowSources" class="checkbox-row" style="display:flex;align-items:center;gap:8px;">
+      <input id="chatShowSources" type="checkbox" />
+      <span>Quellen-Referenzen im Chat anzeigen</span>
+    </label>
+    <div class="hint">Zeigt gelesene Vault-Dateien als klickbare Quellen-Links unter Chat-Antworten an.</div>
+  </div>
+
+  <div class="field">
+    <label for="chatTtsEnabled" class="checkbox-row" style="display:flex;align-items:center;gap:8px;">
+      <input id="chatTtsEnabled" type="checkbox" />
+      <span>Antworten vorlesen (🔊-Button an Chat-Antworten, via ElevenLabs)</span>
+    </label>
+    <div class="hint">Aktiviert einen Vorlese-Button an den Chat-Antworten. Nutzt ElevenLabs (eigener Key, BYOK).</div>
+  </div>
+
+  <div class="field">
+    <label for="elevenlabsApiKey">ElevenLabs API-Key</label>
+    <div class="hint">Wird serverseitig gespeichert. Key: <code>elevenlabs.io/app/settings/api-keys</code>. <span id="elevenlabsApiKeyStatus" style="font-weight: 600;"></span></div>
+    <input id="elevenlabsApiKey" type="password" placeholder="..." autocomplete="off" />
+  </div>
+
+  <div class="field">
+    <label for="elevenlabsVoiceId">ElevenLabs Voice-ID (optional)</label>
+    <div class="hint">Standard: Rachel (<code>21m00Tcm4TlvDq8ikWAM</code>). Eigene Voice-ID aus dem ElevenLabs-Dashboard.</div>
+    <input id="elevenlabsVoiceId" type="text" placeholder="21m00Tcm4TlvDq8ikWAM" autocomplete="off" />
   </div>
 
   <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
@@ -397,6 +448,24 @@
       <span>Quick-Buttons ausblenden, wenn ein Tool geöffnet ist</span>
     </label>
     <div class="hint">Spart Platz im Sidepanel, sobald du in einem Tool arbeitest. Standardmäßig aus.</div>
+  </div>
+
+  <h2>Explorer</h2>
+
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input id="explorerShowHidden" type="checkbox" />
+      <span>Versteckte Dateien und Ordner anzeigen</span>
+    </label>
+    <div class="hint">Zeigt im Vault-Explorer auch Einträge mit Punkt am Anfang (z.B. <code>.obsidian</code>, <code>.claude</code>). Standardmäßig aus. Greift beim nächsten Öffnen des Explorers.</div>
+  </div>
+
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input id="explorerAllowDelete" type="checkbox" />
+      <span>Löschen im Explorer erlauben</span>
+    </label>
+    <div class="hint">Blendet Lösch-Buttons im Vault-Explorer ein (Dateien + leere Ordner). Wirkt nur, wenn beim jeweiligen Vault die Berechtigung <code>write_files</code> aktiv ist.</div>
   </div>
 
   <h2>Verbundene Vaults</h2>

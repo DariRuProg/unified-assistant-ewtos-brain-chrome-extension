@@ -7,6 +7,8 @@
   "license": "MIT",
   "description": "Researcher-Setup: erbt karpathy-para-base, fügt Themen/Papers/Fragen-Strukturen plus zwei .base-Views.",
   "tags": ["research", "papers", "karpathy"],
+  "category": "addon",
+  "when_to_use": "Für Forschung: eigene Strukturen für Themen, Papers und Fragen plus zwei Tabellen-Ansichten (.base). Baut auf dem Farming-Modul auf.",
   "extends": ["karpathy-para-base"],
   "folders": [
     { "path": "wiki/areas/themen", "kind": "area", "label": "themen", "emoji": "🧪" },

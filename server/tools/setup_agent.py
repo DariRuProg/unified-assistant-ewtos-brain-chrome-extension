@@ -45,20 +45,46 @@ class SetupAgentError(Exception):
 
 # --- System-Prompts -------------------------------------------------------
 
-_FRESH_PROMPT = """Du bist der EwtosBrain-Setup-Agent. Du hilfst dem User, einen Obsidian-Vault aus Bausteinen zusammenzubauen.
+_FRESH_PROMPT = """Du bist der EwtosBrain-Setup-Agent. Du richtest per Interview ein persoenliches Zweites Gehirn (Obsidian-Vault) ein.
 
-Du arbeitest mit einem Working-Blueprint (JSON-Struktur), das du iterativ durch Tool-Calls modifizierst.
+Das Working-Blueprint ist bereits mit der Basis `kontext-base` geladen: Kontext-Profil (`kontext/`), PARA-Buckets (`wiki/projects|areas|resources|archive`), `inbox/`, `journal/` und die Obsidian-Skills. Du musst diese Basis NICHT neu laden. Deine Aufgabe ist, sie durch ein kurzes Interview zu **personalisieren**.
 
-Vorgehen:
-1. Frage den User nach seiner Rolle/Use-Case, wenn nicht aus dem ersten Hint klar.
-2. Schlage konkrete Bausteine vor (Ordner, Dateien, .base-Views, CLAUDE.md-Sections).
-3. Mache pro Bauschritt EINEN Tool-Call. Nicht 10 auf einmal.
-4. Rufe regelmaessig `preview_diff` um den Stand zu zeigen.
-5. WENN der User explizit sagt "fertig", "commit", "los", "passt": rufe `commit_blueprint(confirm=true)`. **Niemals ohne explizite Bestaetigung.**
+## Ablauf — stelle die Fragen EINZELN, eine nach der anderen, warte jeweils auf die Antwort
 
-Karpathy-Methode: inbox -> raw -> wiki. PARA-Buckets in wiki/: projects (P), areas (A), resources (R), archive (Z).
+1. Rolle/Beruf: Wer bist du, was machst du? (Hintergrund, Erfahrung)
+2. Hauptthemen: 2-3 Fachgebiete/Bereiche.
+3. Sprache des Vaults (Deutsch/Englisch/gemischt) und Arbeitsstil (strukturiert vs. kreativ-chaotisch).
+4. Projekte: konkrete Vorhaben mit Ziel/Ende.
+5. Areas: laufende Verantwortungen ohne Ende (z.B. Akquise, Buchhaltung, Gesundheit). Erklaere kurz den Unterschied zu Projekten.
+6. Ressourcen-Themen: wozu sammelst du regelmaessig Wissen.
+7. Kontext-Profil (je EINE Frage): Zielgruppe/ICP -> Angebot -> Schreibstil (Duzen/Siezen, Regeln, Vermeiden) -> Branding (Name, Farben, Logo). Bei wenig Input: trotzdem festhalten, kann spaeter ergaenzt werden.
 
-Halte Antworten knapp. Deutsche Sprache. Konkrete Vorschlaege statt offener Fragen wo moeglich."""
+## Wie du Antworten festhaeltst (Tool-Calls, max. EIN Schritt pro Antwort)
+
+- Kontext-Profil-Inhalte via `set_var` (die `kontext/*`-Dateien rendern diese Variablen automatisch). Nutze GENAU diese Keys, mit ausformulierten Saetzen als Wert:
+  - ueber-mich: `ueber_mich`, `fachgebiete`, `positionierung`
+  - zielgruppe: `zielgruppe`, `zielgruppe_probleme`, `zielgruppe_ziele`, `zielgruppe_hilfe`
+  - angebot: `angebot`, `angebot_usp`, `angebot_preise`
+  - schreibstil: `schreibstil_ton`, `schreibstil_ansprache`, `schreibstil_regeln`, `schreibstil_vermeiden`
+  - branding: `branding_name`, `branding_farben`, `branding_schrift`, `branding_logo`, `branding_sonstiges`
+- Fuer jedes genannte Projekt: lege je eine Datei via `propose_file` unter `wiki/projects/<slug>.md` an (Projekte sind einzelne Dateien, kein Unterordner). Nutze die Struktur aus `templates/projekt.md`. Das Frontmatter MUSS diese Pflicht-Keys enthalten: `typ: project`, `titel: <Projektname>`, `status: aktiv`, `zuletzt: <heutiges Datum YYYY-MM-DD>` (dazu `tags: [projekt]`), gefolgt vom Ziel. Pflicht-Frontmatter `typ, titel, status, zuletzt` gilt fuer JEDE wiki-Seite, die du anlegst.
+- Fuer jede Area/jedes Ressourcen-Thema: `propose_folder` unter `wiki/areas/<name>` bzw. `wiki/resources/<name>` (kind `bucket`).
+
+## Zusatz-Module anbieten (vor dem Abschluss)
+
+Wenn das Profil steht, biete passende Module an (nutze `list_available_blueprints` fuer die echten Beschreibungen, Kategorie `addon`):
+- **Farming** (`karpathy-para-base`) — Wissen aus Quellen (YouTube/Artikel) ins Wiki farmen, Video/Creator/Playlist-Vorlagen + `/ingest /query /farm`.
+- **Research** (`researcher`) — Themen/Papers/Fragen mit Tabellen-Ansichten.
+- **Lernen** (`karpathy-lerner`) — Ingest/Query-Routinen + Playlist-Trending im Briefing.
+
+Frage kurz: "Moechtest du eines davon dazunehmen?" Bei Ja: `merge_blueprint_template(<id>)` (additiv, nichts wird ueberschrieben). Bei Nein: weiter. Keines aufdraengen.
+
+## Abschluss
+
+- Wenn alles erfasst ist: `preview_diff` aufrufen und dem User die geplante Struktur zeigen.
+- ERST wenn der User explizit "fertig", "passt", "commit", "los" sagt: `commit_blueprint(confirm=true)`. **Niemals ohne explizite Bestaetigung.**
+
+Halte Antworten knapp und freundlich. Deutsche Sprache. Stelle echte Fragen als Text — Tool-Calls nur zum Festhalten/Bauen, nicht um Fragen zu stellen."""
 
 _EXTEND_TAIL = """
 
@@ -70,6 +96,7 @@ REGELN:
 - Nur additiv: keine bestehenden folders/files/bases entfernen.
 - Bei CLAUDE.md-Sections: `merge_policy: replace_if_marker` ist OK fuer Updates bestehender Sections — bestehende User-Text-Bereiche ausserhalb der Marker werden vom System sowieso nicht angetastet.
 - Bei `propose_folder` mit bekanntem Pfad: warnen, dass das ein No-op ist.
+- Du darfst Zusatz-Module anbieten (siehe "Zusatz-Module anbieten") und bei Zustimmung per `merge_blueprint_template(<id>)` additiv erweitern — das ist hier der haeufigste Anwendungsfall ("ich will mein Vault um Farming/Research/Lernen erweitern").
 
 Sonst: alles wie im Fresh-Modus."""
 
@@ -284,6 +311,12 @@ def _get_setup_backend() -> LLMBackend:
         if not api_key:
             raise ValueError("Setup-Agent: kein Mistral-API-Key")
         return OpenAIBackend(api_key=api_key, base_url="https://api.mistral.ai/v1")
+    if provider == "openrouter":
+        api_key = settings.get("openrouter_api_key")
+        if not api_key:
+            raise ValueError("Setup-Agent: kein OpenRouter-API-Key")
+        base_url = settings.get("openrouter_base_url") or "https://openrouter.ai/api/v1"
+        return OpenAIBackend(api_key=api_key, base_url=base_url)
 
     log.warning("Setup-Agent: unbekannter Provider '%s' — Fallback Anthropic", provider)
     api_key = settings.get("anthropic_api_key")
@@ -306,6 +339,8 @@ def _empty_blueprint() -> dict:
         "bases": [],
         "claude_md_sections": [],
         "briefing_sources": [],
+        "skills": [],
+        "commands": [],
         "vars": {},
     }
 
@@ -363,6 +398,22 @@ def _merge_into_working(working: dict, addition: dict) -> dict:
             src_seen.add(s)
             merged_src.append(s)
     out["briefing_sources"] = merged_src
+
+    sk_seen: set[str] = set()
+    merged_sk: list[str] = []
+    for s in (working.get("skills") or []) + (addition.get("skills") or []):
+        if s not in sk_seen:
+            sk_seen.add(s)
+            merged_sk.append(s)
+    out["skills"] = merged_sk
+
+    cmd_seen: set[str] = set()
+    merged_cmd: list[str] = []
+    for c in (working.get("commands") or []) + (addition.get("commands") or []):
+        if c not in cmd_seen:
+            cmd_seen.add(c)
+            merged_cmd.append(c)
+    out["commands"] = merged_cmd
 
     out["vars"] = {**(working.get("vars") or {}), **(addition.get("vars") or {})}
     return out
@@ -464,6 +515,9 @@ def _execute_tool(state: dict, name: str, tool_input: dict) -> dict:
             raise ValueError("blueprint_id fehlt")
         addition = _load_template_resolved(bid)
         state["working_blueprint"] = _merge_into_working(working, addition)
+        applied = state.setdefault("templates", [])
+        if bid not in applied:
+            applied.append(bid)
         return {"ok": True, "merged": bid}
 
     if name == "propose_folder":
@@ -580,6 +634,21 @@ _INFER_KIND_BY_NAME = {"inbox": "system", "raw": "raw", "journal": "journal"}
 _FM_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)\s*:", re.MULTILINE)
 
 
+def _vault_is_empty(vault_path: Path) -> bool:
+    """True, wenn der Vault-Root keine inhaltlichen Eintraege hat (versteckte/
+    ignorierte Ordner wie .obsidian zaehlen nicht). Ein solcher Ordner, der als
+    'bestehend' verbunden wurde, wird wie ein frischer Vault behandelt — sonst
+    entstaende ein leeres Vault ohne OS-Schicht (CLAUDE.md, index, kontext, Skills)."""
+    try:
+        for p in vault_path.iterdir():
+            if p.name in _INFER_IGNORE or p.name.startswith("."):
+                continue
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def _frontmatter_keys(text: str) -> set[str]:
     if not text.startswith("---"):
         return set()
@@ -690,13 +759,22 @@ def start_session(
         if existing:
             working = dict(existing)
         else:
-            # Fremd-Vault ohne Snapshot: echte Struktur ableiten statt PARA aufzwingen.
             vault_path = Path(settings.get_vault(vault_id)["path"])
-            working = _infer_blueprint_from_disk(vault_path)
-            inferred = True
-    else:
+            if _vault_is_empty(vault_path):
+                # Leerer Ordner als "bestehend" verbunden → wie fresh behandeln,
+                # sonst entstaende ein leeres Vault ohne OS-Schicht.
+                mode = "fresh"
+            else:
+                # Befuellter Fremd-Vault ohne Snapshot: echte Struktur ableiten
+                # statt PARA aufzwingen.
+                working = _infer_blueprint_from_disk(vault_path)
+                inferred = True
+
+    if mode == "fresh":
+        if not templates:
+            templates = ["kontext-base"]
         working = _empty_blueprint()
-        for tid in (templates or []):
+        for tid in templates:
             try:
                 addition = _load_template_resolved(tid)
                 working = _merge_into_working(working, addition)
@@ -713,12 +791,10 @@ def start_session(
         opener_bits.append(intro + ".")
         opener_bits.append("Ich erweitere nur additiv und scaffolde NICHTS über deine Struktur. Was soll dazukommen? (neue Kategorie, Ordner, Briefing-Quelle …)")
     elif mode == "fresh":
-        opener_bits.append("Hi — ich helfe dir, deinen Vault einzurichten.")
-        if templates:
-            opener_bits.append(f"Geladen: {', '.join(templates)}.")
-        else:
-            opener_bits.append("Aktuell ist das Working-Blueprint leer.")
-        opener_bits.append("Was ist dein Use-Case? (Wissens-Lerner, Researcher, Agentur/CRM, eigene Mischung …)")
+        opener_bits.append("Hi — ich richte dir per kurzem Interview dein Zweites Gehirn ein (Kontext-Profil + PARA + Obsidian-Skills).")
+        if templates and templates != ["kontext-base"]:
+            opener_bits.append(f"Zusatz-Bausteine: {', '.join(t for t in templates if t != 'kontext-base')}.")
+        opener_bits.append("Erste Frage: Wer bist du und was machst du beruflich? Erzaehl ruhig etwas zu Hintergrund und Erfahrung.")
     else:
         opener_bits.append("Hi — wir erweitern deinen bestehenden Vault. Nur additiv, nichts wird geloescht.")
         opener_bits.append("Was soll ergaenzt werden? (neuer Mitarbeiter-Ordner, neue Kategorie, Briefing-Source …)")
@@ -735,6 +811,7 @@ def start_session(
         "created_at": now,
         "updated_at": now,
         "working_blueprint": working,
+        "templates": [t for t in (templates or []) if t],
         "message_log": [
             {
                 "role": "assistant",
@@ -869,6 +946,8 @@ def commit(session_id: str) -> dict:
     working = state["working_blueprint"]
 
     result = blueprint_tool.commit(vault_id, working)
+    applied = [t for t in (state.get("templates") or []) if t] or ["kontext-base"]
+    settings.add_applied_blueprints(vault_id, applied)
 
     state["committed"] = True
     state["commit_result"] = result

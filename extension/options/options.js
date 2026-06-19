@@ -35,16 +35,19 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "openrouterBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel", "chatHeavyOpsMode", "elevenlabsVoiceId"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
   maxUserTurns: "max_user_turns",
   llmProvider: "llm_provider",
   llmModel: "llm_model",
   ollamaBaseUrl: "ollama_base_url",
+  openrouterBaseUrl: "openrouter_base_url",
   imageGenModel: "image_gen_model",
   setupAgentProvider: "setup_agent_provider",
   setupAgentModel: "setup_agent_model",
+  chatHeavyOpsMode: "chat_heavy_ops_mode",
+  elevenlabsVoiceId: "elevenlabs_voice_id",
 };
 
 // Provider-spezifische Modell-Hints + Datalist-Werte
@@ -82,6 +85,16 @@ const PROVIDER_MODELS = {
     options: [
       ["mistral-large-latest", "mistral-large-latest"],
       ["mistral-small-latest", "mistral-small-latest (günstiger)"],
+    ],
+  },
+  openrouter: {
+    hint: "Beliebiges Modell als Slug (provider/model), z.B. anthropic/claude-sonnet-4.6 / openai/gpt-4o / google/gemini-2.0-flash",
+    placeholder: "anthropic/claude-sonnet-4.6",
+    options: [
+      ["anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-4.6"],
+      ["openai/gpt-4o", "openai/gpt-4o"],
+      ["google/gemini-2.0-flash", "google/gemini-2.0-flash"],
+      ["meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct"],
     ],
   },
 };
@@ -220,6 +233,29 @@ async function refreshVaults() {
   }
 }
 
+let _blueprintCatalog = null;
+function loadBlueprintCatalog() {
+  if (!_blueprintCatalog) {
+    _blueprintCatalog = jfetch("/blueprints")
+      .then((d) => (Array.isArray(d) ? d : d.blueprints || []))
+      .catch(() => []);
+  }
+  return _blueprintCatalog;
+}
+function computeActiveBlueprints(applied, catalog) {
+  const byId = {};
+  for (const b of catalog) byId[b.id] = b;
+  const active = new Set();
+  const walk = (id) => {
+    const b = byId[id];
+    if (!b || active.has(id)) return;
+    active.add(id);
+    for (const e of (b.extends || [])) walk(e);
+  };
+  for (const id of (applied || [])) walk(id);
+  return active;
+}
+
 function renderVaultCard(vault) {
   const card = el("div", { className: "vault-card" });
 
@@ -251,7 +287,76 @@ function renderVaultCard(vault) {
   const promptHint = el("div", { className: "hint" });
   promptHint.innerHTML = claudeMdHint;
   const promptArea = el("textarea", { value: vault.system_prompt || "" });
-  promptField.append(promptHint, promptArea);
+  const promptLinks = el("div", { className: "vault-prompt-links", style: "display:flex;gap:8px;margin-top:6px;" });
+  const genBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "KI-Prompt generieren" });
+  const copyBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "Anweisung kopieren" });
+  promptLinks.append(genBtn, copyBtn);
+  promptField.append(promptHint, promptArea, promptLinks);
+
+  // --- Module-Sektion: Katalog-getriebener Aufbau + Erweiterungen ---
+  const moduleSection = el("div", { className: "field" });
+  moduleSection.append(el("label", { textContent: "Module — Aufbau & Erweiterungen" }));
+  const modHint = el("div", { className: "hint" });
+  modHint.innerHTML = 'Wähle, was dieser Vault können soll — alles non-destruktiv (bestehende Dateien bleiben). Oder <a href="#" class="vault-interview-link">per Interview einrichten/erweitern</a>.';
+  modHint.querySelector(".vault-interview-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(vault.id)}&mode=extend`) });
+  });
+  const moduleList = el("div", { className: "vault-modules" });
+  moduleSection.append(modHint, moduleList);
+  const appliedLocal = [...(vault.applied_blueprints || [])];
+
+  async function applyModule(blueprintId, meta, btn) {
+    btn.disabled = true;
+    setStatus(`wende „${meta.name}" an…`);
+    try {
+      const res = blueprintId
+        ? await jfetch(`/vaults/${vault.id}/apply_blueprint`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ blueprint_id: blueprintId }),
+          })
+        : await jfetch(`/vaults/${vault.id}/scaffold`, { method: "POST" });
+      const created = (res.created || []).length;
+      if (!appliedLocal.includes(meta.id)) appliedLocal.push(meta.id);
+      setStatus(`„${meta.name}" angewandt — ${created} neu angelegt (non-destruktiv).`, "success");
+      await renderModules();
+    } catch (err) {
+      setStatus("Fehler: " + err.message, "error");
+      btn.disabled = false;
+    }
+  }
+
+  async function renderModules() {
+    moduleList.replaceChildren(el("div", { className: "hint", textContent: "lade Module…" }));
+    const catalog = await loadBlueprintCatalog();
+    const active = computeActiveBlueprints(appliedLocal, catalog);
+    moduleList.replaceChildren();
+    const mkRow = (b, isBase) => {
+      const row = el("div", { className: "vault-module-row", style: "display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border,rgba(0,0,0,0.08));" });
+      const info = el("div", { style: "flex:1;min-width:0;" });
+      info.append(el("strong", { textContent: b.name }));
+      info.append(el("div", { className: "hint", textContent: b.when_to_use || b.description || "" }));
+      const right = el("div", { style: "white-space:nowrap;display:flex;gap:6px;align-items:center;" });
+      if (active.has(b.id)) {
+        right.append(el("span", { textContent: "✓ aktiv", style: "color:#22c55e;font-weight:600;font-size:12px;" }));
+        if (isBase) {
+          const r = el("button", { type: "button", className: "secondary btn-sm", textContent: "auffrischen" });
+          r.addEventListener("click", () => applyModule(null, b, r));
+          right.append(r);
+        }
+      } else {
+        const add = el("button", { type: "button", className: "btn-sm", textContent: isBase ? "Basis anlegen" : "Hinzufügen" });
+        add.addEventListener("click", () => applyModule(isBase ? null : b.id, b, add));
+        right.append(add);
+      }
+      row.append(info, right);
+      return row;
+    };
+    for (const b of catalog.filter((x) => x.category === "base" && x.id !== "empty")) moduleList.append(mkRow(b, true));
+    const addons = catalog.filter((x) => x.category === "addon");
+    if (addons.length) moduleList.append(el("div", { textContent: "Erweiterungen", style: "margin-top:10px;font-weight:600;opacity:0.7;font-size:12px;" }));
+    for (const b of addons) moduleList.append(mkRow(b, false));
+  }
 
   const permsField = el("div", { className: "field" });
   permsField.append(el("label", { textContent: "Berechtigungen für EwtosBrain in diesem Vault" }));
@@ -283,19 +388,9 @@ function renderVaultCard(vault) {
 
   permsField.append(permsHint, writeRawLabel, writePlaylistsLabel, writeFilesLabel, localNotesLabel);
 
-  const actions = el("div", { className: "vault-actions" });
-  const genBtn = el("button", { type: "button", textContent: "Neu generieren" });
-  const copyBtn = el("button", { type: "button", className: "secondary", textContent: "Anweisung kopieren" });
   const saveBtn = el("button", { type: "button", textContent: "Speichern" });
-  const setupBtn = el("button", { type: "button", className: "secondary", textContent: "Setup-Agent erneut starten" });
-  const exportBtn = el("button", { type: "button", className: "secondary", textContent: "Blueprint exportieren" });
+  const exportBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "Blueprint exportieren" });
   const delBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
-  actions.append(genBtn, copyBtn, saveBtn, setupBtn, exportBtn, delBtn);
-
-  setupBtn.addEventListener("click", () => {
-    const url = chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(vault.id)}&mode=extend`);
-    chrome.tabs.create({ url });
-  });
 
   exportBtn.addEventListener("click", async () => {
     try {
@@ -321,13 +416,26 @@ function renderVaultCard(vault) {
 
   const status = el("div", { className: "vault-status" });
 
-  body.append(nameField, pathField, promptField, permsField, actions, status);
+  // Erweitert: Berechtigungen + Export ausklappbar
+  const advanced = el("details", { className: "vault-advanced", style: "margin:6px 0;" });
+  advanced.append(el("summary", { textContent: "Erweitert — Berechtigungen & Export", style: "cursor:pointer;font-weight:600;" }));
+  const exportRow = el("div", { className: "field" });
+  exportRow.append(exportBtn);
+  advanced.append(permsField, exportRow);
+
+  // Hauptaktionen schlank
+  const actions = el("div", { className: "vault-actions" });
+  actions.append(saveBtn, delBtn);
+
+  body.append(nameField, pathField, promptField, moduleSection, advanced, actions, status);
   card.append(header, body);
 
   function setStatus(msg, level = "") {
     status.textContent = msg;
     status.className = "vault-status" + (level ? " " + level : "");
   }
+
+  renderModules();
 
   header.addEventListener("click", (e) => {
     if (e.target === toggle || toggle.contains(e.target)) return;
@@ -671,7 +779,7 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
 // ----- Initial load -----
 
 (async () => {
-  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "hideQuickRowOnTool"]);
+  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "hideQuickRowOnTool", "explorerShowHidden", "explorerAllowDelete"]);
   for (const key of CLIENT_FIELDS) {
     const e = document.getElementById(key);
     if (e && stored[key] !== undefined) e.value = stored[key];
@@ -687,6 +795,22 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
     chrome.storage.local.set({ hideQuickRowOnTool: hideQR.checked });
   });
 
+  const showHidden = document.getElementById("explorerShowHidden");
+  if (showHidden) {
+    showHidden.checked = !!stored.explorerShowHidden;
+    showHidden.addEventListener("change", () => {
+      chrome.storage.local.set({ explorerShowHidden: showHidden.checked });
+    });
+  }
+
+  const allowDelete = document.getElementById("explorerAllowDelete");
+  if (allowDelete) {
+    allowDelete.checked = !!stored.explorerAllowDelete;
+    allowDelete.addEventListener("change", () => {
+      chrome.storage.local.set({ explorerAllowDelete: allowDelete.checked });
+    });
+  }
+
   const server = await loadServerSettings();
   if (server) {
     for (const fieldId of SERVER_FIELDS) {
@@ -697,8 +821,16 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
     setApiKeyBadge("anthropic", server.anthropic_api_key_set);
     setApiKeyBadge("openai", server.openai_api_key_set);
     setApiKeyBadge("mistral", server.mistral_api_key_set);
+    setApiKeyBadge("openrouter", server.openrouter_api_key_set);
     setApiKeyBadge("gemini", server.gemini_api_key_set);
     setApiKeyBadge("youtube", server.youtube_api_key_set);
+    setApiKeyBadge("elevenlabs", server.elevenlabs_api_key_set);
+    const ttsToggle = document.getElementById("chatTtsEnabled");
+    if (ttsToggle) ttsToggle.checked = !!server.chat_tts_enabled;
+    const chatShowSources = document.getElementById("chatShowSources");
+    if (chatShowSources && typeof server.chat_show_sources === "boolean") {
+      chatShowSources.checked = server.chat_show_sources;
+    }
   }
 
   const providerEl = document.getElementById("llmProvider");
@@ -854,9 +986,15 @@ document.getElementById("save").addEventListener("click", async () => {
     ["anthropicApiKey", "anthropic_api_key"],
     ["openaiApiKey", "openai_api_key"],
     ["mistralApiKey", "mistral_api_key"],
+    ["openrouterApiKey", "openrouter_api_key"],
     ["geminiApiKey", "gemini_api_key"],
     ["youtubeApiKey", "youtube_api_key"],
+    ["elevenlabsApiKey", "elevenlabs_api_key"],
   ];
+  const ttsToggleEl = document.getElementById("chatTtsEnabled");
+  if (ttsToggleEl) serverPayload.chat_tts_enabled = ttsToggleEl.checked;
+  const chatShowSourcesEl = document.getElementById("chatShowSources");
+  if (chatShowSourcesEl) serverPayload.chat_show_sources = chatShowSourcesEl.checked;
   for (const [elId, payloadKey] of apiKeyInputs) {
     const el = document.getElementById(elId);
     if (el && el.value.trim()) serverPayload[payloadKey] = el.value.trim();
@@ -873,8 +1011,10 @@ document.getElementById("save").addEventListener("click", async () => {
       setApiKeyBadge("anthropic", updated.anthropic_api_key_set);
       setApiKeyBadge("openai", updated.openai_api_key_set);
       setApiKeyBadge("mistral", updated.mistral_api_key_set);
+      setApiKeyBadge("openrouter", updated.openrouter_api_key_set);
       setApiKeyBadge("gemini", updated.gemini_api_key_set);
       setApiKeyBadge("youtube", updated.youtube_api_key_set);
+      setApiKeyBadge("elevenlabs", updated.elevenlabs_api_key_set);
     } catch (err) {
       serverError = err.message || String(err);
     }

@@ -1,0 +1,53 @@
+# {{ vault_name }} — agents.md
+
+Persönliches Zweites Gehirn nach **PARA**, mit einem **Kontext-Profil** als zentraler Referenzschicht.
+
+> Diese Datei ist die LLM-agnostische Schema-Beschreibung für jeden Agenten (Claude, ChatGPT, Gemini, lokale Modelle). Details zum Nutzer stehen in `kontext/`.
+
+## Struktur
+
+```
+vault/
+├─ agents.md           ← dieses File (Schema)
+├─ index.md            ← Home-MOC
+├─ log.md              ← append-only Audit
+│
+├─ kontext/            # Wer der Nutzer ist — IMMER zuerst lesen bei Inhalts-Aufgaben
+│   ├─ ueber-mich.md
+│   ├─ zielgruppe.md
+│   ├─ angebot.md
+│   ├─ schreibstil.md
+│   └─ branding.md
+│
+├─ inbox/              # Quick-Input, unsortiert (Scratchpad, Todos)
+│   ├─ scratchpad.md
+│   └─ todos.md
+│
+├─ wiki/               # kuratiert, PARA
+│   ├─ index.md
+│   ├─ projects/       # P — endliche Vorhaben mit Ziel/Deadline
+│   ├─ areas/          # A — Dauer-Verantwortungen ohne Endtermin
+│   ├─ resources/      # R — Referenzwissen nach Thema
+│   └─ archive/        # Z — abgeschlossen
+│
+└─ journal/            # Daily Notes / Briefing-Archive
+```
+
+## Kontext-Profil (Kern)
+
+`kontext/` ist die zentrale Referenz für **alle inhaltlichen Aufgaben** (Content, Mails, Angebote, Kundenberatung). Vor solchen Aufgaben die relevanten `kontext/`-Dateien lesen, statt den Kontext zu raten. Updates an Profil-Wissen landen hier, nicht verstreut im Vault.
+
+## Konventionen
+
+- Dateinamen: lesbar, mit Leerzeichen/Großbuchstaben erlaubt (z.B. `Content Creation.md`).
+- Daily Notes: `journal/YYYY-MM-DD.md` (chronologisch sortierbar).
+- Wikilinks `[[Note]]` für interne Verknüpfungen, externe URLs als Markdown-Links.
+- Frontmatter (YAML): `tags`, `status` (aktiv/abgeschlossen/pausiert), Datum.
+- Projekte starten als einzelne `.md` in `wiki/projects/`; Areas und Resources als Ordner, weil sie über die Zeit wachsen.
+- **Seiten-Vorlagen:** Neue Wissensseiten nach den Skeletten in `templates/<typ>.md` bauen (Frontmatter + Sektionen exakt übernehmen) — so bleiben gleichartige Seiten konsistent.
+- **Wartung:** Slash-Commands in `.claude/commands/` (`/lint`, `/rebuild-index`, `/audit`; im Farming-Vault `/ingest`, `/query`, `/farm`) halten Hubs, MOCs und Frontmatter konsistent.
+- **Index-Konvention (flach, Karpathy):** Ein Hub `index.md` gibt es für `wiki/` (Root-MOC), die Buckets und Themen-Ordner *eine Ebene unter einem Bucket* — und dort nur, wenn sie ≥2 Seiten/Unterordner sammeln. Tiefer (≥3 Ebenen) **kein** Hub. Die `## Pages`-Sektion eines Hubs listet seine Kind-Hubs und eigenen Seiten als statische `- [[…|Titel]]`-Links (kein Dataview — die KI liest die Dateien). So bleibt der obere Index schlank, das Detail wandert nach unten.
+
+## Schreibrechte für EwtosBrain
+
+EwtosBrain schreibt **standardmäßig nur** in `inbox/`. Erweiterte Schreibrechte (`raw/` etc.) sind pro Vault einzeln in den Extension-Settings freizugeben.

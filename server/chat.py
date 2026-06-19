@@ -12,10 +12,13 @@ from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
 
+import httpx
+
+import config
 import paths
 import settings
 from llm_client import effective_llm_config, get_backend
-from tools import bookmarks, notes_file, playlists, raw_promoter, vault_audit, videos, wiki_reader
+from tools import blueprint, bookmarks, notes_file, playlists, raw_promoter, vault_audit, videos, wiki_reader
 
 log = logging.getLogger("ewtosbrain.chat")
 
@@ -61,6 +64,14 @@ BASE_SYSTEM_PROMPT = """Du bist ein Assistent für einen Markdown-Vault. Du hilf
 Nutze die Tools wenn der Nutzer sagt: „leg playlist X an", „füg [URL] zu meiner [name]-Playlist hinzu", „zeig meine playlists", „nimm das aus der playlist raus".
 
 **Promote zu raw** (`promote_to_raw`) — verschiebt einen Scratchpad-Block oder Todo in `vault/raw/<subfolder>/`. Nutze wenn der Nutzer sagt „schick X nach raw", „mach daraus eine Quelle", „das ist wichtig genug für den Vault", „promote nach raw". Datum wird automatisch gesetzt. Frag den Nutzer nach Titel + Beschreibung wenn nicht klar — beides optional, aber empfohlen. Subfolder muss eines sein: `artikel`, `eigene-notizen`, `kunden-input/<kunde>`, `chat-archive`. Erfordert das `write_raw`-Recht auf dem aktiven Vault — ohne Recht meldet das Tool einen Permission-Fehler, den du dem Nutzer 1:1 weitergibst (NICHT Erfolg behaupten, NICHT umschreiben). Wiki-Ingest passiert NICHT automatisch — am Schluss den Nutzer auf den ingest-Hint hinweisen den das Tool zurückgibt.
+
+## Farming & Aufbau-Tools (führen ECHTE Aktionen aus — niemals nur so tun als ob)
+- `pull_youtube(url)` — zieht das Transkript eines YouTube-Videos (über Server-API bzw. die Chrome-Extension) und legt eine Roh-Datei unter `raw/youtube/` an. Nutze bei „farm dieses Video", „/farm <url>", „zieh das Transkript". Erfordert `write_raw`. Metadaten wie Aufrufe/Likes nur wenn ein YouTube-API-Key gesetzt ist — sonst lass sie ehrlich offen, erfinde KEINE Zahlen/Titel.
+- `write_wiki_page(rel_path, content, overwrite?)` — schreibt/aktualisiert eine `.md` im Vault (z.B. `wiki/resources/videos/<slug>.md`). So überführst du eine `raw/`-Quelle ins Wiki (Ingest/Kuratierung): erst `read_file` der raw-Datei, dann kuratierte Seite mit `write_wiki_page` schreiben. Erfordert `write_files`.
+- `save_to_raw(title, content, target_subfolder, description?)` — beliebige Quelle (Artikel/Notiz) nach `raw/<subfolder>/` schreiben. Erfordert `write_raw`.
+- `rebuild_indexes()` — legt fehlende `index.md`-Hubs an und baut die `## Pages`-Listen neu auf (mechanisch, kein LLM). Nutze bei „/rebuild-index" / „Indexe aufräumen". Erfordert `write_files`.
+
+EHRLICHKEIT (HART): Führe Aktionen NUR über diese Tools aus. Wenn ein Tool fehlschlägt oder dir ein Tool fehlt, sag das klar — **behaupte NIEMALS, du hättest eine Datei angelegt/ein Video gefarmt/etwas gespeichert, wenn kein Tool-Call das wirklich getan hat.** Keine erfundenen Pfade, Titel, Transkripte oder Zahlen.
 
 WICHTIG: Notiz-Tools schreiben in einer GLOBALEN Notiz-Datei, nicht im Vault. Wenn unklar ist, ob der Nutzer eine Vault-Page oder den Scratchpad meint, frage kurz nach. Default bei vagen „notiere"-Anfragen: Scratchpad.
 
@@ -344,6 +355,51 @@ TOOL_DEFS = [
             "required": ["source", "identifier", "target_subfolder"],
         },
     },
+    {
+        "name": "pull_youtube",
+        "description": "Zieht das Transkript eines YouTube-Videos (Server-API oder Chrome-Extension) und legt eine Roh-Datei unter raw/youtube/ an. Nutze für '/farm <url>', 'farm dieses Video', 'zieh das Transkript'. ERFORDERT write_raw. Erfinde KEINE Metadaten — nur was wirklich kommt.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "YouTube-Video-URL."},
+                "title": {"type": "string", "description": "Optional. Titel falls bekannt, sonst aus der URL/ID."},
+                "with_timestamps": {"type": "boolean", "description": "Optional, Default false."},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "write_wiki_page",
+        "description": "Schreibt/aktualisiert eine .md-Datei im Vault (z.B. wiki/resources/videos/<slug>.md). Für Ingest/Kuratierung: erst read_file der raw-Quelle, dann kuratierte Seite hier schreiben. ERFORDERT write_files. Bei PermissionError den Fehler 1:1 weitergeben.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rel_path": {"type": "string", "description": "Pfad relativ zum Vault-Root, endet auf .md."},
+                "content": {"type": "string", "description": "Vollständiger Datei-Inhalt (Frontmatter + Markdown)."},
+                "overwrite": {"type": "boolean", "description": "Optional. true = bestehende Datei überschreiben. Default false (nur neu anlegen)."},
+            },
+            "required": ["rel_path", "content"],
+        },
+    },
+    {
+        "name": "save_to_raw",
+        "description": "Speichert beliebigen Inhalt (Artikel, Notiz) nach raw/<subfolder>/<datum>-<slug>.md. ERFORDERT write_raw. Subfolder: artikel, eigene-notizen, kunden-input/<kunde>, chat-archive.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "content": {"type": "string"},
+                "target_subfolder": {"type": "string", "description": "artikel | eigene-notizen | kunden-input/<kunde> | chat-archive"},
+                "description": {"type": "string", "description": "Optional."},
+            },
+            "required": ["title", "content", "target_subfolder"],
+        },
+    },
+    {
+        "name": "rebuild_indexes",
+        "description": "Legt fehlende index.md-Hubs an und baut die ## Pages-Listen neu auf (mechanisch, kein LLM). Nutze für '/rebuild-index', 'Indexe aufräumen/neu aufbauen'. ERFORDERT write_files.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -566,6 +622,76 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str) -
                 f"Promotet nach {res['raw_path']}. {res['ingest_hint']}",
                 False,
             )
+
+        if name == "pull_youtube":
+            url = (tool_input.get("url") or "").strip()
+            if not url:
+                return "url fehlt", True
+            with_ts = bool(tool_input.get("with_timestamps"))
+            try:
+                resp = httpx.post(
+                    f"http://{config.HOST}:{config.PORT}/tools/youtube_transcript",
+                    json={"url": url, "with_timestamps": with_ts}, timeout=130,
+                )
+            except Exception as e:
+                return f"YouTube-Pull nicht möglich (läuft der Server, ist die Extension verbunden?): {e}", True
+            if resp.status_code == 503:
+                return ("Kein Transkript: Server-API hat nichts geliefert und die Chrome-Extension "
+                        "ist nicht verbunden (Browser-Fallback fehlt). Extension öffnen und erneut versuchen."), True
+            if resp.status_code != 200:
+                return f"Transkript-Fehler HTTP {resp.status_code}: {resp.text[:200]}", True
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            transcript = (data.get("transcript") or "").strip()
+            if not transcript:
+                return f"Kein Transkript erhalten: {str(data)[:200]}", True
+            res = raw_promoter.save_video_to_raw(
+                vault_id=vault_id, url=url,
+                title=(data.get("title") or tool_input.get("title") or "").strip(),
+                transcript=transcript, saeule="youtube", playlist_name="",
+                channel=data.get("channel"), duration=data.get("duration"),
+                views=data.get("views"), likes=data.get("likes"),
+                upload_date=data.get("upload_date"), thumbnail_url=data.get("thumbnail_url"),
+                description=data.get("description"),
+            )
+            meta_note = "inkl. Metadaten" if data.get("channel") or data.get("views") is not None else "ohne Metadaten (yt-dlp/Key?)"
+            return (f"Transkript gezogen ({len(transcript)} Zeichen, {meta_note}) und gespeichert: {res['raw_path']}. "
+                    f"Für die Wiki-Seite: write_wiki_page nutzen (oder /ingest in Claude Code).", False)
+
+        if name == "write_wiki_page":
+            if not settings.vault_permission(vault_id, "write_files"):
+                return ("Kein Schreibrecht auf Dateien in diesem Vault. In den Einstellungen aktivieren: "
+                        "'EwtosBrain darf .md-Dateien bearbeiten und neue anlegen'."), True
+            rel = (tool_input.get("rel_path") or "").strip()
+            if not rel:
+                return "rel_path fehlt", True
+            if not rel.endswith(".md"):
+                rel += ".md"
+            content = tool_input.get("content") or ""
+            try:
+                wiki_reader.create_file(vault_path, rel, content)
+                return f"Seite angelegt: {rel}", False
+            except FileExistsError:
+                if not tool_input.get("overwrite"):
+                    return f"Datei existiert bereits: {rel}. Setze overwrite=true zum Überschreiben.", True
+                wiki_reader.write_file(vault_path, rel, content)
+                return f"Seite aktualisiert: {rel}", False
+
+        if name == "save_to_raw":
+            res = raw_promoter.save_raw_content(
+                vault_id=vault_id, title=tool_input.get("title", ""),
+                content=tool_input.get("content", ""),
+                target_subfolder=tool_input.get("target_subfolder", ""),
+                description=tool_input.get("description"),
+            )
+            return f"Gespeichert: {res['raw_path']}. {res['ingest_hint']}", False
+
+        if name == "rebuild_indexes":
+            if not settings.vault_permission(vault_id, "write_files"):
+                return "Kein Schreibrecht (write_files) — für den Index-Aufbau in den Einstellungen aktivieren.", True
+            res = blueprint.rebuild_vault_indexes(vault_id)
+            return (f"Indexe aufgebaut: {len(res.get('created_hubs', []))} neue Hubs, "
+                    f"{len(res.get('mocs_updated', []))} MOCs aktualisiert.", False)
+
         return f"Unbekanntes Tool: {name}", True
     except PermissionError as e:
         return str(e), True
@@ -604,6 +730,47 @@ def clear(vault_id: str) -> dict:
     return {"cleared": True, "vault_id": vault_id}
 
 
+_KNOWN_COMMANDS = {
+    "farm": "Der Nutzer hat `/farm <url>` aufgerufen. Rufe das Tool `pull_youtube` mit der URL auf (zieht Transkript + legt raw/youtube/-Datei an), dann nenne kurz Pfad + nächsten Schritt. Erfinde nichts.",
+    "ingest": "Der Nutzer hat `/ingest <pfad>` aufgerufen. Lies die genannte raw-Datei mit `read_file`, kuratiere sie (Frontmatter typ/titel/status/zuletzt + Sektionen wie in templates/) und schreibe die Wiki-Seite mit `write_wiki_page` (z.B. wiki/resources/videos/<slug>.md).",
+    "query": "Der Nutzer hat `/query <frage>` aufgerufen. Beantworte AUS dem Wiki: starte bei wiki/index.md, navigiere mit read_file zu relevanten Seiten und belege mit [[Wikilinks]]. Nichts erfinden.",
+    "lint": "Der Nutzer hat `/lint` aufgerufen. Rufe `audit_vault` und berichte die Befunde gruppiert. Für Index/MOC-Fixes: `rebuild_indexes` anbieten.",
+    "audit": "Der Nutzer hat `/audit` aufgerufen. Rufe `audit_vault` (read-only) und berichte die Befunde.",
+    "rebuild-index": "Der Nutzer hat `/rebuild-index` aufgerufen. Rufe das Tool `rebuild_indexes` auf und berichte das Ergebnis.",
+}
+
+
+def _slash_route(message: str) -> dict | None:
+    """None = kein Slash-Command. {'directive': ...} = bekanntes Kommando (an den LLM
+    weiterreichen). {'reply': ...} = unbekannt → fester Reply, kein LLM-Call (keine Halluzination)."""
+    if not message.startswith("/"):
+        return None
+    cmd = message[1:].split(None, 1)[0].lower().strip()
+    if not cmd:
+        return None
+    if cmd in _KNOWN_COMMANDS:
+        return {"directive": _KNOWN_COMMANDS[cmd]}
+    return {"reply": (f"`/{cmd}` ist kein bekannter Befehl in diesem Chat. Verfügbar: "
+                      "/farm <url>, /ingest <raw-pfad>, /query <frage>, /lint, /audit, /rebuild-index. "
+                      "Für freie Anfragen schreib einfach normal (ohne /).")}
+
+
+def _cost_clause() -> str:
+    """Im Hinweis-Modus: bittet den Chat, vor teurer LLM-Kuratierung auf API-Kosten +
+    Claude-Code-Alternative hinzuweisen. Im Vollmodus leer."""
+    if (settings.get("chat_heavy_ops_mode") or "full") == "hint":
+        return ("\n\n## Kosten-Hinweis-Modus\n"
+                "Bevor du teure LLM-Kuratierung machst (Ingest = Wiki-Seite aus langem Transkript schreiben, "
+                "Zusammenfassungen): weise den Nutzer EINMAL kurz darauf hin, dass das über den hier konfigurierten "
+                "LLM läuft (API-Kosten) und via Claude Code auf der Subscription günstiger wäre — dann mach weiter, "
+                "wenn er will. Mechanisches (Transkript ziehen, raw/Datei schreiben, Indexe, Playlists) einfach ausführen.")
+    return ""
+
+
+def _zero_usage() -> dict:
+    return {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+
+
 def send(vault_id: str, user_message: str, page_context: str | None = None) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
@@ -622,6 +789,18 @@ def send(vault_id: str, user_message: str, page_context: str | None = None) -> d
         system_prompt += SEARCH_INSTRUCTION
     if page_context:
         system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
+
+    route = _slash_route(user_message)
+    if route and route.get("reply"):
+        history = _load_history(vault_id)
+        history.append({"role": "user", "content": user_message})
+        history.append({"role": "assistant", "content": route["reply"]})
+        _save_history(vault_id, history)
+        return {"reply": route["reply"], "consulted": [], "messages": history, "usage": _zero_usage()}
+    if route and route.get("directive"):
+        system_prompt += "\n\n## Aktueller Befehl\n" + route["directive"]
+    system_prompt += _cost_clause()
+
     vault_path = vault["path"]
     active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
 
@@ -670,6 +849,11 @@ def send(vault_id: str, user_message: str, page_context: str | None = None) -> d
         final_text = "".join(b.text for b in response.content if b.type == "text").strip()
         if not final_text:
             final_text = "(keine Textantwort)"
+
+        if settings.get("chat_show_sources", True) and consulted_files:
+            unique = list(dict.fromkeys(consulted_files))
+            refs = "\n".join(f"- `{f}`" for f in unique)
+            final_text += f"\n\n---\n**Quellen:**\n{refs}"
 
         history.append({"role": "assistant", "content": final_text})
         _save_history(vault_id, history)
@@ -871,6 +1055,20 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
             system_prompt += SEARCH_INSTRUCTION
         if page_context:
             system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
+
+        route = _slash_route(user_message)
+        if route and route.get("reply"):
+            history = _load_history(vault_id)
+            history.append({"role": "user", "content": user_message})
+            history.append({"role": "assistant", "content": route["reply"]})
+            _save_history(vault_id, history)
+            yield _sse("text_delta", {"text": route["reply"]})
+            yield _sse("done", {"messages": history, "consulted": [], "usage": _zero_usage(), "vault": vault})
+            return
+        if route and route.get("directive"):
+            system_prompt += "\n\n## Aktueller Befehl\n" + route["directive"]
+        system_prompt += _cost_clause()
+
         vault_path = vault["path"]
         active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
 
@@ -917,6 +1115,12 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
             if final_message.stop_reason != "tool_use":
                 # End of conversation turn — persist and signal done
                 final_text = "".join(accumulated_text).strip() or "(keine Textantwort)"
+
+                if settings.get("chat_show_sources", True) and consulted:
+                    unique = list(dict.fromkeys(consulted))
+                    refs = "\n".join(f"- `{f}`" for f in unique)
+                    final_text += f"\n\n---\n**Quellen:**\n{refs}"
+
                 history.append({"role": "assistant", "content": final_text})
                 _save_history(vault_id, history)
                 yield _sse("done", {

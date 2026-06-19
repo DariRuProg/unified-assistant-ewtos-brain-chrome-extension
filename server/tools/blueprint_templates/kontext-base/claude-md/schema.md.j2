@@ -1,0 +1,22 @@
+Vault: **{{ vault_name }}**. Persönliches Zweites Gehirn nach **PARA**, mit `kontext/` als Profil-Schicht. Schema-Details siehe [[agents.md]].
+
+## Struktur (Kurzfassung)
+
+- `kontext/` — wer der Nutzer ist (Über mich, Zielgruppe, Angebot, Schreibstil, Branding).
+- `inbox/scratchpad.md`, `inbox/todos.md` — Workspace für Notizen und Aufgaben.
+- `wiki/projects|areas|resources|archive/` — kuratiertes Wissen, PARA-Buckets.
+- `journal/YYYY-MM-DD.md` — Daily Notes / Briefing-Archive.
+- `log.md` — append-only Audit struktureller Änderungen.
+
+## Routinen
+
+- **Session-Start:** `inbox/` auf neue Einträge prüfen, Einsortierung anbieten.
+- **Kontext bei Bedarf:** „Wo war ich?" → letzte 2–3 `journal/`-Einträge + aktive `wiki/projects/` lesen.
+- **Session-Ende:** auf Wunsch Daily Note in `journal/` schreiben, Inbox aufräumen.
+
+## Konventionen
+
+- Wikilinks `[[...]]` für interne Verknüpfungen; Frontmatter mit `tags`, `status`, Datum.
+- Projekte = einzelne Datei in `wiki/projects/`; Areas/Resources = Ordner.
+- Index-Hubs (`index.md` mit `## Pages`) gibt es flach: `wiki/`-Root, die Buckets und Sammel-Themen *eine Ebene unter einem Bucket* (≥2 Seiten) — nicht tiefer. `## Pages` verlinkt Kind-Hubs + eigene Seiten statisch als `[[…|Titel]]`.
+- Abgeschlossenes nach `wiki/archive/` — nur auf Anweisung, nicht eigenständig.

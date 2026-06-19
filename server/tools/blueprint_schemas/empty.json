@@ -7,6 +7,8 @@
   "license": "MIT",
   "description": "Minimal: nur eine inbox/ und eine agents.md mit Schema-Hinweis. Ausgangspunkt für komplett eigene Setups via Setup-Agent.",
   "tags": ["minimal", "leer"],
+  "category": "base",
+  "when_to_use": "Nur für Profis, die alles selbst aufbauen wollen — leeres Skelett ohne Kontext-Profil/PARA.",
   "extends": [],
   "folders": [
     { "path": "inbox", "kind": "system" }

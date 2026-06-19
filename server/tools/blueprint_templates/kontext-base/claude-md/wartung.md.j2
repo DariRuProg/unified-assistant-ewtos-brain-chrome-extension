@@ -1,0 +1,13 @@
+Unter `.claude/commands/` liegen Slash-Commands für die Vault-Pflege (in Claude Code mit `/<name>` aufrufbar):
+
+- `/lint` — Hygiene: Orphans, kaputte Wikilinks, fehlende Hubs, veraltete `## Pages`-MOCs, Frontmatter prüfen und beheben.
+- `/rebuild-index` — Index-Hubs + `## Pages` nach der flachen Karpathy-Regel neu aufbauen.
+- `/audit` — read-only Health-Report (ändert nichts).
+
+Im Farming-Vault zusätzlich:
+
+- `/ingest <quelle>` — Quelle aus `raw/` in eine kuratierte Wiki-Master-Page überführen (nutzt die passende `templates/`-Vorlage).
+- `/query <frage>` — das Wiki befragen, Antwort mit `[[wikilinks]]` belegen.
+- `/farm <url>` — neue Quelle/Seed in `raw/` anlegen.
+
+Faustregel: nach größeren Änderungen am Wiki `/lint` (oder mindestens `/rebuild-index`) laufen lassen, damit Hubs und MOCs konsistent bleiben.

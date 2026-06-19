@@ -32,26 +32,37 @@ EDITABLE_KEYS = {
     "openai_api_key",
     "ollama_base_url",
     "mistral_api_key",
+    "openrouter_api_key",
+    "openrouter_base_url",
     "gemini_api_key",
     "image_gen_model",
     "youtube_api_key",
     "setup_agent_provider",
     "setup_agent_model",
     "vault_search_enabled",
+    "chat_heavy_ops_mode",
+    "elevenlabs_api_key",
+    "elevenlabs_voice_id",
+    "chat_tts_enabled",
+    "chat_show_sources",
 }
 SECRET_KEYS = {
     "anthropic_api_key",
     "openai_api_key",
     "mistral_api_key",
+    "openrouter_api_key",
     "gemini_api_key",
     "youtube_api_key",
+    "elevenlabs_api_key",
 }
 SECRET_ENV_MAP = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
     "mistral_api_key": "MISTRAL_API_KEY",
+    "openrouter_api_key": "OPENROUTER_API_KEY",
     "gemini_api_key": "GEMINI_API_KEY",
     "youtube_api_key": "YOUTUBE_API_KEY",
+    "elevenlabs_api_key": "ELEVENLABS_API_KEY",
 }
 
 _cache: dict[str, Any] | None = None
@@ -96,7 +107,7 @@ def get(key: str, default: Any = None) -> Any:
 def update(values: dict[str, Any]) -> dict[str, Any]:
     global _cache
     current = all()
-    filtered = {k: v for k, v in values.items() if k in EDITABLE_KEYS and v}
+    filtered = {k: v for k, v in values.items() if k in EDITABLE_KEYS and v is not None and v != ""}
     current.update(filtered)
     _cache = current
     _flush()
@@ -113,6 +124,7 @@ def _normalize_vault(v: dict[str, Any]) -> dict[str, Any]:
         out["use_local_notes"] = False
     else:
         out["use_local_notes"] = bool(out["use_local_notes"])
+    out["applied_blueprints"] = list(out.get("applied_blueprints") or [])
     return out
 
 
@@ -262,6 +274,28 @@ def vault_notes_dir(vault_id: str | None) -> Path:
     p = Path(get("notes_path") or config.NOTES_PATH)
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def add_applied_blueprints(vault_id: str, ids: list[str]) -> list[str] | None:
+    """Merkt sich (Set-Union), welche Katalog-Blueprints auf den Vault angewandt
+    wurden — Basis fuer die 'aktiv'-Anzeige im Modul-Panel. Liefert die neue Liste."""
+    global _cache
+    current = all()
+    vaults = list(current.get("vaults") or [])
+    for i, v in enumerate(vaults):
+        if v.get("id") == vault_id:
+            existing = list(v.get("applied_blueprints") or [])
+            for bid in ids:
+                if bid and bid not in existing:
+                    existing.append(bid)
+            updated = dict(v)
+            updated["applied_blueprints"] = existing
+            vaults[i] = updated
+            current["vaults"] = vaults
+            _cache = current
+            _flush()
+            return existing
+    return None
 
 
 def vault_permission(vault_id: str, key: str) -> bool:

@@ -11,6 +11,7 @@ Frontmatter-Parsing und blueprint (Soll-Struktur + CLAUDE.md-Upgrade-Preview).
 from __future__ import annotations
 
 import re
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -95,6 +96,9 @@ def _check_orphans(root: Path) -> list[dict]:
 
 
 def _check_raw_uningested(root: Path, md_files: list[Path]) -> list[dict]:
+    """Farming-only: prueft raw/ auf noch nicht ins Wiki ueberfuehrte Quellen.
+    Nur relevant fuer Vaults mit raw/ (karpathy-para-base/researcher). Ein reiner
+    kontext-base-Vault hat kein raw/ → return [] (kein Finding, korrekt)."""
     raw_dir = root / "raw"
     if not raw_dir.exists():
         return []
@@ -186,6 +190,9 @@ def _check_frontmatter(root: Path, md_files: list[Path], bp: dict | None) -> lis
 
 
 def _check_structure(vault_id: str, root: Path) -> list[dict]:
+    """Prueft nur die im Blueprint EXPLIZIT gelisteten folders[]. Automatisch
+    erzeugte Index-Hubs (wiki/<bucket>, wiki/<bucket>/<thema>) sind nicht in
+    folders[] — die deckt der separate `missing_hub`-Check ab."""
     bp = blueprint.export_vault_blueprint(vault_id)
     if not bp:
         return [_finding(
@@ -247,7 +254,30 @@ def _check_claude_md(vault_id: str) -> list[dict]:
 # brauchen menschliches Urteil und bleiben reiner Bericht. Jeder Repair wird vom
 # Aufrufer per-Finding bestätigt (UI/MCP), genau wie der CLAUDE.md-Apply.
 
-REPAIRABLE_CATEGORIES = ("orphan_index", "structure_drift")
+def _check_missing_hubs(root: Path) -> list[dict]:
+    """wiki/-Ordner MIT Inhalt aber ohne index.md-Hub: Buckets (Ebene 1) und
+    Themen-Ordner (Ebene 2). Leere Ordner brauchen keinen Hub; tiefer (≥3) wird
+    bewusst nicht indexiert (flache MOC)."""
+    wiki = root / "wiki"
+    if not wiki.is_dir():
+        return []
+    out: list[dict] = []
+    for d in wiki.rglob("*"):
+        if not d.is_dir() or any(part.startswith(".") for part in d.relative_to(root).parts):
+            continue
+        depth = len(d.relative_to(wiki).parts)
+        if depth in (1, 2) and blueprint._folder_has_content(d):
+            if not (d / "index.md").exists():
+                rel = d.relative_to(root).as_posix()
+                out.append(_finding(
+                    "missing_hub", "warn", rel + "/",
+                    f"Ordner mit Inhalt ohne index.md-Hub: {rel}/",
+                    "'Indexe neu aufbauen' — legt fehlende Hubs an und pflegt alle ## Pages (non-destruktiv).",
+                ))
+    return out
+
+
+REPAIRABLE_CATEGORIES = ("orphan_index", "structure_drift", "missing_hub", "missing_frontmatter")
 
 
 def _page_title(page: Path) -> str:
@@ -313,6 +343,56 @@ def _repair_structure(root: Path, rel_path: str) -> dict:
     return {"repaired": True, "action": "folder_created", "path": rel + "/"}
 
 
+_TYP_BY_BUCKET = {"projects": "project", "areas": "area", "resources": "wissen", "archive": "archiv"}
+
+
+def _yaml_val(v: str) -> str:
+    if v == "" or v != v.strip() or re.search(r'[:#\[\]{}|>&*!,]', v):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return v
+
+
+def _default_fm_value(key: str, page: Path, root: Path) -> str:
+    if key in ("zuletzt", "aktualisiert", "datum"):
+        return date.today().isoformat()
+    if key == "status":
+        return "aktiv"
+    if key == "titel":
+        m = re.search(r"^#\s+(.+?)\s*$", _read(page), re.MULTILINE)
+        return m.group(1).strip() if m else page.stem.replace("-", " ").replace("_", " ").title()
+    if key == "typ":
+        parts = page.relative_to(root).parts
+        bucket = parts[1] if len(parts) > 1 and parts[0] == "wiki" else ""
+        return _TYP_BY_BUCKET.get(bucket, "wissen")
+    return "tbd"
+
+
+def _repair_frontmatter(root: Path, rel_path: str, required: list[str]) -> dict:
+    """Ergaenzt fehlende Pflicht-Frontmatter-Keys mit deterministischen Defaults
+    (typ aus Bucket, titel aus # Ueberschrift/Dateiname, status=aktiv, zuletzt=heute).
+    Bestehende Keys + Body bleiben unangetastet."""
+    page = root / rel_path
+    if not page.exists():
+        return {"repaired": False, "reason": f"Datei existiert nicht: {rel_path}"}
+    text = _read(page)
+    fm = _parse_frontmatter(text)
+    missing = [k for k in required if not fm.get(k)]
+    if not missing:
+        return {"repaired": False, "reason": "Frontmatter bereits vollstaendig."}
+    add_lines = [f"{k}: {_yaml_val(_default_fm_value(k, page, root))}" for k in missing]
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            new_text = text[:end] + "\n" + "\n".join(add_lines) + text[end:]
+        else:  # kaputter/offener Block → davor neuen setzen
+            new_text = "---\n" + "\n".join(add_lines) + "\n---\n\n" + text
+    else:
+        new_text = "---\n" + "\n".join(add_lines) + "\n---\n\n" + text
+    page.write_text(new_text, encoding="utf-8")
+    return {"repaired": True, "action": "frontmatter_added",
+            "path": rel_path, "added": missing}
+
+
 def repair_finding(vault_id: str, category: str, path: str) -> dict:
     """Repariert ein einzelnes Audit-Finding. Re-validiert gegen den Live-Vault
     (idempotent: bereits behoben -> repaired False mit Grund). Schreibt nur für
@@ -327,6 +407,14 @@ def repair_finding(vault_id: str, category: str, path: str) -> dict:
         return _repair_orphan(root, path)
     if category == "structure_drift":
         return _repair_structure(root, path)
+    if category == "missing_hub":
+        res = blueprint.rebuild_vault_indexes(vault_id)
+        return {"repaired": True, "action": "indexes_rebuilt",
+                "created_hubs": res.get("created_hubs", []), "mocs_updated": res.get("mocs_updated", [])}
+    if category == "missing_frontmatter":
+        bp = blueprint.export_vault_blueprint(vault_id)
+        required = ((bp or {}).get("vars") or {}).get("frontmatter_required") or list(REQUIRED_FRONTMATTER)
+        return _repair_frontmatter(root, path, required)
     raise ValueError(
         f"Kategorie '{category}' ist nicht automatisch reparierbar "
         f"(nur: {', '.join(REPAIRABLE_CATEGORIES)})."
@@ -347,6 +435,7 @@ def audit_vault(vault_id: str) -> dict:
     findings: list[dict] = []
     for check in (
         lambda: _check_orphans(root),
+        lambda: _check_missing_hubs(root),
         lambda: _check_raw_uningested(root, md_files),
         lambda: _check_broken_links(root, md_files),
         lambda: _check_frontmatter(root, md_files, bp_snapshot),

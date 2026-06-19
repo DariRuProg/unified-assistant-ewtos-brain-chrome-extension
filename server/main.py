@@ -19,12 +19,14 @@ paths.migrate_legacy_data()
 load_dotenv(paths.env_file())
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 import chat
 import config
 import settings
+from tools import youtube_metadata as youtube_metadata_tool
+from tools import tts_elevenlabs as tts_tool
 from tools import bookmarks as bookmarks_tool
 from tools import notes_file, wiki_reader
 from tools import playlists as playlists_tool
@@ -207,6 +209,25 @@ class YouTubeTranscriptRequest(BaseModel):
     with_timestamps: bool = False
 
 
+async def _merge_youtube_meta(data: dict[str, Any], url: str) -> dict[str, Any]:
+    """Ergaenzt das Transkript-Result um YouTube-Metadaten (yt-dlp/oEmbed), ohne den
+    Event-Loop zu blockieren. Fehler werden geschluckt — nur vorhandene Felder gesetzt."""
+    try:
+        meta = await asyncio.to_thread(youtube_metadata_tool.fetch_metadata, url)
+    except Exception as e:
+        log.info("YouTube-Metadaten konnten nicht geladen werden: %s", e)
+        meta = {}
+    if meta.get("title") and not data.get("title"):
+        data["title"] = meta["title"]
+    for src, dst in (("channel", "channel"), ("channel_url", "channel_url"),
+                     ("duration", "duration"), ("views", "views"), ("likes", "likes"),
+                     ("upload_date", "upload_date"), ("thumbnail", "thumbnail_url"),
+                     ("description", "description")):
+        if meta.get(src) is not None:
+            data[dst] = meta[src]
+    return data
+
+
 @app.post("/tools/youtube_transcript")
 async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
     """Hybrid-Pull: erst Server-API (youtube-transcript-api), Browser als Fallback.
@@ -222,7 +243,7 @@ async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
         )
         data["url"] = req.url
         data["source"] = "server_api"
-        return data
+        return await _merge_youtube_meta(data, req.url)
     except (ValueError, ImportError) as e:
         server_error = str(e)
         log.info("Server-API fail, versuche Browser-Fallback: %s", server_error)
@@ -239,7 +260,7 @@ async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
                 if text:
                     data["source"] = "extension"
                     data["server_error"] = server_error
-                    return data
+                    return await _merge_youtube_meta(data, req.url)
                 browser_error = "leeres Transcript vom Browser-Scrape"
             else:
                 browser_error = result.get("error") or "Browser-Scrape fehlgeschlagen"
@@ -691,7 +712,14 @@ class BrainSaveRequest(BaseModel):
     saeule: str
     playlist_name: str
     tags: list[str] = []
-    ingest_now: bool = True
+    assign_playlist: bool = True
+    channel: str | None = None
+    duration: str | None = None
+    views: int | None = None
+    likes: int | None = None
+    upload_date: str | None = None
+    thumbnail_url: str | None = None
+    description: str | None = None
 
 
 @app.post("/tools/brain/save")
@@ -705,8 +733,15 @@ def brain_save_endpoint(req: BrainSaveRequest) -> dict[str, Any]:
             saeule=req.saeule,
             playlist_name=req.playlist_name,
             tags=req.tags,
+            channel=req.channel,
+            duration=req.duration,
+            views=req.views,
+            likes=req.likes,
+            upload_date=req.upload_date,
+            thumbnail_url=req.thumbnail_url,
+            description=req.description,
         )
-        if req.ingest_now:
+        if req.assign_playlist:
             try:
                 try:
                     playlists_tool.add_to_playlist(
@@ -721,7 +756,7 @@ def brain_save_endpoint(req: BrainSaveRequest) -> dict[str, Any]:
                     else:
                         raise
             except Exception as ingest_err:
-                result["ingest_warning"] = str(ingest_err)
+                result["playlist_warning"] = str(ingest_err)
         return {"ok": True, "data": result}
     except PermissionError as e:
         raise HTTPException(403, str(e))
@@ -738,6 +773,13 @@ class RawContentSaveRequest(BaseModel):
     target_subfolder: str
     description: str | None = None
     filename_slug: str | None = None
+    url: str | None = None
+    meta_title: str | None = None
+    meta_beschreibung: str | None = None
+    og_bild: str | None = None
+    canonical: str | None = None
+    h1: str | None = None
+    tags: list[str] = []
 
 
 @app.post("/tools/raw/save")
@@ -750,6 +792,57 @@ def raw_content_save_endpoint(req: RawContentSaveRequest) -> dict[str, Any]:
             target_subfolder=req.target_subfolder,
             description=req.description,
             filename_slug=req.filename_slug,
+            url=req.url,
+            meta_title=req.meta_title,
+            meta_beschreibung=req.meta_beschreibung,
+            og_bild=req.og_bild,
+            canonical=req.canonical,
+            h1=req.h1,
+            tags=req.tags,
+        )
+        return {"ok": True, "data": result}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class VideoRawSaveRequest(BaseModel):
+    vault_id: str
+    url: str
+    title: str
+    transcript: str
+    channel: str | None = None
+    duration: str | None = None
+    views: int | None = None
+    likes: int | None = None
+    upload_date: str | None = None
+    thumbnail_url: str | None = None
+    description: str | None = None
+    saeule: str = "youtube"
+    tags: list[str] = []
+
+
+@app.post("/tools/raw/save_video")
+def raw_video_save_endpoint(req: VideoRawSaveRequest) -> dict[str, Any]:
+    try:
+        result = raw_promoter.save_video_to_raw(
+            vault_id=req.vault_id,
+            url=req.url,
+            title=req.title,
+            transcript=req.transcript,
+            saeule=req.saeule,
+            playlist_name="",
+            channel=req.channel,
+            duration=req.duration,
+            views=req.views,
+            likes=req.likes,
+            upload_date=req.upload_date,
+            thumbnail_url=req.thumbnail_url,
+            description=req.description,
+            tags=req.tags,
         )
         return {"ok": True, "data": result}
     except PermissionError as e:
@@ -819,16 +912,54 @@ def vault_file_read(vault_id: str, rel_path: str) -> dict[str, Any]:
         raise HTTPException(400, str(e))
 
 
-@app.get("/tools/vault_list/{vault_id}")
-def vault_list_folder(vault_id: str, rel_path: str = "") -> dict[str, Any]:
-    """Listet Ordner und .md-Dateien an einem Pfad im Vault. rel_path leer
-    = Vault-Root (bzw. wiki/-Unterordner falls vorhanden, siehe wiki_reader.resolve_dir)."""
+@app.get("/tools/vault_asset/{vault_id}/{rel_path:path}")
+def vault_asset_serve(vault_id: str, rel_path: str) -> Response:
+    """Liefert ein Bild-Asset (png/jpg/gif/webp/svg) aus dem Vault — fuer das
+    Inline-Rendern lokaler Bilder im Explorer. Pfad-Traversal-geschuetzt."""
     v = settings.get_vault(vault_id)
     if not v:
         raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
     try:
-        listing = wiki_reader.list_folder(v["path"], rel_path)
-        return {"vault_id": vault_id, **listing}
+        data, mime = wiki_reader.read_asset(v["path"], rel_path)
+        return Response(content=data, media_type=mime,
+                        headers={"Cache-Control": "private, max-age=3600"})
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class TtsRequest(BaseModel):
+    text: str
+    voice_id: str | None = None
+
+
+@app.post("/tools/tts")
+def tts_synthesize(req: TtsRequest) -> Response:
+    """Wandelt Text per ElevenLabs (BYOK) in Sprache. Liefert MP3. 403 ohne Key."""
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text fehlt")
+    try:
+        audio = tts_tool.synth(text, req.voice_id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(502, str(e))
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/tools/vault_list/{vault_id}")
+def vault_list_folder(vault_id: str, rel_path: str = "", show_hidden: bool = False) -> dict[str, Any]:
+    """Listet Ordner und .md-Dateien an einem Pfad im Vault. rel_path leer
+    = Vault-Root (bzw. wiki/-Unterordner falls vorhanden, siehe wiki_reader.resolve_dir).
+    show_hidden=true zeigt versteckte/ignorierte Eintraege (.obsidian, .claude, Dotfiles)."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        listing = wiki_reader.list_folder(v["path"], rel_path, show_hidden=show_hidden)
+        return {"vault_id": vault_id, **listing, "show_hidden": show_hidden}
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
@@ -924,6 +1055,23 @@ def vault_file_create(vault_id: str, rel_path: str, body: VaultWriteRequest) -> 
         raise HTTPException(400, str(e))
 
 
+@app.delete("/tools/vault_file/{vault_id}")
+def vault_file_delete(vault_id: str, rel_path: str) -> dict[str, Any]:
+    """Loescht eine Datei oder einen leeren Ordner. Erfordert write_files-Permission."""
+    if not settings.vault_permission(vault_id, "write_files"):
+        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+    try:
+        kind = wiki_reader.delete_path(v["path"], rel_path)
+        return {"ok": True, "deleted": rel_path, "kind": kind}
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/tools/videos/{vault_id}/{slug}/transcript")
 def videos_save_transcript(
     vault_id: str,
@@ -961,9 +1109,19 @@ class SettingsUpdate(BaseModel):
     openai_api_key: str | None = None
     ollama_base_url: str | None = None
     mistral_api_key: str | None = None
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str | None = None
     gemini_api_key: str | None = None
     image_gen_model: str | None = None
+    youtube_api_key: str | None = None
+    setup_agent_provider: str | None = None
+    setup_agent_model: str | None = None
     vault_search_enabled: bool | None = None
+    chat_heavy_ops_mode: str | None = None
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str | None = None
+    chat_tts_enabled: bool | None = None
+    chat_show_sources: bool | None = None
 
 
 def _public_settings() -> dict[str, Any]:
@@ -978,9 +1136,18 @@ def _public_settings() -> dict[str, Any]:
         "openai_api_key_set": bool(s.get("openai_api_key")),
         "ollama_base_url": s.get("ollama_base_url") or "http://localhost:11434",
         "mistral_api_key_set": bool(s.get("mistral_api_key")),
+        "openrouter_api_key_set": bool(s.get("openrouter_api_key")),
+        "openrouter_base_url": s.get("openrouter_base_url") or "https://openrouter.ai/api/v1",
         "gemini_api_key_set": bool(s.get("gemini_api_key")),
         "image_gen_model": s.get("image_gen_model") or "gemini-2.5-flash-image",
+        "setup_agent_provider": s.get("setup_agent_provider") or "",
+        "setup_agent_model": s.get("setup_agent_model") or "",
         "vault_search_enabled": s.get("vault_search_enabled", True),
+        "chat_heavy_ops_mode": s.get("chat_heavy_ops_mode") or "full",
+        "elevenlabs_api_key_set": bool(s.get("elevenlabs_api_key")),
+        "elevenlabs_voice_id": s.get("elevenlabs_voice_id") or "",
+        "chat_tts_enabled": bool(s.get("chat_tts_enabled", False)),
+        "chat_show_sources": bool(s.get("chat_show_sources", True)),
     }
 
 
@@ -1076,6 +1243,23 @@ def vaults_saeulen(vault_id: str) -> dict[str, Any]:
     return {"saeulen": saeulen_tool.list_allowed()}
 
 
+@app.get("/vaults/{vault_id}/raw_folders")
+def vaults_raw_folders(vault_id: str) -> dict[str, Any]:
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault nicht gefunden")
+    raw_root = Path(v["path"]) / "raw"
+    folders: list[str] = []
+    if raw_root.is_dir():
+        for p in raw_root.iterdir():
+            if p.is_dir() and not p.name.startswith("."):
+                folders.append(p.name)
+                for sub in p.iterdir():
+                    if sub.is_dir() and not sub.name.startswith("."):
+                        folders.append(f"{p.name}/{sub.name}")
+    return {"folders": sorted(folders)}
+
+
 @app.get("/vaults/{vault_id}")
 def vaults_get(vault_id: str) -> dict[str, Any]:
     v = settings.get_vault(vault_id)
@@ -1102,19 +1286,51 @@ def vaults_delete(vault_id: str) -> dict[str, Any]:
     return {"removed": True, "vault_id": vault_id}
 
 
+@app.get("/vaults/{vault_id}/chat/history")
+def vault_chat_history(vault_id: str) -> dict[str, Any]:
+    messages = [
+        m for m in chat._load_history(vault_id)
+        if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)
+    ]
+    return {"messages": messages, "count": len(messages)}
+
+
 @app.post("/vaults/{vault_id}/scaffold")
 def vaults_scaffold(vault_id: str) -> dict[str, Any]:
-    """Convenience-Endpoint: scaffold default Karpathy + PARA vault.
+    """Convenience-Endpoint: scaffold den Default-Vault (Kontext-Profil + PARA).
 
-    Intern: ruft blueprint.commit(vault_id, load_builtin('karpathy-para-base')).
+    Intern: ruft blueprint.commit(vault_id, load_builtin(DEFAULT_BLUEPRINT_ID)).
     Eine einzige Wahrheit fuer alle Scaffold-Pfade.
     """
     v = settings.get_vault(vault_id)
     if not v:
         raise HTTPException(404, "Vault nicht gefunden")
     try:
-        bp = blueprint_tool.load_builtin("karpathy-para-base")
-        return blueprint_tool.commit(vault_id, bp)
+        bp = blueprint_tool.load_builtin(blueprint_tool.DEFAULT_BLUEPRINT_ID)
+        result = blueprint_tool.commit(vault_id, bp)
+        settings.add_applied_blueprints(vault_id, [blueprint_tool.DEFAULT_BLUEPRINT_ID])
+        return result
+    except blueprint_tool.BlueprintError as e:
+        raise HTTPException(400, str(e))
+
+
+class ApplyBlueprintRequest(BaseModel):
+    blueprint_id: str
+
+
+@app.post("/vaults/{vault_id}/apply_blueprint")
+def vaults_apply_blueprint(vault_id: str, req: ApplyBlueprintRequest) -> dict[str, Any]:
+    """Committet ein zusaetzliches builtin Blueprint non-destruktiv auf einen
+    bestehenden Vault (z.B. 'karpathy-para-base' fuer die Farming-Erweiterung).
+    skip_if_exists schuetzt vorhandene Dateien; Indexe/MOCs werden mitgepflegt."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault nicht gefunden")
+    try:
+        bp = blueprint_tool.load_builtin(req.blueprint_id)
+        result = blueprint_tool.commit(vault_id, bp)
+        settings.add_applied_blueprints(vault_id, [req.blueprint_id])
+        return result
     except blueprint_tool.BlueprintError as e:
         raise HTTPException(400, str(e))
 

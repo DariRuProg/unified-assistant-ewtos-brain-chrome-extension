@@ -42,6 +42,15 @@
       "items": {"type": "string"},
       "description": "Free-form tags for marketplace discovery."
     },
+    "category": {
+      "type": "string",
+      "enum": ["base", "addon"],
+      "description": "Catalog role: 'base' (standalone, extends empty) or 'addon' (extends a base). Drives the module grouping in setup/extend UI. If absent, derived from extends (empty => base)."
+    },
+    "when_to_use": {
+      "type": "string",
+      "description": "One short sentence describing what this blueprint/module is good for — shown in the setup picker and the vault module panel."
+    },
     "extends": {
       "type": "array",
       "items": {"type": "string"},
@@ -162,6 +171,16 @@
       "type": "array",
       "items": {"type": "string"},
       "description": "Briefing-source keys this blueprint activates (e.g. 'wetter', 'todos', 'playlist_trending'). Merged as set-union with parents."
+    },
+    "skills": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9\\-]*$"},
+      "description": "Agent-skill names (kebab-case) to scaffold into <vault>/.claude/skills/. Resolved against bundled skill trees in server/tools/blueprint_templates/_skills/. Copied dir-wise, skipped if the target dir already exists. Merged as set-union with parents."
+    },
+    "commands": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9\\-]*$"},
+      "description": "Claude-Code slash-command names (kebab-case) to scaffold into <vault>/.claude/commands/<name>.md. Resolved against bundled prompt files in server/tools/blueprint_templates/_commands/<name>.md. Copied file-wise, skipped if the target exists. Merged as set-union with parents."
     },
     "permissions_defaults": {
       "type": "object",

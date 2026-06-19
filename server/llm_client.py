@@ -59,6 +59,13 @@ def get_backend() -> LLMBackend:
             raise ValueError("Kein Mistral-API-Key in den Settings/Env")
         return OpenAIBackend(api_key=api_key, base_url="https://api.mistral.ai/v1")
 
+    if provider == "openrouter":
+        api_key = settings.get("openrouter_api_key")
+        if not api_key:
+            raise ValueError("Kein OpenRouter-API-Key in den Settings/Env")
+        base_url = settings.get("openrouter_base_url") or "https://openrouter.ai/api/v1"
+        return OpenAIBackend(api_key=api_key, base_url=base_url)
+
     log.warning("Unbekannter LLM-Provider '%s' — Fallback auf Anthropic", provider)
     api_key = settings.get("anthropic_api_key")
     if not api_key:

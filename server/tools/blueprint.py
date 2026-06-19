@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,7 @@ _jinja = Environment(
 )
 
 _PATH_BAD_RE = re.compile(r"(^/)|(\.\.)|(\\)")
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*$")
 
 
 class BlueprintError(Exception):
@@ -81,33 +83,32 @@ def _list_builtin_ids() -> list[str]:
     )
 
 
+def _meta(bp: dict, bid: str, source: str, trusted: bool) -> dict:
+    extends = bp.get("extends", []) or []
+    category = bp.get("category") or ("base" if not extends else "addon")
+    return {
+        "id": bp.get("blueprint_id", bid),
+        "name": bp.get("blueprint_name", bid),
+        "version": bp.get("blueprint_version", ""),
+        "source": source,
+        "trusted": trusted,
+        "description": bp.get("description", ""),
+        "when_to_use": bp.get("when_to_use", ""),
+        "category": category,
+        "tags": bp.get("tags", []),
+        "extends": extends,
+    }
+
+
 def list_available() -> list[dict]:
-    """Liefert Liste von Metadaten-Dicts: id, name, version, source, trusted, description."""
+    """Liefert Metadaten-Dicts: id, name, version, source, trusted, description,
+    when_to_use, category (base|addon, ggf. aus extends abgeleitet), tags, extends."""
     result: list[dict] = []
     for bid in _list_builtin_ids():
-        bp = load_builtin(bid)
-        result.append({
-            "id": bp.get("blueprint_id", bid),
-            "name": bp.get("blueprint_name", bid),
-            "version": bp.get("blueprint_version", ""),
-            "source": "builtin",
-            "trusted": True,
-            "description": bp.get("description", ""),
-            "tags": bp.get("tags", []),
-            "extends": bp.get("extends", []),
-        })
+        result.append(_meta(load_builtin(bid), bid, "builtin", True))
     for entry in settings.get_imported_blueprints():
         bp = entry.get("blueprint") or {}
-        result.append({
-            "id": bp.get("blueprint_id", ""),
-            "name": bp.get("blueprint_name", ""),
-            "version": bp.get("blueprint_version", ""),
-            "source": "imported",
-            "trusted": bool(entry.get("trusted")),
-            "description": bp.get("description", ""),
-            "tags": bp.get("tags", []),
-            "extends": bp.get("extends", []),
-        })
+        result.append(_meta(bp, bp.get("blueprint_id", ""), "imported", bool(entry.get("trusted"))))
     return result
 
 
@@ -221,6 +222,24 @@ def _merge_blueprints(parent: dict, child: dict) -> dict:
             merged_src.append(src)
     out["briefing_sources"] = merged_src
 
+    # skills: Set-Union mit stabiler Reihenfolge
+    merged_skills: list[str] = []
+    seen_skills: set[str] = set()
+    for sk in (parent.get("skills") or []) + (child.get("skills") or []):
+        if sk not in seen_skills:
+            seen_skills.add(sk)
+            merged_skills.append(sk)
+    out["skills"] = merged_skills
+
+    # commands: Set-Union mit stabiler Reihenfolge
+    merged_cmds: list[str] = []
+    seen_cmds: set[str] = set()
+    for cm in (parent.get("commands") or []) + (child.get("commands") or []):
+        if cm not in seen_cmds:
+            seen_cmds.add(cm)
+            merged_cmds.append(cm)
+    out["commands"] = merged_cmds
+
     # permissions_defaults: child overrides parent
     out["permissions_defaults"] = {
         **(parent.get("permissions_defaults") or {}),
@@ -320,6 +339,20 @@ def preview(vault_id: str, blueprint: dict) -> dict:
         else:
             would_create.append(rel)
 
+    for skill_name in resolved.get("skills") or []:
+        rel = f".claude/skills/{skill_name}"
+        if (vault_path / ".claude" / "skills" / skill_name).exists():
+            would_skip.append(rel)
+        else:
+            would_create.append(rel + "/")
+
+    for cmd_name in resolved.get("commands") or []:
+        rel = f".claude/commands/{cmd_name}.md"
+        if (vault_path / ".claude" / "commands" / f"{cmd_name}.md").exists():
+            would_skip.append(rel)
+        else:
+            would_create.append(rel)
+
     section_ids = [s["id"] for s in resolved.get("claude_md_sections") or []]
 
     return {
@@ -336,6 +369,186 @@ def preview(vault_id: str, blueprint: dict) -> dict:
 def _write_file(target: Path, content: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
+
+
+_AUTO_INDEX_TEMPLATE = """---
+typ: index
+aktualisiert: {today}
+---
+
+# {label}
+
+## Pages
+"""
+
+_FM_TITLE_RE = re.compile(r"^\s*titel\s*:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
+_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _folder_has_content(folder: Path) -> bool:
+    """True, wenn unter `folder` (rekursiv, ohne hidden) ≥1 .md ausser index.md liegt.
+    Massstab dafuer, ob ein Index-Hub ueberhaupt etwas zu mappen hat."""
+    try:
+        for p in folder.rglob("*.md"):
+            if p.name == "index.md":
+                continue
+            if any(part.startswith(".") for part in p.relative_to(folder).parts):
+                continue
+            return True
+    except OSError:
+        return False
+    return False
+
+
+def _ensure_wiki_indexes(vault_path: Path, created: list[str]) -> None:
+    """Index-Konvention (Karpathy/PARA, flach + nur bei Inhalt): index.md-Hub fuer
+    den wiki-Root (immer) sowie Buckets (Ebene 1) und Themen-Ordner (Ebene 2) — dort
+    aber NUR wenn der Ordner Inhalt hat. Tiefer (≥3) kein Hub. Leere Buckets bekommen
+    keinen Hub. Idempotent — vorhandene index.md bleiben."""
+    wiki = vault_path / "wiki"
+    if not wiki.is_dir():
+        return
+    candidates = [wiki] + [d for d in wiki.rglob("*") if d.is_dir()]
+    for d in sorted(candidates):
+        rel = d.relative_to(wiki).parts
+        if any(part.startswith(".") for part in rel):
+            continue
+        depth = len(rel)  # wiki=0, bucket=1, topic=2
+        if depth >= 3:
+            continue
+        if depth in (1, 2) and not _folder_has_content(d):
+            continue
+        idx = d / "index.md"
+        if idx.exists():
+            continue
+        label = "Wiki" if depth == 0 else d.name.replace("-", " ").title()
+        idx.write_text(
+            _AUTO_INDEX_TEMPLATE.format(label=label, today=date.today().isoformat()),
+            encoding="utf-8",
+        )
+        created.append(f"{d.relative_to(vault_path).as_posix()}/index.md")
+
+
+def _is_prunable_stub(idx: Path) -> bool:
+    """True, wenn idx.md ein unveraenderter Auto-Stub ist: keine Wikilinks, keine
+    Listenpunkte, keine ##-Sektion ausser '## Pages'. Schuetzt handkuratierte Hubs."""
+    try:
+        text = idx.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if "[[" in text:
+        return False
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith(("- ", "* ")):
+            return False
+        if s.startswith("## ") and s.lower() != "## pages":
+            return False
+    return True
+
+
+def _prune_empty_hubs(vault_path: Path, removed: list[str]) -> None:
+    """Entfernt index.md in Bucket-/Themen-Ordnern (Ebene 1–2), die keinen Inhalt
+    haben UND ein unveraenderter Auto-Stub sind. wiki-Root wird nie entfernt."""
+    wiki = vault_path / "wiki"
+    if not wiki.is_dir():
+        return
+    for idx in list(wiki.rglob("index.md")):
+        folder = idx.parent
+        if folder == wiki:
+            continue
+        rel = folder.relative_to(wiki).parts
+        if any(part.startswith(".") for part in rel):
+            continue
+        depth = len(rel)
+        if depth not in (1, 2):
+            continue
+        if _folder_has_content(folder):
+            continue
+        if _is_prunable_stub(idx):
+            try:
+                idx.unlink()
+                removed.append(idx.relative_to(vault_path).as_posix())
+            except OSError:
+                pass
+
+
+def _md_title(path: Path) -> str:
+    """Titel einer Seite: Frontmatter `titel:`, sonst erste `# `-Ueberschrift, sonst Dateiname."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return path.stem
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            m = _FM_TITLE_RE.search(text[3:end])
+            if m:
+                return m.group(1).strip()
+    m = _H1_RE.search(text)
+    return m.group(1).strip() if m else path.stem
+
+
+def _replace_pages_section(content: str, body: str) -> str:
+    """Ersetzt den Block unter '## Pages' bis zur naechsten '## '-Ueberschrift durch body.
+    Fehlt die Sektion, wird sie am Ende ergaenzt. Sonstiger Inhalt bleibt erhalten."""
+    lines = content.splitlines()
+    head = next((i for i, l in enumerate(lines) if l.strip().lower() == "## pages"), None)
+    new_block = ["## Pages"] + (["", *body.splitlines()] if body else [])
+    if head is None:
+        base = content.rstrip("\n")
+        return (base + "\n\n" + "\n".join(new_block) + "\n") if base else "\n".join(new_block) + "\n"
+    end = len(lines)
+    for j in range(head + 1, len(lines)):
+        if lines[j].startswith("## "):
+            end = j
+            break
+    tail = lines[end:]
+    rebuilt = lines[:head] + new_block + ([""] if tail else []) + tail
+    return "\n".join(rebuilt).rstrip("\n") + "\n"
+
+
+def _rebuild_wiki_mocs(vault_path: Path, changed: list[str]) -> None:
+    """Baut die '## Pages'-Sektion jeder wiki/-index.md (inkl. wiki-Root) neu auf:
+    Kind-Hubs (Unterordner mit index.md) zuerst, dann fuer Unterordner OHNE Hub deren
+    Seiten flach (damit kein Hub leer bleibt und nichts orphaned ist), dann eigene
+    Direkt-Seiten. Statische [[wikilinks]], non-destruktiv (nur die ## Pages-Sektion)."""
+    wiki = vault_path / "wiki"
+    if not wiki.is_dir():
+        return
+
+    def _page_link(p: Path) -> str:
+        rel = p.with_suffix("").relative_to(vault_path).as_posix()
+        return f"- [[{rel}|{_md_title(p)}]]"
+
+    for idx in wiki.rglob("index.md"):
+        if any(part.startswith(".") for part in idx.relative_to(vault_path).parts):
+            continue
+        folder = idx.parent
+        try:
+            children = sorted(folder.iterdir(), key=lambda p: p.name.lower())
+        except OSError:
+            continue
+        entries: list[str] = []
+        for p in children:
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            if (p / "index.md").exists():  # Kind-Hub
+                rel = (p / "index").relative_to(vault_path).as_posix()
+                entries.append(f"- [[{rel}|{p.name.replace('-', ' ')}]]")
+            else:  # Hub-los → Seiten flach mitlisten
+                for page in sorted(p.rglob("*.md")):
+                    if page.name == "index.md" or any(pt.startswith(".") for pt in page.relative_to(p).parts):
+                        continue
+                    entries.append(_page_link(page))
+        for p in children:  # eigene Direkt-Seiten
+            if p.suffix == ".md" and p.name != "index.md":
+                entries.append(_page_link(p))
+        old = idx.read_text(encoding="utf-8")
+        new = _replace_pages_section(old, "\n".join(entries))
+        if new != old:
+            idx.write_text(new, encoding="utf-8")
+            changed.append(idx.relative_to(vault_path).as_posix())
 
 
 def _commit_snapshot(vault_path: Path, resolved: dict) -> Path:
@@ -385,11 +598,21 @@ def commit(vault_id: str, blueprint: dict) -> dict:
         if "template_inline" in f:
             content = f["template_inline"]
         else:
-            ctx = _make_context(vault_name, vault_path, f.get("vars"))
+            file_vars = {**(resolved.get("vars") or {}), **(f.get("vars") or {})}
+            ctx = _make_context(vault_name, vault_path, file_vars)
             content = _render_template(f["template"], ctx)
 
         _write_file(target, content)
         created.append(rel)
+
+    # 2b. Index-Konvention: Hub-index.md fuer wiki-Root + Buckets/Themen MIT Inhalt.
+    _ensure_wiki_indexes(vault_path, created)
+    # 2c. Leere Auto-Stub-Hubs entfernen.
+    pruned_hubs: list[str] = []
+    _prune_empty_hubs(vault_path, pruned_hubs)
+    # 2d. Statische MOC-Pflege: ## Pages in jeder wiki/-index.md neu aufbauen.
+    mocs_updated: list[str] = []
+    _rebuild_wiki_mocs(vault_path, mocs_updated)
 
     # 3. Bases
     for b in resolved.get("bases") or []:
@@ -411,7 +634,7 @@ def commit(vault_id: str, blueprint: dict) -> dict:
         for s in sections:
             sec = dict(s)
             if "template" in sec and sec.get("template"):
-                ctx = _make_context(vault_name, vault_path, None)
+                ctx = _make_context(vault_name, vault_path, resolved.get("vars"))
                 sec["content"] = _render_template(sec["template"], ctx)
                 sec.pop("template", None)
             sec.setdefault("merge_policy", "replace_if_marker")
@@ -420,7 +643,42 @@ def commit(vault_id: str, blueprint: dict) -> dict:
         new_text = claude_md_merger.merge(existing, rendered_sections)
         _write_file(claude_md_path, new_text)
 
-    # 5. Snapshot + settings.blueprint_ref
+    # 5. Skills — gebuendelte Skill-Trees nach .claude/skills/<name> kopieren
+    copied_skills: list[str] = []
+    for skill_name in resolved.get("skills") or []:
+        if not _SKILL_NAME_RE.match(skill_name):
+            raise BlueprintError(f"skills[]: ungueltiger Skill-Name '{skill_name}'")
+        src = paths.skills_dir() / skill_name
+        rel = f".claude/skills/{skill_name}"
+        if not src.is_dir():
+            continue
+        dest = vault_path / ".claude" / "skills" / skill_name
+        if dest.exists():
+            skipped.append(rel)
+            continue
+        shutil.copytree(src, dest)
+        created.append(rel + "/")
+        copied_skills.append(skill_name)
+
+    # 5b. Commands — gebuendelte Slash-Command-Prompts nach .claude/commands/<name>.md
+    copied_commands: list[str] = []
+    for cmd_name in resolved.get("commands") or []:
+        if not _SKILL_NAME_RE.match(cmd_name):
+            raise BlueprintError(f"commands[]: ungueltiger Command-Name '{cmd_name}'")
+        src = paths.commands_dir() / f"{cmd_name}.md"
+        rel = f".claude/commands/{cmd_name}.md"
+        if not src.is_file():
+            continue
+        dest = vault_path / ".claude" / "commands" / f"{cmd_name}.md"
+        if dest.exists():
+            skipped.append(rel)
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        created.append(rel)
+        copied_commands.append(cmd_name)
+
+    # 6. Snapshot + settings.blueprint_ref
     snap_path = _commit_snapshot(vault_path, resolved)
     bid = resolved.get("blueprint_id")
     if bid:
@@ -432,8 +690,31 @@ def commit(vault_id: str, blueprint: dict) -> dict:
         "created": created,
         "skipped": skipped,
         "merged_claude_md_sections": merged_sections,
+        "copied_skills": copied_skills,
+        "copied_commands": copied_commands,
+        "mocs_updated": mocs_updated,
+        "pruned_hubs": pruned_hubs,
         "blueprint_snapshot": str(snap_path),
     }
+
+
+def rebuild_vault_indexes(vault_id: str) -> dict:
+    """On-demand Index-/MOC-Pflege fuer einen bestehenden Vault (ohne Blueprint-Commit):
+    legt fehlende Hub-index.md an (Bucket/Sammel-Themen) und baut alle ## Pages neu auf.
+    Idempotent, non-destruktiv. Fuer Wartung nach Aenderungen ausserhalb des Commit-Pfads."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise BlueprintError(f"Vault nicht gefunden: {vault_id}")
+    vault_path = Path(v["path"])
+    if not vault_path.exists():
+        raise BlueprintError(f"Vault-Pfad existiert nicht: {vault_path}")
+    created: list[str] = []
+    _ensure_wiki_indexes(vault_path, created)
+    pruned: list[str] = []
+    _prune_empty_hubs(vault_path, pruned)
+    updated: list[str] = []
+    _rebuild_wiki_mocs(vault_path, updated)
+    return {"ok": True, "created_hubs": created, "pruned_hubs": pruned, "mocs_updated": updated}
 
 
 def export_vault_blueprint(vault_id: str) -> dict | None:
@@ -451,7 +732,7 @@ def export_vault_blueprint(vault_id: str) -> dict | None:
 
 # --- CLAUDE.md Upgrade (non-destruktiv, ohne Folders/Files/Bases) ----------
 
-DEFAULT_BLUEPRINT_ID = "karpathy-para-base"
+DEFAULT_BLUEPRINT_ID = "kontext-base"
 
 
 def _resolve_vault_blueprint(vault_id: str) -> dict:
@@ -481,7 +762,7 @@ def _render_claude_md(vault_id: str) -> tuple[str, str, list[str]]:
     for s in sections:
         sec = dict(s)
         if sec.get("template"):
-            ctx = _make_context(v["name"], vault_path, None)
+            ctx = _make_context(v["name"], vault_path, resolved.get("vars"))
             sec["content"] = _render_template(sec["template"], ctx)
             sec.pop("template", None)
         sec.setdefault("merge_policy", "replace_if_marker")
