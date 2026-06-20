@@ -4,6 +4,7 @@
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
 // keeping the WebSocket connection stable while the sidepanel is open.
 const _keepalivePort = chrome.runtime.connect({ name: "sidepanel-keepalive" });
+_keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; });
 
 // ── Theme & Dark Mode ────────────────────────────────────────────────────────
 
@@ -304,7 +305,7 @@ document.getElementById("edit-quick-slots").addEventListener("click", () => {
 
 reconnectBtn.addEventListener("click", () => {
   setStatus(false, "verbinde...");
-  chrome.runtime.sendMessage({ type: "reconnect" });
+  chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
   closeBurgerMenu();
 });
 
@@ -343,7 +344,7 @@ document.addEventListener("keydown", (e) => {
 
 document.getElementById("retry-connect")?.addEventListener("click", () => {
   setStatus(false, "verbinde...");
-  chrome.runtime.sendMessage({ type: "reconnect" });
+  chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
 });
 
 document.getElementById("dark-toggle").addEventListener("click", async () => {

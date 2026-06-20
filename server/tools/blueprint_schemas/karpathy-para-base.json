@@ -38,7 +38,7 @@
     },
     {
       "id": "ingest-pflicht",
-      "order": 17,
+      "order": 12,
       "title": "Ingest-Pflicht",
       "template": "karpathy-para-base/claude-md/ingest-pflicht.md.j2",
       "merge_policy": "replace_if_marker"
