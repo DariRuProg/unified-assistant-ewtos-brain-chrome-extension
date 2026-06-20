@@ -101,7 +101,15 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(KEEPALIVE_NAME, { periodInMinutes: 0.5 });
   setupContextMenus();
   connect();
+  checkAndOpenWizard();
 });
+
+async function checkAndOpenWizard() {
+  const { serverUrl } = await chrome.storage.local.get("serverUrl");
+  if (!serverUrl) {
+    chrome.tabs.create({ url: chrome.runtime.getURL("setup/wizard.html") });
+  }
+}
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_NAME) {

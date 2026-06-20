@@ -86,6 +86,7 @@ const TOOL_RENDERERS = {
   screenshot: renderScreenshot,
   url_extractor: renderUrlExtractor,
   image_generator: renderImageGenerator,
+  ingest_document: renderDocumentIngest,
 };
 
 const GROUPS = [
@@ -114,7 +115,8 @@ const GROUPS = [
           { label: "URLs der Tabs kopieren", icon: "⧉", action: "copy_urls" },
         ],
       },
-      { id: "vault_health", label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
+      { id: "vault_health",     label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
+      { id: "ingest_document",  label: "Dokument-Ingest",  hint: "PDF, TXT oder Markdown in raw/ ablegen", icon: "📥" },
     ],
   },
   {
@@ -6236,7 +6238,8 @@ async function showBriefingPanel() {
   let currentProfile = null;
   let currentVaultId = null;
   let allProfiles = [];
-  let selectedProfileId = "default";
+  const { briefingLastProfile } = await chrome.storage.local.get("briefingLastProfile");
+  let selectedProfileId = briefingLastProfile || "default";
 
   async function loadProfiles() {
     try {
@@ -6281,6 +6284,7 @@ async function showBriefingPanel() {
 
   profileSelect.addEventListener("change", () => {
     selectedProfileId = profileSelect.value;
+    chrome.storage.local.set({ briefingLastProfile: selectedProfileId });
     loadCurrentBriefing();
   });
 
@@ -6884,3 +6888,76 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
     if (tab?.id === tabId) _chatPageModeScrape();
   });
 });
+
+// --- Dokument-Ingest ---
+
+async function renderDocumentIngest() {
+  panelTitle.textContent = "Dokument-Ingest";
+
+  const SUBFOLDERS = ["artikel", "eigene-notizen", "kunden-input", "chat-archive"];
+
+  const fileInput = el("input");
+  fileInput.type = "file";
+  fileInput.accept = ".pdf,.txt,.md";
+  fileInput.style.cssText = "width:100%;margin-bottom:8px;";
+
+  const titleInput = el("input");
+  titleInput.type = "text";
+  titleInput.placeholder = "Titel (optional — sonst Dateiname)";
+  titleInput.style.cssText = "width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border,#444);background:var(--bg-card,#2a2a2a);color:var(--text,inherit);box-sizing:border-box;margin-bottom:8px;font-size:13px;";
+
+  const subfolderSelect = el("select");
+  subfolderSelect.style.cssText = "width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border,#444);background:var(--bg-card,#2a2a2a);color:var(--text,inherit);margin-bottom:12px;font-size:13px;";
+  SUBFOLDERS.forEach(sf => subfolderSelect.append(el("option", { value: sf, textContent: sf })));
+
+  const uploadBtn = el("button", { textContent: "In Vault speichern (raw/)" });
+  uploadBtn.style.cssText = "width:100%;";
+  uploadBtn.disabled = true;
+
+  const status = el("div", { className: "tool-status" });
+  const resultBox = el("div");
+  resultBox.style.cssText = "margin-top:10px;font-size:12px;color:var(--muted,#888);word-break:break-all;";
+
+  fileInput.addEventListener("change", () => {
+    uploadBtn.disabled = !fileInput.files?.length;
+    status.textContent = "";
+    resultBox.textContent = "";
+  });
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    uploadBtn.disabled = true;
+    status.textContent = "Lade hoch...";
+    status.className = "tool-status";
+    resultBox.textContent = "";
+    try {
+      const httpBase = await getHttpBase();
+      const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
+      if (!selectedVaultId) throw new Error("Kein Vault ausgewählt (Einstellungen → Vaults).");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("vault_id", selectedVaultId);
+      fd.append("subfolder", subfolderSelect.value);
+      fd.append("title", titleInput.value.trim());
+      const res = await fetch(`${httpBase}/tools/ingest/document`, { method: "POST", body: fd });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      const rawPath = data?.data?.relative_path || data?.data?.raw_path || "";
+      status.textContent = "Gespeichert!";
+      status.className = "tool-status success";
+      if (rawPath) resultBox.textContent = rawPath;
+      fileInput.value = "";
+      titleInput.value = "";
+      uploadBtn.disabled = true;
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+      uploadBtn.disabled = false;
+    }
+  });
+
+  panelBody.replaceChildren(fileInput, titleInput, subfolderSelect, uploadBtn, status, resultBox);
+}

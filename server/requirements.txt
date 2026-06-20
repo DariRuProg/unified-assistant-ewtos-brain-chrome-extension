@@ -13,3 +13,4 @@ jsonschema>=4.21.0
 pystray>=0.19.5
 Pillow>=10.0.0
 yt-dlp
+pdfplumber>=0.11

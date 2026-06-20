@@ -18,7 +18,7 @@ import paths
 paths.migrate_legacy_data()
 load_dotenv(paths.env_file())
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -36,11 +36,13 @@ from tools import youtube_transcript_fallback
 from tools import briefing as briefing_tool
 from tools import auto_tagger
 from tools import raw_promoter
+from tools import pdf_ingest as pdf_ingest_tool
 from tools import saeulen as saeulen_tool
 from tools import image_generator as image_generator_tool
 from tools import blueprint as blueprint_tool
 from tools import setup_agent as setup_agent_tool
 from tools import vault_audit as vault_audit_tool
+import auth
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -126,6 +128,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="EwtosBrain", version=SERVER_VERSION, lifespan=lifespan)
+app.middleware("http")(auth.api_key_middleware)
 
 
 @app.get("/")
@@ -807,6 +810,43 @@ def raw_content_save_endpoint(req: RawContentSaveRequest) -> dict[str, Any]:
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@app.post("/tools/ingest/document")
+async def ingest_document_endpoint(
+    file: UploadFile = File(...),
+    vault_id: str = Form(...),
+    subfolder: str = Form("artikel"),
+    title: str = Form(""),
+) -> dict[str, Any]:
+    if not settings.vault_permission(vault_id, "write_raw"):
+        raise HTTPException(403, "write_raw-Permission für diesen Vault nicht aktiviert.")
+    allowed = ("application/pdf", "text/plain", "text/markdown")
+    if file.content_type and not any(file.content_type.startswith(m) for m in allowed):
+        raise HTTPException(400, f"Nicht unterstützter Dateityp: {file.content_type}")
+    data = await file.read()
+    try:
+        content = pdf_ingest_tool.extract_text(data, file.filename or "")
+    except ImportError as e:
+        raise HTTPException(500, str(e))
+    if not content.strip():
+        raise HTTPException(422, "Kein Text extrahierbar.")
+    doc_title = title.strip() or (file.filename or "Dokument").rsplit(".", 1)[0]
+    try:
+        result = raw_promoter.save_raw_content(
+            vault_id=vault_id,
+            title=doc_title,
+            content=content,
+            target_subfolder=subfolder,
+            description=f"Importiert aus {file.filename}",
+        )
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return {"ok": True, "data": result}
 
 
 class VideoRawSaveRequest(BaseModel):

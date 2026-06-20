@@ -45,6 +45,7 @@ EDITABLE_KEYS = {
     "elevenlabs_voice_id",
     "chat_tts_enabled",
     "chat_show_sources",
+    "api_key",
 }
 SECRET_KEYS = {
     "anthropic_api_key",
@@ -54,6 +55,7 @@ SECRET_KEYS = {
     "gemini_api_key",
     "youtube_api_key",
     "elevenlabs_api_key",
+    "api_key",
 }
 SECRET_ENV_MAP = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
