@@ -37,6 +37,13 @@
       "merge_policy": "replace_if_marker"
     },
     {
+      "id": "ingest-pflicht",
+      "order": 17,
+      "title": "Ingest-Pflicht",
+      "template": "karpathy-para-base/claude-md/ingest-pflicht.md.j2",
+      "merge_policy": "replace_if_marker"
+    },
+    {
       "id": "karpathy-routinen",
       "order": 20,
       "title": "Routinen (Karpathy)",

@@ -1,0 +1,20 @@
+**Wenn Wissen in den Vault kommt — immer in zwei Schritten, in dieser Reihenfolge:**
+
+1. **Rohquelle in `raw/<subfolder>/` ablegen** (unveränderlich — nach dem Speichern nicht mehr editieren).
+
+   | Inhaltstyp | Unterordner |
+   |---|---|
+   | Gespräch / Chat-Transkript | `raw/chat-archive/YYYY-MM-DD-<slug>.md` |
+   | Artikel / Webseite | `raw/artikel/<slug>.md` |
+   | PDF / Paper | `raw/papers/<slug>.md` |
+   | YouTube-Notizen | `raw/youtube/<slug>.md` |
+   | Eigene Notizen / Braindump | `raw/eigene-notizen/<slug>.md` |
+   | Kunden-Input | `raw/kunden-input/<slug>.md` |
+
+2. **Kuratierte Wiki-Seite in `wiki/` anlegen** — aus der Rohquelle destilliert, mit `templates/` als Gerüst.
+
+**Verlinkung (bidirektional, Pflicht):**
+- Raw-Datei Frontmatter: `kuratiert_in: "[[wiki/...]]"`
+- Wiki-Seite `## Quellen`: `[[raw/...]]`
+
+**Niemals direkt eine Wiki-Seite anlegen ohne vorherige Raw-Ablage.**
