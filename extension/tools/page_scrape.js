@@ -20,9 +20,14 @@ export async function runPageScrape(params) {
 }
 
 // Injected into the active tab. Self-contained — no closures, no imports.
-function scrapePageContent(mode) {
+async function scrapePageContent(mode) {
   try {
     const isFull = mode === "full";
+
+    // Trigger scroll-based lazy loading before scraping
+    window.scrollTo(0, document.body.scrollHeight);
+    await new Promise(r => setTimeout(r, 800));
+    window.scrollTo(0, 0);
 
     // --- Root selection (content mode only) ---
     // Text-density heuristic: find the deepest DOM node that still contains

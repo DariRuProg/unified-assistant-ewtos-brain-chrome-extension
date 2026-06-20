@@ -131,7 +131,6 @@ const GROUPS = [
         ],
       },
       { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
-      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
     ],
   },
   {
@@ -144,12 +143,13 @@ const GROUPS = [
     ],
   },
   {
-    id: "studio",
-    label: "Studio",
+    id: "extras",
+    label: "Extras",
     icon: "🎨",
     tools: [
-      { id: "image_generator", label: "Image-Gen", hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
-      { id: "color_picker",  label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
+      { id: "url_extractor",  label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
+      { id: "image_generator", label: "Image-Gen",   hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
+      { id: "color_picker",   label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
       { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸",
         actions: [
           { label: "Sichtbar", icon: "▸", action: "shot_visible" },
@@ -162,10 +162,11 @@ const GROUPS = [
 ];
 
 const QUICK_SPECIAL = {
-  _briefing: { label: "Briefing", icon: "☀", run: () => showBriefingPanel() },
+  _briefing:   { label: "Briefing",    icon: "☀", run: () => showBriefingPanel() },
+  _save_page:  { label: "Ins Vault",   icon: "📥", run: () => showQuickSavePage() },
 };
-const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing"];
-const QUICK_SLOT_COUNT = 4;
+const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
+const QUICK_SLOT_COUNT = 5;
 let quickSlots = DEFAULT_QUICK_SLOTS.slice();
 
 function getQuickOption(id) {
@@ -6292,6 +6293,100 @@ async function showBriefingPanel() {
 
   await loadProfiles();
   await loadCurrentBriefing();
+}
+
+async function showQuickSavePage() {
+  const panel = el("div", { className: "tool-panel" });
+  const header = el("div", { className: "tool-header" });
+  const title = el("h2", { textContent: "Seite ins Vault" });
+  const closeBtn = el("button", { type: "button", className: "close-btn", textContent: "✕" });
+  closeBtn.addEventListener("click", () => panel.remove());
+  header.append(title, closeBtn);
+
+  const body = el("div", { className: "tool-body" });
+  const status = el("div", { className: "tool-status", textContent: "scrapt Seite..." });
+
+  const titleInput = el("input", { type: "text", placeholder: "Titel" });
+  titleInput.style.cssText = "width:100%;margin-bottom:8px;";
+  titleInput.style.display = "none";
+
+  const subfolderSelect = el("select");
+  subfolderSelect.style.cssText = "width:100%;margin-bottom:12px;";
+  subfolderSelect.style.display = "none";
+  ["artikel", "eigene-notizen", "chat-archive"].forEach(s => subfolderSelect.append(new Option(s, s)));
+
+  const saveBtn = el("button", { textContent: "Speichern", disabled: true });
+  saveBtn.style.width = "100%";
+
+  body.append(status, titleInput, subfolderSelect, saveBtn);
+  panel.append(header, body);
+  document.body.append(panel);
+
+  let markdown = "";
+  let pageUrl = "";
+
+  try {
+    const httpBase = await getHttpBase();
+    const res = await fetch(`${httpBase}/tools/page_scrape`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "content" }),
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch {}
+    if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+    markdown = data.markdown || "";
+    pageUrl = data.url || "";
+    titleInput.value = data.title || "";
+    titleInput.style.display = "";
+    subfolderSelect.style.display = "";
+    status.textContent = `${data.wordCount || 0} Wörter erfasst`;
+    status.className = "tool-status success";
+    saveBtn.disabled = false;
+  } catch (err) {
+    status.textContent = err.message || String(err);
+    status.className = "tool-status error";
+    return;
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    const t = titleInput.value.trim();
+    if (!t) { status.textContent = "Titel erforderlich"; status.className = "tool-status error"; return; }
+    saveBtn.disabled = true;
+    status.textContent = "speichere...";
+    status.className = "tool-status";
+    try {
+      const httpBase = await getHttpBase();
+      const vaultId = await getActiveVaultId(httpBase);
+      if (!vaultId) throw new Error("Kein Vault konfiguriert");
+      const res = await fetch(`${httpBase}/tools/raw/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault_id: vaultId,
+          title: t,
+          content: markdown,
+          target_subfolder: subfolderSelect.value,
+          url: pageUrl || null,
+        }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {}
+      if (!res.ok) {
+        if (res.status === 403) throw new Error("Fehlende Berechtigung — write_raw in Vault-Options aktivieren");
+        throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      }
+      status.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+      status.className = "tool-status success";
+      setTimeout(() => panel.remove(), 1500);
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.className = "tool-status error";
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 function openBriefingLookback(body, restoreFn, vaultId) {
