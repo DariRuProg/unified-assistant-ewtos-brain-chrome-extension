@@ -1,5 +1,10 @@
 // Sidepanel: connection status, tab navigation, tool runner. ewtos.com
 
+// Keep the background Service Worker alive via a persistent port.
+// MV3 SWs are terminated after ~30s idle — an open port prevents that,
+// keeping the WebSocket connection stable while the sidepanel is open.
+const _keepalivePort = chrome.runtime.connect({ name: "sidepanel-keepalive" });
+
 // ── Theme & Dark Mode ────────────────────────────────────────────────────────
 
 const html = document.documentElement;

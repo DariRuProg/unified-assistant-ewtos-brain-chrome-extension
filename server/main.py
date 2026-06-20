@@ -76,10 +76,10 @@ class ExtensionBridge:
                 if not fut.done():
                     fut.set_exception(RuntimeError("Extension reconnected mid-call"))
             self.pending.clear()
-            try:
-                await self.socket.close()
-            except Exception:
-                pass
+            # Do NOT close the old socket — sending a close frame to an already-dead
+            # SW connection would trigger onclose in the extension if the old SW
+            # is still alive, causing an immediate reconnect loop.
+            # The old connection dies naturally when the SW is terminated.
         self.socket = ws
         log.info("Extension connected")
 
