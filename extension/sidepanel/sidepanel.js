@@ -12,6 +12,7 @@ import { renderVaultExplorer, renderVaultHealth } from './renderers/vault.js';
 import { renderPageScrape, renderSeoCheck, renderImageAnalyse, renderColorPicker, renderScreenshot, renderUrlExtractor, renderImageGenerator } from './renderers/web-tools.js';
 import { showBriefingPanel, showQuickSavePage, checkPendingBrainPick, checkActiveTabForYoutube, renderDocumentIngest } from './renderers/briefing.js';
 import { renderPlaylistsTool, checkPendingPlaylistPick } from './renderers/playlists.js';
+import { statusDot, tabsNav, content, openOptions, reconnectBtn, quickActions, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, burgerMenu } from './modules/dom-refs.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -56,14 +57,6 @@ chrome.storage.onChanged.addListener((changes) => {
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
-const statusDot = document.getElementById("status-dot");
-const tabsNav = document.getElementById("tabs");
-const content = document.getElementById("content");
-const openOptions = document.getElementById("open-options");
-const reconnectBtn = document.getElementById("reconnect");
-const quickActions = document.getElementById("quick-actions");
-const offlineBannerText = document.getElementById("offline-banner-text");
-const DEFAULT_OFFLINE_HTML = offlineBannerText ? offlineBannerText.innerHTML : "";
 
 const TOOL_RENDERERS = {
   youtube_transcript: renderYoutubeTranscript,
@@ -288,8 +281,6 @@ reconnectBtn.addEventListener("click", () => {
   closeBurgerMenu();
 });
 
-const burgerBtn = document.getElementById("burger-btn");
-const burgerMenu = document.getElementById("burger-menu");
 
 async function setViewMode(mode) {
   if (state.toolViewMode === mode) return;
