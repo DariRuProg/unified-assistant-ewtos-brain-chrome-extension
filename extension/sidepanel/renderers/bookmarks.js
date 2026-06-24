@@ -2,7 +2,7 @@
 import { el, makeYouTubeThumb } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
-import { captureHighlightedTabs, copyHighlightedTabUrls } from '../sidepanel.js';
+import { captureHighlightedTabs, copyHighlightedTabUrls } from './playlists.js';
 
 let bookmarksState = { all: [], search: "", activeTag: null };
 
