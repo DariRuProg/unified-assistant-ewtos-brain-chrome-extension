@@ -3,6 +3,7 @@ import { el, extractYouTubeId, makeYouTubeThumb } from './dom.js';
 import { renderMarkdown, escapeHtml, inlineMd, buildNestedList, obsidianUri, openInObsidian, renderLineDiff } from './markdown.js';
 import { applyTheme, updateDarkToggleIcon } from './modules/theme.js';
 import { state } from './state.js';
+import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from './modules/api.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -191,13 +192,6 @@ function runQuickSlot(id) {
 
 
 
-async function getHttpBase() {
-  const { serverUrl } = await chrome.storage.local.get("serverUrl");
-  return (serverUrl || "ws://localhost:9988/ws")
-    .replace(/^ws:/, "http:")
-    .replace(/^wss:/, "https:")
-    .replace(/\/ws$/, "");
-}
 
 setStatus(false, "verbinde...");
 renderTabs();
@@ -3294,36 +3288,8 @@ async function renderVaultHealth() {
 
 
 
-// --- Vault helper (used by Playlists/Bookmarks tools) -------------------
 
-async function getActiveVault(httpBase) {
-  const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
-  try {
-    const res = await fetch(`${httpBase}/vaults`);
-    const data = await res.json();
-    const list = data.vaults || [];
-    if (selectedVaultId) {
-      const found = list.find((v) => v.id === selectedVaultId);
-      if (found) return found;
-    }
-    return list[0] || null;
-  } catch {
-    return null;
-  }
-}
 
-async function getActiveVaultId(httpBase) {
-  const v = await getActiveVault(httpBase);
-  return v?.id || null;
-}
-
-// Hängt vault_id als Query-Param an eine URL an. Unterstützt URLs, die bereits
-// einen Query-String haben (z.B. /tools/playlists/<id>?saeule=...).
-function withVaultId(url, vaultId) {
-  if (!vaultId) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}vault_id=${encodeURIComponent(vaultId)}`;
-}
 
 const NOTES_TOOLS = new Set(["scratchpad", "todos", "bookmarks"]);
 
