@@ -8,15 +8,13 @@
     "storage",
     "scripting",
     "tabs",
-    "activeTab",
     "alarms",
     "contextMenus",
     "clipboardWrite",
     "downloads"
   ],
   "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "<all_urls>"
   ],
   "icons": {
     "16": "images/icon-16.png",
