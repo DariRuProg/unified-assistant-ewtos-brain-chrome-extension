@@ -337,7 +337,9 @@ async function renderPlaylistDetail(name, saeule) {
   const vault = await getActiveVault(httpBase);
   if (!vault) { status.textContent = "Kein Vault."; return; }
   const vaultId = vault.id;
-  const vaultName = vault.name;
+  // Obsidian-Vault-Name = Ordnername (letztes Pfad-Segment), nicht der frei
+  // vergebene Anzeige-Name aus EwtosBrain — sonst greift obsidian://open nicht.
+  const vaultName = vault.path.split(/[\\/]/).filter(Boolean).pop() || vault.name;
 
   pullBtn.addEventListener("click", () => runPullPending({
     httpBase, vaultId, playlistName: name, saeule,
