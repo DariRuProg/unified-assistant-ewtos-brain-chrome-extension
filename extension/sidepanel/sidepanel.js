@@ -2,6 +2,7 @@
 import { el, extractYouTubeId, makeYouTubeThumb } from './dom.js';
 import { renderMarkdown, escapeHtml, inlineMd, buildNestedList, obsidianUri, openInObsidian, renderLineDiff } from './markdown.js';
 import { applyTheme, updateDarkToggleIcon } from './modules/theme.js';
+import { state } from './state.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -16,16 +17,16 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
     await chrome.storage.local.get(["theme", "darkMode"]);
   applyTheme(theme, darkMode);
   updateDarkToggleIcon(darkMode);
-  toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
+  state.toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
   const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
   if (Array.isArray(stored)) {
-    quickSlots = stored.slice(0, QUICK_SLOT_COUNT);
-    while (quickSlots.length < QUICK_SLOT_COUNT) quickSlots.push(null);
+    state.quickSlots = stored.slice(0, QUICK_SLOT_COUNT);
+    while (state.quickSlots.length < QUICK_SLOT_COUNT) state.quickSlots.push(null);
   }
   renderTabs();
   renderQuickActions();
   await loadQuickRowPref();
-  if (!activeTool) renderToolList();
+  if (!state.activeTool) renderToolList();
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -36,7 +37,7 @@ chrome.storage.onChanged.addListener((changes) => {
     });
   }
   if (changes.hideQuickRowOnTool !== undefined) {
-    hideQuickRowOnTool = !!changes.hideQuickRowOnTool.newValue;
+    state.hideQuickRowOnTool = !!changes.hideQuickRowOnTool.newValue;
     applyQuickRowVisibility();
   }
   if (changes.playlistPick && changes.playlistPick.newValue) {
@@ -156,7 +157,6 @@ const QUICK_SPECIAL = {
 };
 const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
 const QUICK_SLOT_COUNT = 5;
-let quickSlots = DEFAULT_QUICK_SLOTS.slice();
 
 function getQuickOption(id) {
   if (!id) return null;
@@ -189,13 +189,7 @@ function runQuickSlot(id) {
   openTool(id);
 }
 
-let activeTab = GROUPS[0].id;
-let activeTool = null;
-let toolViewMode = "list";
 
-// Re-bound on each openTool call so renderers can target current tool view.
-let panelTitle = null;
-let panelBody = null;
 
 async function getHttpBase() {
   const { serverUrl } = await chrome.storage.local.get("serverUrl");
@@ -271,8 +265,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   // Vault-Switch: Notes-Tools sind vault-scoped, also komplett neu rendern,
   // damit scratchpad/todos/bookmarks aus dem neu gewählten Vault geladen werden.
-  if (area === "local" && changes.selectedVaultId && activeTool && NOTES_TOOLS.has(activeTool)) {
-    openTool(activeTool);
+  if (area === "local" && changes.selectedVaultId && state.activeTool && NOTES_TOOLS.has(state.activeTool)) {
+    openTool(state.activeTool);
   }
 });
 
@@ -296,11 +290,11 @@ const burgerBtn = document.getElementById("burger-btn");
 const burgerMenu = document.getElementById("burger-menu");
 
 async function setViewMode(mode) {
-  if (toolViewMode === mode) return;
-  toolViewMode = mode;
-  await chrome.storage.local.set({ toolViewMode });
+  if (state.toolViewMode === mode) return;
+  state.toolViewMode = mode;
+  await chrome.storage.local.set({ toolViewMode: state.toolViewMode });
   renderTabs();
-  if (!activeTool) renderToolList();
+  if (!state.activeTool) renderToolList();
 }
 
 function openBurgerMenu() {
@@ -547,12 +541,12 @@ function renderTabs() {
   for (const g of GROUPS) {
     const b = el("button", {
       type: "button",
-      className: "tab" + (g.id === activeTab ? " active" : ""),
+      className: "tab" + (g.id === state.activeTab ? " active" : ""),
       textContent: (g.icon ? g.icon + " " : "") + g.label,
     });
     b.addEventListener("click", () => {
-      activeTab = g.id;
-      activeTool = null;
+      state.activeTab = g.id;
+      state.activeTool = null;
       renderTabs();
       renderToolList();
       if (g.autoOpen && g.tools.filter(t => !t.separator).length === 1) {
@@ -564,13 +558,13 @@ function renderTabs() {
   const vt = el("div", { className: "view-toggle" });
   const listBtn = el("button", {
     type: "button",
-    className: "vt-btn first" + (toolViewMode === "list" ? " active" : ""),
+    className: "vt-btn first" + (state.toolViewMode === "list" ? " active" : ""),
     title: "Listen-Ansicht",
     textContent: "☰",
   });
   const gridBtn = el("button", {
     type: "button",
-    className: "vt-btn last" + (toolViewMode === "grid" ? " active" : ""),
+    className: "vt-btn last" + (state.toolViewMode === "grid" ? " active" : ""),
     title: "Kachel-Ansicht",
     textContent: "⊞",
   });
@@ -582,10 +576,10 @@ function renderTabs() {
 
 function renderToolList() {
   content.replaceChildren();
-  const group = GROUPS.find((g) => g.id === activeTab);
+  const group = GROUPS.find((g) => g.id === state.activeTab);
   if (!group) return;
 
-  const list = el("ul", { className: "tools " + toolViewMode });
+  const list = el("ul", { className: "tools " + state.toolViewMode });
   for (const t of group.tools) {
     if (t.separator) {
       list.append(el("li", { className: "tool-separator", textContent: t.label }));
@@ -593,14 +587,14 @@ function renderToolList() {
     }
     const hasActions = Array.isArray(t.actions) && t.actions.length > 0;
     const li = el("li", { className: "tool" + (t.soon ? " soon" : "") + (hasActions ? " has-caret" : "") });
-    if (toolViewMode === "grid" && t.icon) {
+    if (state.toolViewMode === "grid" && t.icon) {
       li.append(el("span", { className: "tool-icon", textContent: t.icon }));
     }
     li.append(el("span", { className: "tool-label", textContent: t.label }));
-    if (toolViewMode === "list" && t.hint) {
+    if (state.toolViewMode === "list" && t.hint) {
       li.append(el("span", { className: "hint", textContent: t.hint }));
     }
-    if (toolViewMode === "grid" && t.hint) {
+    if (state.toolViewMode === "grid" && t.hint) {
       li.append(el("span", { className: "tool-hint", textContent: t.hint }));
     }
     if (t.soon) {
@@ -646,13 +640,13 @@ document.addEventListener("click", () => {
 function renderQuickActions() {
   quickActions.replaceChildren();
 
-  while (quickSlots.length < QUICK_SLOT_COUNT) quickSlots.push(null);
-  if (quickSlots.length > QUICK_SLOT_COUNT) quickSlots = quickSlots.slice(0, QUICK_SLOT_COUNT);
+  while (state.quickSlots.length < QUICK_SLOT_COUNT) state.quickSlots.push(null);
+  if (state.quickSlots.length > QUICK_SLOT_COUNT) state.quickSlots = state.quickSlots.slice(0, QUICK_SLOT_COUNT);
 
   const row = el("div", { className: "quick-row" });
-  const allFilled = quickSlots.every((id) => !!id);
+  const allFilled = state.quickSlots.every((id) => !!id);
 
-  quickSlots.forEach((slotId, idx) => {
+  state.quickSlots.forEach((slotId, idx) => {
     const opt = getQuickOption(slotId);
     if (!opt) {
       const plus = el("button", {
@@ -668,7 +662,7 @@ function renderQuickActions() {
     }
     const btn = el("button", {
       type: "button",
-      className: "quick-btn" + (activeTool === opt.id ? " active" : ""),
+      className: "quick-btn" + (state.activeTool === opt.id ? " active" : ""),
       title: opt.label,
     });
     btn.append(el("span", { className: "quick-icon", textContent: opt.icon }));
@@ -696,7 +690,7 @@ function renderQuickActions() {
 }
 
 async function saveQuickSlots() {
-  await chrome.storage.local.set({ quickSlots });
+  await chrome.storage.local.set({ quickSlots: state.quickSlots });
   renderQuickActions();
 }
 
@@ -708,7 +702,7 @@ function openSlotContextMenu(x, y, idx) {
   change.addEventListener("click", () => { menu.remove(); openQuickEditor(idx); });
   remove.addEventListener("click", async () => {
     menu.remove();
-    quickSlots[idx] = null;
+    state.quickSlots[idx] = null;
     await saveQuickSlots();
   });
   menu.append(change, remove);
@@ -745,7 +739,7 @@ function openQuickEditor(targetIdx) {
   const slotsRow = el("div", { className: "quick-editor-slots" });
   function renderSlotsRow() {
     slotsRow.replaceChildren();
-    quickSlots.forEach((slotId, idx) => {
+    state.quickSlots.forEach((slotId, idx) => {
       const opt = getQuickOption(slotId);
       const slot = el("button", { type: "button",
         className: "qe-slot" + (opt ? "" : " empty") + (selectedIdx === idx ? " selected" : ""),
@@ -755,7 +749,7 @@ function openQuickEditor(targetIdx) {
       slot.append(el("span", { className: "lbl", textContent: opt ? opt.label : `Slot ${idx + 1}` }));
       slot.addEventListener("click", async () => {
         if (opt) {
-          quickSlots[idx] = null;
+          state.quickSlots[idx] = null;
           await saveQuickSlots();
           renderSlotsRow();
         } else {
@@ -766,7 +760,7 @@ function openQuickEditor(targetIdx) {
       slotsRow.append(slot);
     });
   }
-  let selectedIdx = targetIdx !== null ? targetIdx : quickSlots.findIndex((s) => !s);
+  let selectedIdx = targetIdx !== null ? targetIdx : state.quickSlots.findIndex((s) => !s);
   if (selectedIdx < 0) selectedIdx = 0;
   renderSlotsRow();
 
@@ -775,7 +769,7 @@ function openQuickEditor(targetIdx) {
   });
 
   const picker = el("div", { className: "quick-editor-picker" });
-  const used = new Set(quickSlots.filter(Boolean));
+  const used = new Set(state.quickSlots.filter(Boolean));
   for (const opt of getAllQuickOptions()) {
     const item = el("button", { type: "button", className: "qe-pick" });
     item.append(el("span", { className: "ico", textContent: opt.icon }));
@@ -784,11 +778,11 @@ function openQuickEditor(targetIdx) {
     if (used.has(opt.id)) item.classList.add("used");
     item.addEventListener("click", async () => {
       const idx = selectedIdx;
-      const existing = quickSlots.indexOf(opt.id);
-      if (existing >= 0 && existing !== idx) quickSlots[existing] = null;
-      quickSlots[idx] = opt.id;
+      const existing = state.quickSlots.indexOf(opt.id);
+      if (existing >= 0 && existing !== idx) state.quickSlots[existing] = null;
+      state.quickSlots[idx] = opt.id;
       await saveQuickSlots();
-      const nextEmpty = quickSlots.findIndex((s) => !s);
+      const nextEmpty = state.quickSlots.findIndex((s) => !s);
       if (nextEmpty >= 0) {
         selectedIdx = nextEmpty;
         renderSlotsRow();
@@ -804,27 +798,23 @@ function openQuickEditor(targetIdx) {
   quickActions.after(editor);
 }
 
-let hideQuickRowOnTool = false;
 
 async function loadQuickRowPref() {
   const { hideQuickRowOnTool: pref } = await chrome.storage.local.get("hideQuickRowOnTool");
-  hideQuickRowOnTool = !!pref;
+  state.hideQuickRowOnTool = !!pref;
   applyQuickRowVisibility();
 }
 
 function applyQuickRowVisibility() {
-  if (hideQuickRowOnTool && activeTool) quickActions.classList.add("hidden");
+  if (state.hideQuickRowOnTool && state.activeTool) quickActions.classList.add("hidden");
   else quickActions.classList.remove("hidden");
 }
 
-let pendingToolOptions = null;
-let _chatPageModeScrape = null; // set when chat is in page mode — fires on tab change
-let currentToolCleanup = null;  // optional cleanup callback set by tool renderers
 
 function runToolCleanup() {
-  if (currentToolCleanup) {
-    try { currentToolCleanup(); } catch {}
-    currentToolCleanup = null;
+  if (state.currentToolCleanup) {
+    try { state.currentToolCleanup(); } catch {}
+    state.currentToolCleanup = null;
   }
 }
 
@@ -833,10 +823,10 @@ function openTool(toolId, options = null) {
   if (!renderer) return;
   runToolCleanup();
   for (const g of GROUPS) {
-    if (g.tools.some((t) => t.id === toolId)) { activeTab = g.id; break; }
+    if (g.tools.some((t) => t.id === toolId)) { state.activeTab = g.id; break; }
   }
-  activeTool = toolId;
-  pendingToolOptions = options;
+  state.activeTool = toolId;
+  state.pendingToolOptions = options;
   renderTabs();
   renderQuickActions();
   applyQuickRowVisibility();
@@ -846,30 +836,29 @@ function openTool(toolId, options = null) {
   const header = el("div", { className: "tool-header" });
   const back = el("button", { type: "button", className: "back", textContent: "←" });
   back.addEventListener("click", closeTool);
-  panelTitle = el("h3");
-  header.append(back, panelTitle);
-  panelBody = el("div", { className: "tool-body" });
-  view.append(header, panelBody);
+  state.panelTitle = el("h3");
+  header.append(back, state.panelTitle);
+  state.panelBody = el("div", { className: "tool-body" });
+  view.append(header, state.panelBody);
   content.append(view);
 
   renderer();
-  pendingToolOptions = null;
+  state.pendingToolOptions = null;
 }
 
 function closeTool() {
   runToolCleanup();
-  activeTool = null;
-  panelTitle = null;
-  panelBody = null;
+  state.activeTool = null;
+  state.panelTitle = null;
+  state.panelBody = null;
   renderQuickActions();
   applyQuickRowVisibility();
   renderToolList();
 }
 
-let lastFetchData = null;
 
 function renderYoutubeTranscript() {
-  panelTitle.textContent = "YouTube-Transcript";
+  state.panelTitle.textContent = "YouTube-Transcript";
 
   const urlRow = el("div");
   urlRow.style.cssText = "display:flex;gap:6px;align-items:stretch;";
@@ -906,7 +895,7 @@ function renderYoutubeTranscript() {
   };
   chrome.tabs.onActivated.addListener(onActivated);
   chrome.tabs.onUpdated.addListener(onUpdated);
-  currentToolCleanup = () => {
+  state.currentToolCleanup = () => {
     chrome.tabs.onActivated.removeListener(onActivated);
     chrome.tabs.onUpdated.removeListener(onUpdated);
   };
@@ -971,7 +960,7 @@ function renderYoutubeTranscript() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       output.value = data?.transcript || "";
-      lastFetchData = data;
+      state.lastFetchData = data;
       // Metadaten-Karte befüllen
       metaCard.replaceChildren();
       const rows = [
@@ -1041,7 +1030,7 @@ function renderYoutubeTranscript() {
   saveRawBtn.style.marginLeft = "6px";
   saveRawBtn.title = "Transcript als Raw-Datei im aktiven Vault speichern";
   saveRawBtn.addEventListener("click", async () => {
-    if (!lastFetchData || !urlInput.value.trim()) {
+    if (!state.lastFetchData || !urlInput.value.trim()) {
       status.textContent = "Erst Transcript holen";
       status.className = "tool-status error";
       return;
@@ -1063,15 +1052,15 @@ function renderYoutubeTranscript() {
         body: JSON.stringify({
           vault_id: selectedVaultId,
           url: urlInput.value.trim(),
-          title: lastFetchData.title || "",
-          transcript: lastFetchData.transcript || output.value || "",
-          channel: lastFetchData.channel || null,
-          duration: lastFetchData.duration || null,
-          views: lastFetchData.views || null,
-          likes: lastFetchData.likes || null,
-          upload_date: lastFetchData.upload_date || null,
-          thumbnail_url: lastFetchData.thumbnail_url || null,
-          description: lastFetchData.description || null,
+          title: state.lastFetchData.title || "",
+          transcript: state.lastFetchData.transcript || output.value || "",
+          channel: state.lastFetchData.channel || null,
+          duration: state.lastFetchData.duration || null,
+          views: state.lastFetchData.views || null,
+          likes: state.lastFetchData.likes || null,
+          upload_date: state.lastFetchData.upload_date || null,
+          thumbnail_url: state.lastFetchData.thumbnail_url || null,
+          description: state.lastFetchData.description || null,
           tags: parseTags(tagsInput.value),
         }),
       });
@@ -1170,11 +1159,11 @@ function renderYoutubeTranscript() {
   btnRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;";
   btnRow.append(runBtn, chatBtn, saveRawBtn, batchToggle);
 
-  panelBody.append(urlRow, btnRow, status, metaCard, tagsInput, output, fallbackRow, batchArea, farmAllBtn, batchResults);
+  state.panelBody.append(urlRow, btnRow, status, metaCard, tagsInput, output, fallbackRow, batchArea, farmAllBtn, batchResults);
 }
 
 async function renderNotesFile(kind, opts) {
-  panelTitle.textContent = opts.title;
+  state.panelTitle.textContent = opts.title;
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
   const meta = el("div", { className: "tool-status", textContent: "lade..." });
@@ -1286,7 +1275,7 @@ async function renderNotesFile(kind, opts) {
   const toolbar = el("div", { className: "todo-toolbar" });
   toolbar.append(viewToggle, exportBtn);
 
-  panelBody.append(vaultHint, meta, textarea, rendered, status, toolbar, fallbackRow, ...(promoteSection ? [promoteSection] : []));
+  state.panelBody.append(vaultHint, meta, textarea, rendered, status, toolbar, fallbackRow, ...(promoteSection ? [promoteSection] : []));
 
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
@@ -1533,7 +1522,7 @@ function appendTodo(content, text) {
 }
 
 async function renderTodos() {
-  panelTitle.textContent = "Todos";
+  state.panelTitle.textContent = "Todos";
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
   const meta = el("div", { className: "tool-status", textContent: "lade..." });
@@ -1568,7 +1557,7 @@ async function renderTodos() {
   fallbackBtns.append(fallbackSave, fallbackCancel);
   fallbackRow.append(fallbackInput, fallbackBtns);
 
-  panelBody.append(vaultHint, meta, list, addForm, sourceArea, status, toolbar, fallbackRow);
+  state.panelBody.append(vaultHint, meta, list, addForm, sourceArea, status, toolbar, fallbackRow);
 
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
@@ -1766,18 +1755,18 @@ async function renderTodos() {
 }
 
 async function renderChat() {
-  panelTitle.textContent = "Chat mit Vault";
+  state.panelTitle.textContent = "Chat mit Vault";
 
-  const initialSource = pendingToolOptions?.sourceType && pendingToolOptions?.sourceRef
-    ? { type: pendingToolOptions.sourceType, ref: pendingToolOptions.sourceRef, title: pendingToolOptions.sourceTitle || "" }
+  const initialSource = state.pendingToolOptions?.sourceType && state.pendingToolOptions?.sourceRef
+    ? { type: state.pendingToolOptions.sourceType, ref: state.pendingToolOptions.sourceRef, title: state.pendingToolOptions.sourceTitle || "" }
     : null;
 
   function updateChatTitle(mode, sourceTitle) {
-    if (mode === "transcript") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Transcript";
-    else if (mode === "video") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Video";
-    else if (mode === "page") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Seite";
-    else if (mode === "vault_file") panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Datei";
-    else panelTitle.textContent = "Chat mit Vault";
+    if (mode === "transcript") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Transcript";
+    else if (mode === "video") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Video";
+    else if (mode === "page") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Seite";
+    else if (mode === "vault_file") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Datei";
+    else state.panelTitle.textContent = "Chat mit Vault";
   }
 
   const httpBase = await getHttpBase();
@@ -1835,11 +1824,11 @@ async function renderChat() {
   const status = el("div", { className: "tool-status" });
   const pageUrlRow = el("div", { className: "page-url-row", style: "display:none" });
 
-  const startMode = pendingToolOptions?.startMode || null;
+  const startMode = state.pendingToolOptions?.startMode || null;
   let chatMode = "vault";
   let scrapeMode = "content"; // "content" | "full"
   let strictPage = true;
-  let scrapedPage = pendingToolOptions?.pageContent || null;
+  let scrapedPage = state.pendingToolOptions?.pageContent || null;
   let pageChatHistory = [];
   let sourceChatHistory = [];
   let activeSource = null; // {type: "transcript"|"video", ref: {...}, title: string}
@@ -1920,7 +1909,7 @@ async function renderChat() {
     chatMode = "vault";
     vaultBtn.classList.add("active");
     pageBtn.classList.remove("active");
-    _chatPageModeScrape = null;
+    state._chatPageModeScrape = null;
     scrapeModeRow.style.display = "none";
     strictRow.style.display = "none";
     setPageUrlRow("hide");
@@ -1935,7 +1924,7 @@ async function renderChat() {
     pageChatHistory = [];
     scrapeModeRow.style.display = "";
     strictRow.style.display = "";
-    _chatPageModeScrape = scrapeCurrentPage;
+    state._chatPageModeScrape = scrapeCurrentPage;
     updateChatTitle("page");
     await scrapeCurrentPage();
   });
@@ -1944,7 +1933,7 @@ async function renderChat() {
 
   const sourceBanner = el("div", { className: "chat-source-banner", style: "display:none" });
 
-  panelBody.append(header, modeRow, scrapeModeRow, strictRow, pageUrlRow, sourceBanner, meta, log, status, inputWrap, webHint, toolbar);
+  state.panelBody.append(header, modeRow, scrapeModeRow, strictRow, pageUrlRow, sourceBanner, meta, log, status, inputWrap, webHint, toolbar);
 
   function updateWebHintVisibility() {
     webHint.style.display = chatMode === "vault" ? "" : "none";
@@ -1957,7 +1946,7 @@ async function renderChat() {
     chatMode = src.type;
     activeSource = src;
     sourceChatHistory = [];
-    _chatPageModeScrape = null;
+    state._chatPageModeScrape = null;
     header.style.display = "none";
     modeRow.style.display = "none";
     scrapeModeRow.style.display = "none";
@@ -1987,7 +1976,7 @@ async function renderChat() {
     vaultBtn.classList.remove("active");
     scrapeModeRow.style.display = "";
     strictRow.style.display = "";
-    _chatPageModeScrape = scrapeCurrentPage;
+    state._chatPageModeScrape = scrapeCurrentPage;
     setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
     updateChatTitle("page");
   }
@@ -2032,7 +2021,7 @@ async function renderChat() {
   }
 
   function showEmptyState(message, withOptionsLink = true) {
-    panelBody.replaceChildren();
+    state.panelBody.replaceChildren();
     const wrap = el("div", { className: "chat-empty-state" });
     wrap.append(el("p", { textContent: message }));
     if (withOptionsLink) {
@@ -2040,7 +2029,7 @@ async function renderChat() {
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
     }
-    panelBody.append(wrap);
+    state.panelBody.append(wrap);
   }
 
   async function loadVaultHistory(vaultId) {
@@ -2440,12 +2429,12 @@ async function renderChat() {
 }
 
 async function renderVaultExplorer() {
-  panelTitle.textContent = "Vault-Explorer";
+  state.panelTitle.textContent = "Vault-Explorer";
 
   // pendingToolOptions wird in openTool() direkt nach renderer()-Aufruf
   // auf null gesetzt — synchron lesen, bevor das erste await passiert.
-  const initialFile = pendingToolOptions?.initialFile || null;
-  const initialVaultId = pendingToolOptions?.vaultId || null;
+  const initialFile = state.pendingToolOptions?.initialFile || null;
+  const initialVaultId = state.pendingToolOptions?.vaultId || null;
 
   const httpBase = await getHttpBase();
 
@@ -2487,7 +2476,7 @@ async function renderVaultExplorer() {
   const viewerBox = el("div", { className: "vault-viewer", style: "display:none" });
   const status = el("div", { className: "tool-status" });
 
-  panelBody.append(header, breadcrumb, listBox, viewerBox, status);
+  state.panelBody.append(header, breadcrumb, listBox, viewerBox, status);
 
   // Floating Vault-Chat Button — opens classic Karpathy chat for current vault
   const fab = el("button", {
@@ -2496,7 +2485,7 @@ async function renderVaultExplorer() {
     title: "Mit Vault chatten (Karpathy)",
     textContent: "💬",
   });
-  panelBody.append(fab);
+  state.panelBody.append(fab);
   fab.addEventListener("click", () => {
     openTool("chat");
   });
@@ -2821,15 +2810,15 @@ async function renderVaultExplorer() {
         findNext.addEventListener("click", () => jumpTo(currentHit + 1));
 
         // Strg+F fokussiert die In-Datei-Suche (leak-frei: alten Handler ersetzen).
-        if (panelBody._vaultFindKeyHandler) {
-          document.removeEventListener("keydown", panelBody._vaultFindKeyHandler);
+        if (state.panelBody._vaultFindKeyHandler) {
+          document.removeEventListener("keydown", state.panelBody._vaultFindKeyHandler);
         }
         const onFindKey = (e) => {
           if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
             if (findInput.isConnected) { e.preventDefault(); findInput.focus(); findInput.select(); }
           }
         };
-        panelBody._vaultFindKeyHandler = onFindKey;
+        state.panelBody._vaultFindKeyHandler = onFindKey;
         document.addEventListener("keydown", onFindKey);
 
         const viewerActions = el("div", { className: "vault-viewer-actions" });
@@ -3014,15 +3003,15 @@ async function renderVaultExplorer() {
     ta.addEventListener("scroll", syncScroll);
     backdrop.textContent = ta.value;
 
-    if (panelBody._vaultFindKeyHandler) {
-      document.removeEventListener("keydown", panelBody._vaultFindKeyHandler);
+    if (state.panelBody._vaultFindKeyHandler) {
+      document.removeEventListener("keydown", state.panelBody._vaultFindKeyHandler);
     }
     const onFindKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
         if (findInput.isConnected) { e.preventDefault(); findInput.focus(); findInput.select(); }
       }
     };
-    panelBody._vaultFindKeyHandler = onFindKey;
+    state.panelBody._vaultFindKeyHandler = onFindKey;
     document.addEventListener("keydown", onFindKey);
 
     const actionsEl = el("div", { className: "vault-editor-actions" });
@@ -3071,13 +3060,13 @@ async function renderVaultExplorer() {
     const data = await res.json();
     const vaults = data.vaults || [];
     if (!vaults.length) {
-      panelBody.replaceChildren();
+      state.panelBody.replaceChildren();
       const wrap = el("div", { className: "chat-empty-state" });
       wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
       const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
-      panelBody.append(wrap);
+      state.panelBody.append(wrap);
       return;
     }
     vaultSelect.replaceChildren();
@@ -3110,8 +3099,8 @@ const VH_SEVERITY = {
 
 
 async function renderVaultHealth() {
-  panelTitle.textContent = "Vault-Gesundheit";
-  const initialVaultId = pendingToolOptions?.vaultId || null;
+  state.panelTitle.textContent = "Vault-Gesundheit";
+  const initialVaultId = state.pendingToolOptions?.vaultId || null;
   const httpBase = await getHttpBase();
 
   const header = el("div", { className: "chat-header" });
@@ -3123,7 +3112,7 @@ async function renderVaultHealth() {
   const upgradeBox = el("div", { className: "vh-upgrade", style: "display:none" });
   const listBox = el("div", { className: "vh-list" });
   const status = el("div", { className: "tool-status" });
-  panelBody.append(header, summary, upgradeBox, listBox, status);
+  state.panelBody.append(header, summary, upgradeBox, listBox, status);
 
   let currentVaultId = null;
 
@@ -3279,13 +3268,13 @@ async function renderVaultHealth() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const vaults = (await res.json()).vaults || [];
     if (!vaults.length) {
-      panelBody.replaceChildren();
+      state.panelBody.replaceChildren();
       const wrap = el("div", { className: "chat-empty-state" });
       wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
       const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
-      panelBody.append(wrap);
+      state.panelBody.append(wrap);
       return;
     }
     vaultSelect.replaceChildren();
@@ -3343,8 +3332,8 @@ const NOTES_TOOLS = new Set(["scratchpad", "todos", "bookmarks"]);
 // --- Playlists Tool -----------------------------------------------------
 
 async function renderPlaylistsTool() {
-  panelTitle.textContent = "Playlists";
-  panelBody.replaceChildren();
+  state.panelTitle.textContent = "Playlists";
+  state.panelBody.replaceChildren();
 
   const status = el("div", { className: "tool-status" });
   const toolbar = el("div", { className: "playlist-toolbar" });
@@ -3357,7 +3346,7 @@ async function renderPlaylistsTool() {
   captureYtBtn.addEventListener("click", () => captureHighlightedYoutubeTabs());
   toolbar.append(newBtn, captureYtBtn);
   const listWrap = el("div", { className: "playlist-list" });
-  panelBody.append(toolbar, status, listWrap);
+  state.panelBody.append(toolbar, status, listWrap);
 
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
@@ -3461,8 +3450,8 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
 }
 
 async function renderPlaylistDetail(name, saeule) {
-  panelTitle.textContent = `${name} (${saeule})`;
-  panelBody.replaceChildren();
+  state.panelTitle.textContent = `${name} (${saeule})`;
+  state.panelBody.replaceChildren();
 
   const toolbar = el("div", { className: "playlist-toolbar" });
   const backBtn = el("button", { type: "button", textContent: "← zurück" });
@@ -3479,7 +3468,7 @@ async function renderPlaylistDetail(name, saeule) {
   const status = el("div", { className: "tool-status" });
   const orchestrationStatus = el("div", { className: "orchestration-status hidden" });
   const itemsWrap = el("div", { className: "playlist-items-detail" });
-  panelBody.append(toolbar, status, orchestrationStatus, itemsWrap);
+  state.panelBody.append(toolbar, status, orchestrationStatus, itemsWrap);
 
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
@@ -3867,9 +3856,9 @@ function showRemoveDialog({ httpBase, vaultId, playlistName, saeule, item, onDon
 let bookmarksState = { all: [], search: "", activeTag: null };
 
 async function renderBookmarksTool() {
-  panelTitle.textContent = "Bookmarks";
-  panelBody.replaceChildren();
-  const pendingAction = pendingToolOptions?.action;
+  state.panelTitle.textContent = "Bookmarks";
+  state.panelBody.replaceChildren();
+  const pendingAction = state.pendingToolOptions?.action;
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
   const toolbar = el("div", { className: "playlist-toolbar" });
@@ -3891,7 +3880,7 @@ async function renderBookmarksTool() {
   searchWrap.append(searchInput);
   const tagCloud = el("div", { className: "tag-cloud" });
   const listWrap = el("div", { className: "bookmark-list" });
-  panelBody.append(vaultHint, toolbar, searchWrap, tagCloud, status, listWrap);
+  state.panelBody.append(vaultHint, toolbar, searchWrap, tagCloud, status, listWrap);
 
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
@@ -4452,8 +4441,8 @@ function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
 // ── Sprint 3: Web-Tools ──────────────────────────────────────────────────────
 
 function renderPageScrape() {
-  panelTitle.textContent = "Page-Scrape";
-  const pendingAction = pendingToolOptions?.action;
+  state.panelTitle.textContent = "Page-Scrape";
+  const pendingAction = state.pendingToolOptions?.action;
 
   let scrapeMode = pendingAction === "scrape_full" ? "full" : "content";
 
@@ -4671,11 +4660,11 @@ function renderPageScrape() {
     });
   });
 
-  panelBody.append(urlRow, scrapeModeRow, runBtn, status, chatBtn, output, copyBtn, promoteSection);
+  state.panelBody.append(urlRow, scrapeModeRow, runBtn, status, chatBtn, output, copyBtn, promoteSection);
 }
 
 function renderSeoCheck() {
-  panelTitle.textContent = "SEO-Check";
+  state.panelTitle.textContent = "SEO-Check";
 
   const runBtn = el("button", { textContent: "Aktiven Tab analysieren" });
   const status = el("div", { className: "tool-status" });
@@ -4750,11 +4739,11 @@ function renderSeoCheck() {
     }
   });
 
-  panelBody.append(runBtn, status, output);
+  state.panelBody.append(runBtn, status, output);
 }
 
 function renderImageAnalyse() {
-  panelTitle.textContent = "Image-Analyse";
+  state.panelTitle.textContent = "Image-Analyse";
 
   const runBtn = el("button", { textContent: "Bilder analysieren" });
   const status = el("div", { className: "tool-status" });
@@ -4836,11 +4825,11 @@ function renderImageAnalyse() {
     }
   });
 
-  panelBody.append(runBtn, status, summary, list);
+  state.panelBody.append(runBtn, status, summary, list);
 }
 
 function renderColorPicker() {
-  panelTitle.textContent = "Color-Picker";
+  state.panelTitle.textContent = "Color-Picker";
 
   const runBtn = el("button", { textContent: "Farben extrahieren" });
   const status = el("div", { className: "tool-status" });
@@ -4944,12 +4933,12 @@ function renderColorPicker() {
   const btnRow = el("div");
   btnRow.style.cssText = "display:flex;gap:8px;";
   btnRow.append(runBtn, eyeBtn);
-  panelBody.append(btnRow, eyeResult, status, output);
+  state.panelBody.append(btnRow, eyeResult, status, output);
 }
 
 function renderScreenshot() {
-  panelTitle.textContent = "Screenshot + Annotation";
-  const pendingAction = pendingToolOptions?.action;
+  state.panelTitle.textContent = "Screenshot + Annotation";
+  const pendingAction = state.pendingToolOptions?.action;
   const initialShotMode = pendingAction === "shot_area" ? "area"
     : pendingAction === "shot_full" ? "full"
     : "visible";
@@ -4986,7 +4975,7 @@ function renderScreenshot() {
     { id: "arrow", label: "→ Pfeil" },
     { id: "text", label: "T Text" },
   ];
-  let activeTool = "pen";
+  let drawTool = "pen";
 
   annotToolDefs.forEach(({ id, label }) => {
     const btn = el("button", { textContent: label });
@@ -4994,7 +4983,7 @@ function renderScreenshot() {
     btn.dataset.tool = id;
     btn.addEventListener("click", () => {
       if (cropMode) return;
-      activeTool = id;
+      drawTool = id;
       Object.values(toolBtns).forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
     });
@@ -5145,7 +5134,7 @@ function renderScreenshot() {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    if (activeTool === "text") {
+    if (drawTool === "text") {
       drawing = false;
       const text = prompt("Text eingeben:");
       if (!text) return;
@@ -5155,7 +5144,7 @@ function renderScreenshot() {
       return;
     }
     saveUndo();
-    if (activeTool === "pen") {
+    if (drawTool === "pen") {
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
     } else {
@@ -5185,7 +5174,7 @@ function renderScreenshot() {
     }
 
     if (!drawing) return;
-    if (activeTool === "pen") {
+    if (drawTool === "pen") {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
       return;
@@ -5194,9 +5183,9 @@ function renderScreenshot() {
     ctx.strokeStyle = colorPicker.value;
     ctx.lineWidth = parseInt(sizeSelect.value, 10);
     ctx.lineCap = "round";
-    if (activeTool === "rect") {
+    if (drawTool === "rect") {
       ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
-    } else if (activeTool === "arrow") {
+    } else if (drawTool === "arrow") {
       drawArrow(startX, startY, pos.x, pos.y);
     }
   });
@@ -5205,13 +5194,13 @@ function renderScreenshot() {
     if (cropMode) return;
     if (!drawing) return;
     drawing = false;
-    if (activeTool === "pen") ctx.closePath();
+    if (drawTool === "pen") ctx.closePath();
     snapshot = null;
   });
 
   canvas.addEventListener("mouseleave", () => {
     if (cropMode) return;
-    if (drawing && activeTool === "pen") { drawing = false; ctx.closePath(); }
+    if (drawing && drawTool === "pen") { drawing = false; ctx.closePath(); }
   });
 
   undoBtn.addEventListener("click", () => {
@@ -5366,7 +5355,7 @@ function renderScreenshot() {
     a.click();
   });
 
-  panelBody.append(modeRow, runBtn, status, cropActions, toolbar, canvas, actions);
+  state.panelBody.append(modeRow, runBtn, status, cropActions, toolbar, canvas, actions);
 
   if (autoRun) setTimeout(() => runBtn.click(), 0);
 }
@@ -5374,7 +5363,7 @@ function renderScreenshot() {
 // ── URL-Extraktor ────────────────────────────────────────────────────────────
 
 function renderUrlExtractor() {
-  panelTitle.textContent = "URL-Extraktor";
+  state.panelTitle.textContent = "URL-Extraktor";
 
   const filterRow = el("label", { className: "checkbox-row" });
   const filterCb = el("input", { type: "checkbox" });
@@ -5436,7 +5425,7 @@ function renderUrlExtractor() {
       renderOutput();
       status.textContent = `${data.count || 0} URLs gefunden`;
       status.className = "tool-status success";
-      panelBody.querySelector(".url-source-row")?.remove();
+      state.panelBody.querySelector(".url-source-row")?.remove();
       const sourceRow = el("div", { className: "url-source-row" });
       sourceRow.append(el("span", { className: "url-source-label", textContent: "Quelle:" }));
       try {
@@ -5538,7 +5527,7 @@ function renderUrlExtractor() {
   const promoteSection = el("div");
   promoteSection.append(promoteBtn, promoteForm);
 
-  panelBody.append(filterRow, runBtn, status, formatTabs, output, copyBtn, promoteSection);
+  state.panelBody.append(filterRow, runBtn, status, formatTabs, output, copyBtn, promoteSection);
 }
 
 // ── Image-Generator (Gemini Nano Banana) ─────────────────────────────────────
@@ -5581,7 +5570,7 @@ function fileToInput(file) {
 }
 
 async function renderImageGenerator() {
-  panelTitle.textContent = "Image-Generator";
+  state.panelTitle.textContent = "Image-Generator";
 
   const httpBase = await getHttpBase();
   const imgUrl = (rel) => `${httpBase}/tools/image_generated/${rel}`;
@@ -5869,7 +5858,7 @@ async function renderImageGenerator() {
     }
   });
 
-  panelBody.append(modelRow, promptArea, inputsStrip, inputControls, genBtn, status, outputWrap, historyWrap);
+  state.panelBody.append(modelRow, promptArea, inputsStrip, inputControls, genBtn, status, outputWrap, historyWrap);
   renderInputs();
   renderHistory();
   await loadGallery();
@@ -5898,7 +5887,7 @@ async function renderImageGenerator() {
     }
   };
   chrome.storage.onChanged.addListener(pickListener);
-  currentToolCleanup = () => chrome.storage.onChanged.removeListener(pickListener);
+  state.currentToolCleanup = () => chrome.storage.onChanged.removeListener(pickListener);
 }
 
 // ── Guten-Morgen-Briefing ────────────────────────────────────────────────────
@@ -6745,20 +6734,20 @@ function hideBrainHint() {
 
 chrome.tabs.onActivated.addListener(() => {
   checkActiveTabForYoutube();
-  if (_chatPageModeScrape) _chatPageModeScrape();
+  if (state._chatPageModeScrape) state._chatPageModeScrape();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (info.status !== "complete" || !_chatPageModeScrape) return;
+  if (info.status !== "complete" || !state._chatPageModeScrape) return;
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (tab?.id === tabId) _chatPageModeScrape();
+    if (tab?.id === tabId) state._chatPageModeScrape();
   });
 });
 
 // --- Dokument-Ingest ---
 
 async function renderDocumentIngest() {
-  panelTitle.textContent = "Dokument-Ingest";
+  state.panelTitle.textContent = "Dokument-Ingest";
 
   const SUBFOLDERS = ["artikel", "eigene-notizen", "kunden-input", "chat-archive"];
 
@@ -6825,5 +6814,5 @@ async function renderDocumentIngest() {
     }
   });
 
-  panelBody.replaceChildren(fileInput, titleInput, subfolderSelect, uploadBtn, status, resultBox);
+  state.panelBody.replaceChildren(fileInput, titleInput, subfolderSelect, uploadBtn, status, resultBox);
 }
