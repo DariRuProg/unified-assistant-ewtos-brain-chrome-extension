@@ -46,6 +46,13 @@ EDITABLE_KEYS = {
     "chat_tts_enabled",
     "chat_show_sources",
     "api_key",
+    # video-brain Sync
+    "video_brain_supabase_url",
+    "video_brain_supabase_anon_key",
+    "video_brain_supabase_service_key",
+    "video_brain_supabase_user_id",
+    "video_brain_license_key",
+    "youtube_proxy_url",
 }
 SECRET_KEYS = {
     "anthropic_api_key",
@@ -56,6 +63,9 @@ SECRET_KEYS = {
     "youtube_api_key",
     "elevenlabs_api_key",
     "api_key",
+    # video-brain — Service-Key + License sind Secrets, URL+anon_key+user_id nicht
+    "video_brain_supabase_service_key",
+    "video_brain_license_key",
 }
 SECRET_ENV_MAP = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
@@ -65,6 +75,12 @@ SECRET_ENV_MAP = {
     "gemini_api_key": "GEMINI_API_KEY",
     "youtube_api_key": "YOUTUBE_API_KEY",
     "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+    "video_brain_supabase_url": "VIDEO_BRAIN_SUPABASE_URL",
+    "video_brain_supabase_anon_key": "VIDEO_BRAIN_SUPABASE_ANON_KEY",
+    "video_brain_supabase_service_key": "VIDEO_BRAIN_SUPABASE_SERVICE_KEY",
+    "video_brain_supabase_user_id": "VIDEO_BRAIN_SUPABASE_USER_ID",
+    "video_brain_license_key": "VIDEO_BRAIN_LICENSE_KEY",
+    "youtube_proxy_url": "YOUTUBE_PROXY_URL",
 }
 
 _cache: dict[str, Any] | None = None

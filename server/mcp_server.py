@@ -32,6 +32,7 @@ from tools import (
     transcript_writer,
     vault_audit,
     videos,
+    web_scraper,
     wiki_reader,
 )
 
@@ -474,6 +475,22 @@ def pull_transcript_via_extension(url: str) -> dict:
         }
     except httpx.HTTPStatusError as e:
         return {"ok": False, "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+
+
+# --- Web-Scrape (Playwright, server-seitig — keine WS-Bridge nötig) --------
+
+@mcp.tool()
+async def scrape_url(url: str, mode: str = "content") -> dict:
+    """Scrapt eine öffentliche URL via Playwright (System-Chrome) zu Markdown.
+
+    Rendert JavaScript voll und klickt Accordeons/FAQs nativ auf — erfasst auch
+    lazy-rendered Inhalte (Radix/React), die der Browser-Extension-Scraper nicht
+    lesen kann. Läuft komplett im Server-Prozess, braucht keine Chrome-Extension.
+
+    `mode`: 'content' (Hauptinhalt, Navigation/Footer gestrippt) oder 'full'.
+    Returns: {ok: bool, data: {markdown, url, title, wordCount, mode}, error?: str}
+    """
+    return await web_scraper.scrape_url(url, mode)
 
 
 if __name__ == "__main__":

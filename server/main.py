@@ -42,6 +42,7 @@ from tools import image_generator as image_generator_tool
 from tools import blueprint as blueprint_tool
 from tools import setup_agent as setup_agent_tool
 from tools import vault_audit as vault_audit_tool
+from tools import web_scraper
 import auth
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -284,6 +285,19 @@ class PageScrapeRequest(BaseModel):
 async def page_scrape_endpoint(req: PageScrapeRequest = None) -> dict[str, Any]:
     mode = req.mode if req else "content"
     result = await bridge.call("page_scrape", {"mode": mode})
+    if not result.get("ok"):
+        raise HTTPException(500, result.get("error", "Tool call failed"))
+    return result.get("data", {})
+
+
+class ScrapeUrlRequest(BaseModel):
+    url: str
+    mode: str = "content"
+
+
+@app.post("/tools/scrape_url")
+async def scrape_url_endpoint(req: ScrapeUrlRequest) -> dict[str, Any]:
+    result = await web_scraper.scrape_url(req.url, req.mode)
     if not result.get("ok"):
         raise HTTPException(500, result.get("error", "Tool call failed"))
     return result.get("data", {})
@@ -1162,6 +1176,12 @@ class SettingsUpdate(BaseModel):
     elevenlabs_voice_id: str | None = None
     chat_tts_enabled: bool | None = None
     chat_show_sources: bool | None = None
+    # video-brain Sync
+    video_brain_supabase_url: str | None = None
+    video_brain_supabase_anon_key: str | None = None
+    video_brain_supabase_service_key: str | None = None
+    video_brain_supabase_user_id: str | None = None
+    video_brain_license_key: str | None = None
 
 
 def _public_settings() -> dict[str, Any]:
@@ -1188,6 +1208,12 @@ def _public_settings() -> dict[str, Any]:
         "elevenlabs_voice_id": s.get("elevenlabs_voice_id") or "",
         "chat_tts_enabled": bool(s.get("chat_tts_enabled", False)),
         "chat_show_sources": bool(s.get("chat_show_sources", True)),
+        # video-brain Sync
+        "video_brain_supabase_url": s.get("video_brain_supabase_url") or "",
+        "video_brain_supabase_anon_key_set": bool(s.get("video_brain_supabase_anon_key")),
+        "video_brain_supabase_service_key_set": bool(s.get("video_brain_supabase_service_key")),
+        "video_brain_supabase_user_id": s.get("video_brain_supabase_user_id") or "",
+        "video_brain_license_key_set": bool(s.get("video_brain_license_key")),
     }
 
 
@@ -1200,6 +1226,53 @@ def settings_get() -> dict[str, Any]:
 def settings_post(req: SettingsUpdate) -> dict[str, Any]:
     settings.update(req.model_dump(exclude_none=True))
     return _public_settings()
+
+
+# --- video-brain Sync --------------------------------------------------------
+
+from tools import video_brain_sync as _vb_sync
+
+@app.post("/tools/video-brain/resync/{vault_id}")
+def video_brain_resync(vault_id: str) -> dict[str, Any]:
+    """Spiegelt alle Video-Pages eines Vaults in die Kunden-Supabase.
+    Für Erstbefüllung und Reparatur — Lizenz-Check läuft intern."""
+    return _vb_sync.resync_all(vault_id)
+
+
+@app.post("/tools/video-brain/sync/{vault_id}/{slug}")
+def video_brain_sync_one(vault_id: str, slug: str, saeule: str = "ki") -> dict[str, Any]:
+    """Spiegelt ein einzelnes Video manuell."""
+    return _vb_sync.sync_video(vault_id, slug, saeule)
+
+
+@app.get("/tools/video-brain/status")
+def video_brain_status() -> dict[str, Any]:
+    """Zeigt ob video-brain konfiguriert ist (keine Secrets im Klartext)."""
+    s = settings.all()
+    return {
+        "configured": bool(
+            s.get("video_brain_supabase_url")
+            and s.get("video_brain_supabase_service_key")
+            and s.get("video_brain_supabase_user_id")
+        ),
+        "license_key_set": bool(s.get("video_brain_license_key")),
+        "supabase_url": s.get("video_brain_supabase_url") or "",
+        "supabase_user_id": s.get("video_brain_supabase_user_id") or "",
+    }
+
+
+@app.get("/tools/video-brain/pair-config")
+def video_brain_pair_config() -> dict[str, str]:
+    """Gibt BYO-Supabase-Config für QR-Pairing zurück.
+    supabase_anon_key ist public-safe (Client-Key, designed für Browser-Zugriff).
+    supabase_service_key wird NICHT zurückgegeben."""
+    s = settings.all()
+    return {
+        "supabase_url": s.get("video_brain_supabase_url") or "",
+        "supabase_anon_key": s.get("video_brain_supabase_anon_key") or "",
+        "user_id": s.get("video_brain_supabase_user_id") or "",
+        "license_key": s.get("video_brain_license_key") or "",
+    }
 
 
 # --- Vaults ---------------------------------------------------------------

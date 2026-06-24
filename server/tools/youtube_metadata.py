@@ -13,6 +13,8 @@ import subprocess
 
 import httpx
 
+import settings as _settings
+
 logger = logging.getLogger("ewtosbrain.youtube_metadata")
 
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -86,9 +88,14 @@ def _best_thumbnail(info: dict, video_id: str | None) -> str | None:
 
 def _fetch_ytdlp(url: str) -> dict:
     """yt-dlp via subprocess. Leeres dict bei Fehler/Nichtvorhandensein."""
+    proxy = _settings.get("youtube_proxy_url") or ""
+    cmd = ["yt-dlp", "--dump-json", "--no-warnings", "--skip-download"]
+    if proxy:
+        cmd += ["--proxy", proxy]
+    cmd.append(url)
     try:
         proc = subprocess.run(
-            ["yt-dlp", "--dump-json", "--no-warnings", "--skip-download", url],
+            cmd,
             capture_output=True,
             text=True,
             timeout=60,

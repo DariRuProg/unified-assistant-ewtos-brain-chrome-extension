@@ -92,6 +92,15 @@ def trusted_keys_file() -> Path:
     return bundle_dir() / "blueprint_trusted_keys.json"
 
 
+def scrape_dom_js() -> Path:
+    """Gemeinsamer DOM→Markdown-Konverter (extension/tools/scrape_dom.js), den
+    der Playwright-Scraper per page.evaluate injiziert. Dev: Repo-Pfad neben
+    server/. Frozen: muss als data-File ins Bundle-Root (ewtosbrain.spec)."""
+    if is_frozen():
+        return bundle_dir() / "scrape_dom.js"
+    return Path(__file__).parent.parent / "extension" / "tools" / "scrape_dom.js"
+
+
 # --- Migration -------------------------------------------------------------
 
 def migrate_legacy_data() -> list[str]:

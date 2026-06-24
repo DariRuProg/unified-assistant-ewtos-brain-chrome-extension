@@ -121,6 +121,13 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
     today = date.today().isoformat()
     videos._rewrite_frontmatter_field(p, "zuletzt", today)
 
+    # Non-blocking video-brain sync: Vault-Write darf nie durch Sync-Fehler scheitern
+    try:
+        from tools import video_brain_sync
+        video_brain_sync.sync_video(vault_id, video_slug, s)
+    except Exception:
+        pass
+
     return {
         "summarized": True,
         "video_slug": video_slug,
