@@ -3,7 +3,7 @@ import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
 import { renderMarkdown } from '../markdown.js';
-import { openTool } from '../sidepanel.js';
+import { openTool } from '../modules/tool-runner.js';
 
 export async function renderChat() {
   state.panelTitle.textContent = "Chat mit Vault";

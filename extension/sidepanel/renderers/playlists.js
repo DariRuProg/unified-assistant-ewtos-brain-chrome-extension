@@ -3,7 +3,7 @@ import { el, makeYouTubeThumb } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
 import { renderMarkdown, openInObsidian } from '../markdown.js';
-import { openTool } from '../sidepanel.js';
+import { openTool } from '../modules/tool-runner.js';
 
 export async function checkPendingPlaylistPick() {
   const { playlistPick } = await chrome.storage.local.get("playlistPick");

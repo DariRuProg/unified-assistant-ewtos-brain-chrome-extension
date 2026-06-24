@@ -1,19 +1,12 @@
 // Sidepanel: connection status, tab navigation, tool runner. ewtos.com
-import { el, extractYouTubeId, makeYouTubeThumb } from './dom.js';
-import { renderMarkdown, escapeHtml, inlineMd, buildNestedList, obsidianUri, openInObsidian, renderLineDiff } from './markdown.js';
+import { renderMarkdown } from './markdown.js';
 import { applyTheme, updateDarkToggleIcon } from './modules/theme.js';
 import { state } from './state.js';
-import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from './modules/api.js';
-import { renderYoutubeTranscript } from './renderers/youtube.js';
-import { renderBookmarksTool } from './renderers/bookmarks.js';
-import { renderNotesFile, renderTodos } from './renderers/notes.js';
-import { renderChat } from './renderers/chat.js';
-import { renderVaultExplorer, renderVaultHealth } from './renderers/vault.js';
-import { renderPageScrape, renderSeoCheck, renderImageAnalyse, renderColorPicker, renderScreenshot, renderUrlExtractor, renderImageGenerator } from './renderers/web-tools.js';
-import { checkPendingBrainPick, checkActiveTabForYoutube, renderDocumentIngest } from './renderers/briefing.js';
-import { renderPlaylistsTool, checkPendingPlaylistPick } from './renderers/playlists.js';
-import { statusDot, tabsNav, content, openOptions, reconnectBtn, quickActions, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, burgerMenu } from './modules/dom-refs.js';
-import { renderTabs, renderToolList, renderQuickActions, openQuickEditor, loadQuickRowPref, applyQuickRowVisibility, GROUPS, QUICK_SPECIAL, DEFAULT_QUICK_SLOTS, QUICK_SLOT_COUNT } from './modules/nav.js';
+import { checkPendingBrainPick, checkActiveTabForYoutube } from './renderers/briefing.js';
+import { checkPendingPlaylistPick } from './renderers/playlists.js';
+import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, burgerMenu } from './modules/dom-refs.js';
+import { renderTabs, renderToolList, renderQuickActions, openQuickEditor, loadQuickRowPref, applyQuickRowVisibility, QUICK_SLOT_COUNT } from './modules/nav.js';
+import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -59,28 +52,6 @@ chrome.storage.onChanged.addListener((changes) => {
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
 
-const TOOL_RENDERERS = {
-  youtube_transcript: renderYoutubeTranscript,
-  scratchpad: () => renderNotesFile("scratchpad", {
-    title: "Note-Taker",
-    placeholder: "Notizen, Gedanken, Skizzen... wird automatisch gespeichert.",
-  }),
-  todos: renderTodos,
-  chat: renderChat,
-  chat_web: renderChat,
-  vault_explorer: renderVaultExplorer,
-  vault_health: renderVaultHealth,
-  playlists: renderPlaylistsTool,
-  bookmarks: renderBookmarksTool,
-  page_scrape: renderPageScrape,
-  seo_check: renderSeoCheck,
-  image_analyse: renderImageAnalyse,
-  color_picker: renderColorPicker,
-  screenshot: renderScreenshot,
-  url_extractor: renderUrlExtractor,
-  image_generator: renderImageGenerator,
-  ingest_document: renderDocumentIngest,
-};
 
 
 
@@ -246,50 +217,8 @@ document.addEventListener("click", () => {
 
 
 
-function runToolCleanup() {
-  if (state.currentToolCleanup) {
-    try { state.currentToolCleanup(); } catch {}
-    state.currentToolCleanup = null;
-  }
-}
 
-export function openTool(toolId, options = null) {
-  const renderer = TOOL_RENDERERS[toolId];
-  if (!renderer) return;
-  runToolCleanup();
-  for (const g of GROUPS) {
-    if (g.tools.some((t) => t.id === toolId)) { state.activeTab = g.id; break; }
-  }
-  state.activeTool = toolId;
-  state.pendingToolOptions = options;
-  renderTabs();
-  renderQuickActions();
-  applyQuickRowVisibility();
 
-  content.replaceChildren();
-  const view = el("section", { className: "tool-view" });
-  const header = el("div", { className: "tool-header" });
-  const back = el("button", { type: "button", className: "back", textContent: "←" });
-  back.addEventListener("click", closeTool);
-  state.panelTitle = el("h3");
-  header.append(back, state.panelTitle);
-  state.panelBody = el("div", { className: "tool-body" });
-  view.append(header, state.panelBody);
-  content.append(view);
-
-  renderer();
-  state.pendingToolOptions = null;
-}
-
-function closeTool() {
-  runToolCleanup();
-  state.activeTool = null;
-  state.panelTitle = null;
-  state.panelBody = null;
-  renderQuickActions();
-  applyQuickRowVisibility();
-  renderToolList();
-}
 
 
 

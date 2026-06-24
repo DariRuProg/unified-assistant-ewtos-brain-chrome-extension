@@ -2,7 +2,7 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
-import { openTool } from '../sidepanel.js';
+import { openTool } from '../modules/tool-runner.js';
 
 export function renderYoutubeTranscript() {
   state.panelTitle.textContent = "YouTube-Transcript";

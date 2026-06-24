@@ -2,7 +2,7 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { content, quickActions, tabsNav } from './dom-refs.js';
-import { openTool } from '../sidepanel.js';
+import { openTool } from './tool-runner.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
 
 export const GROUPS = [

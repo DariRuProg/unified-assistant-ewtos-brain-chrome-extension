@@ -2,7 +2,7 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVaultId } from '../modules/api.js';
-import { openTool } from '../sidepanel.js';
+import { openTool } from '../modules/tool-runner.js';
 
 const IMAGE_GEN_MODELS = [
   ["gemini-2.5-flash-image", "Nano Banana (2.5 Flash) — schnell"],
