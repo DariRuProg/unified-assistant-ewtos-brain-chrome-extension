@@ -46,6 +46,7 @@ from tools import web_scraper
 import auth
 from bridge import bridge, SERVER_VERSION, _version_compatible
 from routers import notes
+from routers import images
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="EwtosBrain", version=SERVER_VERSION, lifespan=lifespan)
 app.middleware("http")(auth.api_key_middleware)
 app.include_router(notes.router)
+app.include_router(images.router)
 
 
 @app.get("/")
@@ -280,58 +282,6 @@ async def url_extractor_endpoint(req: UrlExtractorRequest) -> dict[str, Any]:
     if not result.get("ok"):
         raise HTTPException(500, result.get("error", "Tool call failed"))
     return result.get("data", {})
-
-
-# --- Image-Generator (Gemini Nano Banana) --------------------------------
-
-class ImageGenRequest(BaseModel):
-    prompt: str
-    input_images: list[str] = []  # base64-Strings oder data-URLs
-    input_files: list[str] = []   # relative Pfade in generated_images/
-    model: str | None = None      # None -> Setting/Default
-
-
-@app.post("/tools/image_generate")
-def image_generate_endpoint(req: ImageGenRequest) -> dict[str, Any]:
-    return image_generator_tool.generate_image(
-        prompt=req.prompt,
-        input_images=req.input_images,
-        input_files=req.input_files,
-        model=req.model,
-    )
-
-
-@app.get("/tools/image_gallery")
-def image_gallery_list() -> dict[str, Any]:
-    return {"items": image_generator_tool.list_index()}
-
-
-@app.delete("/tools/image_gallery/{rel_path:path}")
-def image_gallery_delete(rel_path: str) -> dict[str, Any]:
-    try:
-        return image_generator_tool.delete_entry(rel_path)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-@app.post("/tools/image_gallery/open")
-def image_gallery_open() -> dict[str, Any]:
-    try:
-        return image_generator_tool.open_output_folder()
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/tools/image_generated/{rel_path:path}")
-def image_generated_serve(rel_path: str):
-    from fastapi.responses import Response
-    try:
-        data, mime = image_generator_tool.read_generated_file(rel_path)
-    except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return Response(content=data, media_type=mime)
 
 
 # --- Playlists ------------------------------------------------------------
