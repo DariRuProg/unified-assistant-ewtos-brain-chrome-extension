@@ -1,15 +1,8 @@
 """EwtosBrain server — FastAPI + WebSocket bridge to Chrome extension."""
 from __future__ import annotations
 
-import asyncio
 import logging
-import subprocess
-import sys
-import uuid
-from datetime import date
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 
@@ -18,31 +11,11 @@ import paths
 paths.migrate_legacy_data()
 load_dotenv(paths.env_file())
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 import chat
 import config
 import settings
-from tools import youtube_metadata as youtube_metadata_tool
-from tools import tts_elevenlabs as tts_tool
-from tools import bookmarks as bookmarks_tool
-from tools import notes_file, wiki_reader
-from tools import playlists as playlists_tool
-from tools import playlist_orchestrator
-from tools import summary_writer, transcript_writer
-from tools import youtube_transcript_fallback
-from tools import briefing as briefing_tool
-from tools import auto_tagger
-from tools import raw_promoter
-from tools import pdf_ingest as pdf_ingest_tool
-from tools import saeulen as saeulen_tool
-from tools import image_generator as image_generator_tool
-from tools import blueprint as blueprint_tool
-from tools import setup_agent as setup_agent_tool
-from tools import vault_audit as vault_audit_tool
-from tools import web_scraper
 import auth
 from bridge import bridge, SERVER_VERSION, _version_compatible
 from routers import notes
