@@ -26,11 +26,11 @@ from routers import brain
 from routers import video_brain
 from routers import vaults
 from routers import blueprints
-from routers import chat
+from routers import chat as chat_router
 from routers import web_tools
 from routers import vault_files
 from routers import videos
-from routers import settings
+from routers import settings as settings_router
 from routers import system
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -58,11 +58,11 @@ app.include_router(brain.router)
 app.include_router(video_brain.router)
 app.include_router(vaults.router)
 app.include_router(blueprints.router)
-app.include_router(chat.router)
+app.include_router(chat_router.router)
 app.include_router(web_tools.router)
 app.include_router(vault_files.router)
 app.include_router(videos.router)
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 app.include_router(system.router)
 
 
