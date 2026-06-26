@@ -808,6 +808,27 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
   loadBriefingProfiles();
 });
 
+// ----- Settings Tabs -----
+
+function setupSettingsTabs() {
+  const tabs = [...document.querySelectorAll(".settings-tab")];
+  const sections = [...document.querySelectorAll(".settings-section")];
+  if (!tabs.length) return;
+
+  function activate(tabId) {
+    tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tabId));
+    sections.forEach((s) => s.classList.toggle("active", s.dataset.tab === tabId));
+    chrome.storage.local.set({ optionsActiveTab: tabId });
+  }
+
+  tabs.forEach((t) => t.addEventListener("click", () => activate(t.dataset.tab)));
+
+  chrome.storage.local.get("optionsActiveTab", ({ optionsActiveTab }) => {
+    const valid = tabs.some((t) => t.dataset.tab === optionsActiveTab);
+    activate(valid ? optionsActiveTab : "general");
+  });
+}
+
 // ----- Initial load -----
 
 (async () => {
@@ -819,6 +840,8 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
     langSelect.value = getLang();
     langSelect.addEventListener("change", () => setLang(langSelect.value));
   }
+
+  setupSettingsTabs();
 
   const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "showQuickRow", "uiIconScale", "uiFontScale", "explorerShowHidden", "explorerAllowDelete"]);
   for (const key of CLIENT_FIELDS) {

@@ -735,5 +735,10 @@
   "options.blueprint_source_imported": "Imported",
   "options.briefing_profile_delete_confirm": "Delete profile \"{name}\"?",
   "options.blueprint_signed": "✓ Signed",
-  "options.blueprint_unsigned": "⚠ Unsigned"
+  "options.blueprint_unsigned": "⚠ Unsigned",
+  "options.tab_general": "General",
+  "options.tab_connection": "Connection",
+  "options.tab_ai": "AI & Providers",
+  "options.tab_vault": "Vault",
+  "options.tab_tools": "Tools"
 }
