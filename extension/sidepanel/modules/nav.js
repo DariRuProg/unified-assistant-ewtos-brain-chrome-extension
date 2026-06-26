@@ -6,7 +6,8 @@ import { openTool } from './tool-runner.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
 import { t } from '../../i18n/i18n.js';
 
-export const GROUPS = [
+export function getGroups() {
+  return [
   {
     id: "chat",
     label: t("nav.chat"),
@@ -89,43 +90,48 @@ export const GROUPS = [
       },
     ],
   },
-];
+  ];
+}
 
-export const QUICK_SPECIAL = {
-  _briefing:   { label: t("nav.briefing"),    icon: "☀", run: () => showBriefingPanel() },
-  _save_page:  { label: t("nav.save_to_vault"), icon: "📥", run: () => showQuickSavePage() },
-};
+export function getQuickSpecial() {
+  return {
+    _briefing:   { label: t("nav.briefing"),    icon: "☀", run: () => showBriefingPanel() },
+    _save_page:  { label: t("nav.save_to_vault"), icon: "📥", run: () => showQuickSavePage() },
+  };
+}
 
 export const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
 
 function getQuickOption(id) {
   if (!id) return null;
-  if (QUICK_SPECIAL[id]) {
-    return { id, label: QUICK_SPECIAL[id].label, icon: QUICK_SPECIAL[id].icon, special: true };
+  const special = getQuickSpecial();
+  if (special[id]) {
+    return { id, label: special[id].label, icon: special[id].icon, special: true };
   }
-  for (const g of GROUPS) {
-    const t = g.tools.find((x) => !x.separator && x.id === id);
-    if (t) return { id: t.id, label: t.label, icon: t.icon || "•", special: false };
+  for (const g of getGroups()) {
+    const tool = g.tools.find((x) => !x.separator && x.id === id);
+    if (tool) return { id: tool.id, label: tool.label, icon: tool.icon || "•", special: false };
   }
   return null;
 }
 
 function getAllQuickOptions() {
   const opts = [];
-  for (const [id, meta] of Object.entries(QUICK_SPECIAL)) {
+  for (const [id, meta] of Object.entries(getQuickSpecial())) {
     opts.push({ id, label: meta.label, icon: meta.icon, special: true });
   }
-  for (const g of GROUPS) {
-    for (const t of g.tools) {
-      if (t.separator || t.soon) continue;
-      opts.push({ id: t.id, label: t.label, icon: t.icon || "•", group: g.label });
+  for (const g of getGroups()) {
+    for (const tool of g.tools) {
+      if (tool.separator || tool.soon) continue;
+      opts.push({ id: tool.id, label: tool.label, icon: tool.icon || "•", group: g.label });
     }
   }
   return opts;
 }
 
 function runQuickSlot(id) {
-  if (QUICK_SPECIAL[id]) return QUICK_SPECIAL[id].run();
+  const special = getQuickSpecial();
+  if (special[id]) return special[id].run();
   openTool(id);
 }
 
@@ -264,13 +270,13 @@ export function applyQuickRowVisibility() {
 export function updateCrumb() {
   if (!viewCrumb) return;
   if (state.activeTool || state.activeTab === "all") { viewCrumb.textContent = ""; return; }
-  const g = GROUPS.find((x) => x.id === state.activeTab);
+  const g = getGroups().find((x) => x.id === state.activeTab);
   viewCrumb.textContent = g ? " / " + g.label : "";
 }
 
 export function renderSidebar() {
   navSidebarMain.replaceChildren();
-  const items = [{ id: "all", label: t("nav.all"), icon: "▦" }, ...GROUPS];
+  const items = [{ id: "all", label: t("nav.all"), icon: "▦" }, ...getGroups()];
   for (const it of items) {
     const b = el("button", {
       type: "button",
@@ -337,7 +343,7 @@ export function renderToolList() {
   if (q) {
     const results = el("ul", { className: "tools" });
     const matches = [];
-    for (const g of GROUPS) {
+    for (const g of getGroups()) {
       for (const t of g.tools) {
         const hay = `${t.label} ${t.hint || ""} ${g.label}`.toLowerCase();
         if (hay.includes(q)) matches.push(t);
@@ -355,7 +361,7 @@ export function renderToolList() {
   const list = el("ul", { className: "tools" });
 
   if (state.activeTab === "all") {
-    for (const g of GROUPS) {
+    for (const g of getGroups()) {
       const sec = el("li", { className: "tool-sec" });
       sec.append(el("span", { className: "ts-ico", textContent: g.icon }));
       sec.append(el("span", { className: "ts-label", textContent: g.label }));
@@ -363,7 +369,7 @@ export function renderToolList() {
       for (const t of g.tools) list.append(buildToolRow(t));
     }
   } else {
-    const group = GROUPS.find((g) => g.id === state.activeTab);
+    const group = getGroups().find((g) => g.id === state.activeTab);
     if (!group) return;
     const head = el("li", { className: "group-head" });
     const title = el("span", { className: "gh-title" });

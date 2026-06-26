@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { el } from '../dom.js';
 import { content } from './dom-refs.js';
-import { GROUPS, renderSidebar, renderToolList, renderQuickActions, applyQuickRowVisibility, updateCrumb } from './nav.js';
+import { getGroups, renderSidebar, renderToolList, renderQuickActions, applyQuickRowVisibility, updateCrumb } from './nav.js';
 import { renderYoutubeTranscript } from '../renderers/youtube.js';
 import { renderNotesFile, renderTodos } from '../renderers/notes.js';
 import { renderChat } from '../renderers/chat.js';
@@ -49,7 +49,7 @@ export function openTool(toolId, options = null) {
   state.searchQuery = "";
   const searchEl = document.getElementById("tool-search");
   if (searchEl) searchEl.value = "";
-  for (const g of GROUPS) {
+  for (const g of getGroups()) {
     if (g.tools.some((t) => t.id === toolId)) { state.activeTab = g.id; break; }
   }
   state.activeTool = toolId;
