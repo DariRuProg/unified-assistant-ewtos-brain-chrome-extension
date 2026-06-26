@@ -627,9 +627,8 @@ async function showBrainModal({ url, tabId, prefetched }) {
     return;
   }
 
-  // Lade Säulen + (auto_brain ODER nur auto_tag bei prefetched) parallel
+  // auto_brain ODER nur auto_tag (bei prefetched)
   let brainData = null;
-  let saeulenList = [];
   try {
     let dataPromise;
     if (prefetched) {
@@ -668,15 +667,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
         return j.data || j;
       });
     }
-    const [bd, saeulenRes] = await Promise.all([
-      dataPromise,
-      fetch(`${httpBase}/vaults/${vaultId}/saeulen`),
-    ]);
-    brainData = bd;
-    if (saeulenRes.ok) {
-      const sd = await saeulenRes.json().catch(() => ({}));
-      saeulenList = sd.saeulen || [];
-    }
+    brainData = await dataPromise;
   } catch (err) {
     status.textContent = "Fehler: " + (err.message || err);
     status.className = "tool-status error";
@@ -693,15 +684,9 @@ async function showBrainModal({ url, tabId, prefetched }) {
   const confidenceCls = { high: "high", medium: "medium", low: "low" }[suggestion.confidence] || "low";
   dialog.append(el("span", { className: `confidence-badge ${confidenceCls}`, textContent: suggestion.confidence || "?" }));
 
-  // Säulen-Dropdown
-  const saeulaLabel = el("label", { textContent: "Säule" });
-  const saeulaSelect = el("select");
-  saeulenList.forEach(s => {
-    const opt = new Option(s, s);
-    if (s === suggestion.saeule) opt.selected = true;
-    saeulaSelect.append(opt);
-  });
-  if (!saeulenList.length) saeulaSelect.append(new Option(suggestion.saeule || "knowledge-library/ai", suggestion.saeule || "knowledge-library/ai"));
+  // Thema (freies Frontmatter-Feld, kein Ordner/Whitelist)
+  const themaLabel = el("label", { textContent: "Thema (frei)" });
+  const themaInput = el("input", { type: "text", placeholder: "z.B. ai, marketing, health", value: suggestion.thema || "" });
 
   // Playlist-Dropdown mit Lazy-Load
   const playlistLabel = el("label", { textContent: "Playlist" });
@@ -709,9 +694,9 @@ async function showBrainModal({ url, tabId, prefetched }) {
   const playlistNewInput = el("input", { type: "text", placeholder: "Neue Playlist eingeben..." });
   playlistNewInput.style.display = "none";
 
-  async function loadPlaylists(saeule) {
+  async function loadPlaylists() {
     try {
-      const res = await fetch(`${httpBase}/tools/playlists/${vaultId}?saeule=${encodeURIComponent(saeule)}`);
+      const res = await fetch(`${httpBase}/tools/playlists/${vaultId}`);
       const data = await res.json().catch(() => ({}));
       const items = data.items || [];
       playlistSelect.replaceChildren();
@@ -724,14 +709,13 @@ async function showBrainModal({ url, tabId, prefetched }) {
     } catch {}
   }
 
-  saeulaSelect.addEventListener("change", () => loadPlaylists(saeulaSelect.value));
   playlistSelect.addEventListener("change", () => {
     playlistNewInput.style.display = playlistSelect.value === "__new__" ? "block" : "none";
   });
 
-  await loadPlaylists(saeulaSelect.value);
+  await loadPlaylists();
 
-  dialog.append(saeulaLabel, saeulaSelect, playlistLabel, playlistSelect, playlistNewInput);
+  dialog.append(themaLabel, themaInput, playlistLabel, playlistSelect, playlistNewInput);
 
   if (suggestion.tags && suggestion.tags.length) {
     dialog.append(el("div", { className: "brain-modal-tags", textContent: suggestion.tags.map(t => `#${t}`).join(" ") }));
@@ -752,7 +736,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
   const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "primary" });
 
   saveBtn.addEventListener("click", async () => {
-    const saeule = saeulaSelect.value;
+    const thema = themaInput.value.trim() || null;
     const playlistName = playlistSelect.value === "__new__"
       ? playlistNewInput.value.trim()
       : playlistSelect.value;
@@ -773,7 +757,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
           url,
           title: brainData.title || url,
           transcript: brainData.transcript || "",
-          saeule,
+          thema,
           playlist_name: playlistName,
           tags: suggestion.tags || [],
           ingest_now: ingestCb.checked,

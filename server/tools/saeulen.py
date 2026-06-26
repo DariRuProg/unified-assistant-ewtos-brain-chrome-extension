@@ -1,64 +1,22 @@
-"""Säulen-Whitelist für Video/Playlist-Pfade.
+"""Vault-Pfad-Konstanten + Raw-Subpath-Safety.
 
-EwtosBrain legt Videos und Playlists pro Wiki-Säule ab (`wiki/<saeule>/videos/`,
-`wiki/<saeule>/playlists/`). Diese Datei ist die Single Source of Truth für
-erlaubte Säulen-Werte.
+Videos, Playlists und Creators leben flach unter `wiki/resources/` (PARA).
+Die Themen-Achse ist KEINE Ordner-Ebene mehr, sondern das freie Frontmatter-Feld
+`thema` — es wird bewusst NICHT validiert (kein Whitelist), damit keine
+Code↔CLAUDE.md-Synchronisationspflicht entsteht. Empfohlenes Vokabular steht
+nur in der Vault-CLAUDE.md.
 
-WICHTIG: Diese Liste muss synchron mit dem Säulen-Schema in der
-Vault-CLAUDE.md (Trennlinien-Sektion) bleiben. Wenn dort eine neue
-Säule angelegt wird, hier ergänzen.
-
-Sperrzonen (`personal/*`) sind absichtlich NICHT in der Whitelist —
-Videos dort gehören manuell angelegt, nicht via App.
+`safe_raw_subpath` bleibt als Traversal-Schutz für die generischen raw/-Tools.
 """
 from __future__ import annotations
 
-ALLOWED_SAEULEN: set[str] = {
-    "knowledge-library/ai",
-    "knowledge-library/industries",
-    "knowledge-library/marketing",
-    "knowledge-library/health",
-    "knowledge-library/spirituality",
-}
+from pathlib import Path
 
-ALLOWED_SUB_SAEULEN: set[str] = {
-    "knowledge-library/industries/medical",
-    "knowledge-library/industries/ecommerce",
-    "knowledge-library/industries/crafts-trades",
-    "knowledge-library/ai/chatbots",
-    "knowledge-library/marketing/seo",
-    "work/crafts/web-development/skills/wordpress",
-    "work/crafts/web-development/skills/nextjs",
-    "work/crafts/web-development/skills/automation",
-    "work/crafts/web-development/skills/claude-code",
-    "work/crafts/web-development/skills/chrome-extensions",
-    "work/crafts/web-development/skills/mcp-api",
-}
-
-DEFAULT_SAEULE = "knowledge-library/ai"
-
-
-def validate_saeule(saeule: str | None) -> str:
-    """Prüft, ob die angegebene Säule erlaubt ist. Bei None: Default 'knowledge-library/ai'.
-
-    Akzeptiert nur Werte aus ALLOWED_SAEULEN oder ALLOWED_SUB_SAEULEN.
-    Personal-Bereiche werden mit klarer Fehlermeldung abgelehnt.
-    """
-    s = (saeule or DEFAULT_SAEULE).strip().strip("/")
-    if not s:
-        return DEFAULT_SAEULE
-    if s.startswith("personal") or s.startswith("personal/"):
-        raise ValueError(
-            f"Säule '{s}' ist Sperrzone — Videos in wiki/personal/* manuell anlegen, "
-            f"EwtosBrain schreibt dort nicht."
-        )
-    if s in ALLOWED_SAEULEN or s in ALLOWED_SUB_SAEULEN:
-        return s
-    allowed = sorted(ALLOWED_SAEULEN | ALLOWED_SUB_SAEULEN)
-    raise ValueError(
-        f"Unbekannte Säule '{s}'. Erlaubt: {', '.join(allowed)}. "
-        f"Neue Säulen erst in Vault-CLAUDE.md anlegen, dann hier ergänzen."
-    )
+RESOURCES_REL = Path("wiki") / "resources"
+VIDEOS_REL = RESOURCES_REL / "videos"
+PLAYLISTS_REL = RESOURCES_REL / "playlists"
+CREATORS_REL = RESOURCES_REL / "creators"
+RAW_YOUTUBE_REL = Path("raw") / "youtube"
 
 
 def safe_raw_subpath(folder: str | None) -> str:
@@ -74,18 +32,3 @@ def safe_raw_subpath(folder: str | None) -> str:
     if s == "personal" or s.startswith("personal/"):
         raise ValueError("Ordner 'personal' ist Sperrzone — dort schreibt EwtosBrain nicht")
     return s
-
-
-def typ_from_saeule(saeule: str) -> str:
-    """Leitet den Obsidian-`typ`-Frontmatter-Wert aus der Säule ab.
-
-    work/* → "arbeit", alles andere → "ki" (Default).
-    """
-    if (saeule or "").startswith("work"):
-        return "arbeit"
-    return "ki"
-
-
-def list_allowed() -> list[str]:
-    """Sortierte Liste aller erlaubten Säulen-Werte (für UI-Dropdowns oder Doku)."""
-    return sorted(ALLOWED_SAEULEN | ALLOWED_SUB_SAEULEN)

@@ -1,6 +1,5 @@
-"""Summary-Writer — generiert eine Video-Zusammenfassung via Anthropic API
-und schreibt sie in die Master-Video-Page (ersetzt die "noch keine
-Zusammenfassung"-Sektionen).
+"""Summary-Writer — generiert eine Video-Zusammenfassung via LLM und schreibt sie
+in die Master-Video-Page (ersetzt die "noch keine Zusammenfassung"-Sektion).
 """
 from __future__ import annotations
 
@@ -10,19 +9,18 @@ from pathlib import Path
 
 import settings
 from llm_client import effective_llm_config, get_backend
-from tools import saeulen, videos
+from tools import videos
 
 
 SUMMARY_PROMPT = """Du bekommst gleich das Transcript eines Videos (typisch YouTube). Erstelle eine knappe, dichte Zusammenfassung auf Deutsch in genau diesem Format:
 
-## Kern-Insights
+**Kern-Insights**
 - 3-7 Bullet-Points mit den wichtigsten Erkenntnissen, je 1 Satz, präzise
 - jede Aussage muss substanziell sein (nicht Zusammenfassung der Zusammenfassung)
 
-## Zusammenfassung
-2-4 Absätze die den Inhalt logisch nachvollziehbar machen. Wer sollte zusehen, was lernt man, was sind die Kern-Argumente. Konkret, kein Marketing-Sprech.
+Danach 2-4 Absätze die den Inhalt logisch nachvollziehbar machen. Wer sollte zusehen, was lernt man, was sind die Kern-Argumente. Konkret, kein Marketing-Sprech.
 
-Antworte NUR mit diesen beiden Sektionen — keine Einleitung, kein "Hier ist die Zusammenfassung". Beginne direkt mit `## Kern-Insights`.
+Antworte NUR mit dem Inhalt (Bullets + Absätze) — KEINE Markdown-Überschrift (kein `##`), keine Einleitung, kein "Hier ist die Zusammenfassung". Beginne direkt mit `**Kern-Insights**`.
 
 Titel: {title}
 Channel: {channel}
@@ -55,12 +53,11 @@ def _read_transcript(vault_path: str, transcript_rel: str) -> str:
     return text
 
 
-def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) -> dict:
-    s = saeulen.validate_saeule(saeule)
+def generate_summary(vault_id: str, video_slug: str) -> dict:
     v = _vault(vault_id)
-    video = videos.get_video(vault_id, video_slug, s)
+    video = videos.get_video(vault_id, video_slug)
     if not video:
-        raise ValueError(f"Video '{video_slug}' nicht gefunden in Säule '{s}'")
+        raise ValueError(f"Video '{video_slug}' nicht gefunden")
     fm = video["frontmatter"]
     transcript_path = fm.get("transcript")
     if not transcript_path or not str(transcript_path).strip():
@@ -68,7 +65,7 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
 
     transcript_text = _read_transcript(v["path"], str(transcript_path))
     title = fm.get("titel") or video_slug
-    channel = fm.get("youtuber") or "(unbekannt)"
+    channel = fm.get("kanal") or "(unbekannt)"
 
     _, model = effective_llm_config()
     model = model or "claude-haiku-4-5"
@@ -86,10 +83,10 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
     )
     summary_text = "".join(b.text for b in response.content if b.type == "text").strip()
     if not summary_text:
-        raise RuntimeError("Anthropic-Antwort war leer")
+        raise RuntimeError("LLM-Antwort war leer")
 
-    # Replace the placeholder sections in the video page
-    p = videos.video_path(vault_id, video_slug, s)
+    # Replace the placeholder section in the video page
+    p = videos.video_path(vault_id, video_slug)
     page_text = p.read_text(encoding="utf-8")
 
     # Split frontmatter
@@ -105,16 +102,17 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
         fm_block = ""
         body = page_text
 
-    # Replace from "## Kern-Insights" up to "## Transcript" (or end)
+    # Replace from "## Zusammenfassung" up to "## Transkript" (or end)
+    replacement = "## Zusammenfassung\n" + summary_text.rstrip() + "\n\n"
     new_body = re.sub(
-        r"## Kern-Insights[\s\S]*?(?=## Transcript|\Z)",
-        summary_text.rstrip() + "\n\n",
+        r"## Zusammenfassung[\s\S]*?(?=## Transkript|\Z)",
+        replacement,
         body,
         count=1,
     )
     if new_body == body:
         # Pattern not found — append at end
-        new_body = body.rstrip() + "\n\n" + summary_text + "\n"
+        new_body = body.rstrip() + "\n\n" + replacement
 
     p.write_text(fm_block + new_body, encoding="utf-8")
 
@@ -124,14 +122,13 @@ def generate_summary(vault_id: str, video_slug: str, saeule: str | None = None) 
     # Non-blocking video-brain sync: Vault-Write darf nie durch Sync-Fehler scheitern
     try:
         from tools import video_brain_sync
-        video_brain_sync.sync_video(vault_id, video_slug, s)
+        video_brain_sync.sync_video(vault_id, video_slug)
     except Exception:
         pass
 
     return {
         "summarized": True,
         "video_slug": video_slug,
-        "saeule": s,
         "model": model,
         "summary_chars": len(summary_text),
         "input_tokens": response.usage.input_tokens,

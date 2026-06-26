@@ -388,6 +388,64 @@
     <input id="elevenlabsVoiceId" type="text" placeholder="21m00Tcm4TlvDq8ikWAM" autocomplete="off" />
   </div>
 
+  <h2>video-brain &amp; Lizenz</h2>
+  <div class="hint" style="margin-bottom: 12px;">
+    Spiegelt fertig analysierte Videos in deine eigene Supabase, damit die video-brain Mobile-App sie lesen kann.
+    Jeder Kunde bringt sein eigenes Supabase-Projekt mit — deine Videodaten bleiben bei dir.
+  </div>
+
+  <div class="field external-service-card">
+    <label for="videoBrainSupabaseUrl">Supabase Projekt-URL</label>
+    <div class="hint">
+      Z.B. <code>https://abcdefgh.supabase.co</code> — zu finden unter Project Settings → API.
+    </div>
+    <input id="videoBrainSupabaseUrl" type="url" placeholder="https://....supabase.co" autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="videoBrainSupabaseAnonKey">Supabase anon key <span id="videoBrainSupabaseAnonKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint">
+      Öffentlicher Leseschlüssel — wird von der video-brain PWA genutzt. Project Settings → API → anon public.
+    </div>
+    <input id="videoBrainSupabaseAnonKey" type="password" placeholder="eyJ..." autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="videoBrainSupabaseServiceKey">Supabase service_role key <span id="videoBrainSupabaseServiceKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint">
+      Schreibschlüssel für den Sync (bypassed RLS). Wird serverseitig gespeichert, nie an die PWA weitergegeben.
+      Project Settings → API → service_role secret.
+    </div>
+    <input id="videoBrainSupabaseServiceKey" type="password" placeholder="eyJ..." autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="videoBrainSupabaseUserId">Auth User-UUID</label>
+    <div class="hint">
+      Die UUID des Supabase-Auth-Users der video-brain PWA nutzt (Authentication → Users).
+      ewtos-brain setzt <code>user_id</code> auf diesen Wert, damit die PWA die Daten per RLS sehen kann.
+    </div>
+    <input id="videoBrainSupabaseUserId" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label for="videoBrainLicenseKey">Lizenz-Key <span id="videoBrainLicenseApiKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint">
+      Von ewtos.com ausgestellter Lizenz-Key für video-brain. Wird vor jedem Sync gegen die zentrale Lizenzdatenbank geprüft.
+    </div>
+    <input id="videoBrainLicenseKey" type="password" placeholder="vb_..." autocomplete="off" />
+  </div>
+
+  <div class="field external-service-card">
+    <label>video-brain PWA verbinden</label>
+    <div class="hint">QR-Code mit der video-brain App scannen — alle Einstellungen werden automatisch übernommen. Zuerst oben speichern.</div>
+    <button id="generateVideoBrainQrBtn" type="button">QR-Code generieren</button>
+    <div id="videoBrainQrContainer" style="margin-top:12px; display:none; text-align:center;">
+      <div id="videoBrainQrCanvas"></div>
+      <div class="hint" style="margin-top:6px; word-break:break-all;" id="videoBrainQrHint"></div>
+    </div>
+  </div>
+
   <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
   <span id="saved" class="saved" hidden></span>
 
@@ -444,10 +502,30 @@
 
   <div class="field">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-      <input id="hideQuickRowOnTool" type="checkbox" />
-      <span>Quick-Buttons ausblenden, wenn ein Tool geöffnet ist</span>
+      <input id="showQuickRow" type="checkbox" />
+      <span>Favoriten-Leiste im Sidepanel anzeigen</span>
     </label>
-    <div class="hint">Spart Platz im Sidepanel, sobald du in einem Tool arbeitest. Standardmäßig aus.</div>
+    <div class="hint">Zeigt oben in der „Alles"-Ansicht eine Leiste mit deinen Quick-Slots. Standardmäßig aus — auch über das ⭐-Icon in der Seitenleiste umschaltbar.</div>
+  </div>
+
+  <div class="field">
+    <label for="uiIconScale">Icon-Größe (Tool-Liste)</label>
+    <select id="uiIconScale">
+      <option value="1">Klein</option>
+      <option value="1.15">Mittel</option>
+      <option value="1.35">Groß</option>
+    </select>
+    <div class="hint">Größe der Icons in der Tool-Liste des Sidepanels.</div>
+  </div>
+
+  <div class="field">
+    <label for="uiFontScale">Schriftgröße (Tool-Liste)</label>
+    <select id="uiFontScale">
+      <option value="0.9">Klein</option>
+      <option value="1">Mittel</option>
+      <option value="1.15">Groß</option>
+    </select>
+    <div class="hint">Größe der Schrift in der Tool-Liste des Sidepanels.</div>
   </div>
 
   <h2>Explorer</h2>
@@ -494,6 +572,7 @@
     <div id="blueprint-import-status" class="vault-status" style="margin-top: 8px;"></div>
   </div>
 
+  <script src="../lib/qrcode.min.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

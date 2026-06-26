@@ -2,7 +2,7 @@
 import { el, makeYouTubeThumb } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
-import { renderMarkdown, openInObsidian } from '../markdown.js';
+import { renderMarkdown } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
 
 export async function checkPendingPlaylistPick() {
@@ -237,24 +237,24 @@ export async function renderPlaylistsTool() {
       listWrap.append(el("div", { className: "empty", textContent: "Noch keine Playlists. Mit '+ Neue Playlist' anlegen." }));
       return;
     }
-    // Group by saeule
+    // Group by thema (freies Frontmatter-Feld; PARA-Ordner sind flach)
     const groups = {};
     for (const p of items) {
-      const k = p.saeule || "knowledge-library/ai";
+      const k = p.thema || "(ohne Thema)";
       if (!groups[k]) groups[k] = [];
       groups[k].push(p);
     }
-    for (const saeule of Object.keys(groups).sort()) {
+    for (const thema of Object.keys(groups).sort()) {
       const section = el("div", { className: "playlist-group" });
-      section.append(el("h4", { className: "playlist-group-header", textContent: saeule }));
+      section.append(el("h4", { className: "playlist-group-header", textContent: thema }));
       const ul = el("ul", { className: "playlist-items" });
-      for (const p of groups[saeule]) {
+      for (const p of groups[thema]) {
         const li = el("li", { className: "playlist-item" });
         const main = el("div", { className: "playlist-item-main" });
         main.append(el("span", { className: "playlist-name", textContent: p.name }));
         main.append(el("span", { className: "playlist-count", textContent: `${p.item_count} Items` }));
         li.append(main);
-        li.addEventListener("click", () => renderPlaylistDetail(p.name, p.saeule));
+        li.addEventListener("click", () => renderPlaylistDetail(p.name));
         ul.append(li);
       }
       section.append(ul);
@@ -272,15 +272,14 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   dialog.append(el("h3", { textContent: "Neue Playlist anlegen" }));
 
   const nameInput = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
-  const themaInput = el("input", { type: "text", placeholder: "Thema (frei, optional)" });
-  const saeuleInput = el("input", { type: "text", placeholder: "Säule (z.B. knowledge-library/ai, work/crafts/web-development/skills/wordpress)", value: "knowledge-library/ai" });
+  const themaInput = el("input", { type: "text", placeholder: "Thema (frei, optional — z.B. ai, marketing, health)" });
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "playlist-picker-actions" });
   const cancel = el("button", { type: "button", textContent: "Abbrechen" });
   const ok = el("button", { type: "button", textContent: "Anlegen", className: "primary" });
   actions.append(cancel, ok);
 
-  dialog.append(nameInput, themaInput, saeuleInput, status, actions);
+  dialog.append(nameInput, themaInput, status, actions);
   overlay.append(dialog);
   document.body.append(overlay);
 
@@ -288,11 +287,10 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   ok.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     if (!name) { status.textContent = "Name ist Pflicht"; status.className = "tool-status error"; return; }
-    const saeule = saeuleInput.value.trim() || "knowledge-library/ai";
     const body = { name, thema: themaInput.value.trim() || null };
     ok.disabled = true; status.textContent = "lege an...";
     try {
-      const url = `${httpBase}/tools/playlists/${vaultId}?saeule=${encodeURIComponent(saeule)}`;
+      const url = `${httpBase}/tools/playlists/${vaultId}`;
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -312,8 +310,8 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   nameInput.focus();
 }
 
-async function renderPlaylistDetail(name, saeule) {
-  state.panelTitle.textContent = `${name} (${saeule})`;
+async function renderPlaylistDetail(name) {
+  state.panelTitle.textContent = name;
   state.panelBody.replaceChildren();
 
   const toolbar = el("div", { className: "playlist-toolbar" });
@@ -337,19 +335,16 @@ async function renderPlaylistDetail(name, saeule) {
   const vault = await getActiveVault(httpBase);
   if (!vault) { status.textContent = "Kein Vault."; return; }
   const vaultId = vault.id;
-  // Obsidian-Vault-Name = Ordnername (letztes Pfad-Segment), nicht der frei
-  // vergebene Anzeige-Name aus EwtosBrain — sonst greift obsidian://open nicht.
-  const vaultName = vault.path.split(/[\\/]/).filter(Boolean).pop() || vault.name;
 
   pullBtn.addEventListener("click", () => runPullPending({
-    httpBase, vaultId, playlistName: name, saeule,
+    httpBase, vaultId, playlistName: name,
     statusEl: orchestrationStatus, button: pullBtn,
-    onDone: () => renderPlaylistDetail(name, saeule),
+    onDone: () => renderPlaylistDetail(name),
   }));
 
   status.textContent = "lade...";
   try {
-    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(name)}?saeule=${encodeURIComponent(saeule)}`;
+    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(name)}`;
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -365,7 +360,7 @@ async function renderPlaylistDetail(name, saeule) {
       return;
     }
     for (const it of items) {
-      itemsWrap.append(renderVideoCard(httpBase, vaultId, vaultName, name, saeule, it));
+      itemsWrap.append(renderVideoCard(httpBase, vaultId, name, it));
     }
   } catch (err) {
     status.textContent = `Fehler: ${err.message || err}`;
@@ -373,7 +368,7 @@ async function renderPlaylistDetail(name, saeule) {
   }
 }
 
-function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it) {
+function renderVideoCard(httpBase, vaultId, playlistName, it) {
   const card = el("div", { className: "playlist-item-card" });
   const head = el("div", { className: "playlist-item-head" });
   const thumb = makeYouTubeThumb(it.url);
@@ -402,20 +397,20 @@ function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it)
     const chatBtn = el("button", { type: "button", textContent: "💬 Chat", className: "small" });
     chatBtn.addEventListener("click", () => openTool("chat", {
       sourceType: "video",
-      sourceRef: { vault_id: vaultId, slug, saeule },
+      sourceRef: { vault_id: vaultId, slug },
       sourceTitle: it.title,
     }));
     links.append(chatBtn);
 
-    const obsidianBtn = el("button", { type: "button", textContent: "✎ Obsidian", className: "small obsidian-button" });
-    obsidianBtn.addEventListener("click", () => openInObsidian(vaultName, it.page + ".md"));
-    links.append(obsidianBtn);
+    const explorerBtn = el("button", { type: "button", textContent: "📂 Explorer", className: "small" });
+    explorerBtn.addEventListener("click", () => openTool("vault_explorer", { initialFile: it.page + ".md", vaultId }));
+    links.append(explorerBtn);
   }
 
   const removeBtn = el("button", { type: "button", textContent: "Entfernen", className: "small" });
   removeBtn.addEventListener("click", () => showRemoveDialog({
-    httpBase, vaultId, playlistName, saeule, item: it,
-    onDone: () => renderPlaylistDetail(playlistName, saeule),
+    httpBase, vaultId, playlistName, item: it,
+    onDone: () => renderPlaylistDetail(playlistName),
   }));
   links.append(removeBtn);
   card.append(links);
@@ -441,7 +436,7 @@ function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it)
           }
           const data = await res.json();
           details.replaceChildren();
-          renderMasterPagePreview(details, data.content || "", httpBase, vaultId, vaultName);
+          renderMasterPagePreview(details, data.content || "", httpBase, vaultId);
           loaded = true;
         } catch (err) {
           details.textContent = `Fehler: ${err.message || err}`;
@@ -455,14 +450,14 @@ function renderVideoCard(httpBase, vaultId, vaultName, playlistName, saeule, it)
   return card;
 }
 
-function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName) {
+function renderMasterPagePreview(target, mdContent, httpBase, vaultId) {
   // Strip frontmatter
   let body = mdContent;
   if (body.startsWith("---")) {
     const end = body.indexOf("\n---", 3);
     if (end !== -1) body = body.slice(end + 4).replace(/^\n+/, "");
   }
-  // Find sections: ## Kern-Insights, ## Zusammenfassung, ## Transcript
+  // Find sections: ## Beschreibung, ## Zusammenfassung, ## Transkript
   const sections = {};
   const headerRe = /^##\s+(.+?)\s*$/gm;
   const positions = [];
@@ -476,14 +471,14 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
     sections[p.name] = body.slice(p.contentStart, next ? next.start : body.length).trim();
   }
 
-  const insights = sections["Kern-Insights"];
+  const beschreibung = sections["Beschreibung"];
   const summary = sections["Zusammenfassung"];
-  const transcript = sections["Transcript"];
+  const transcript = sections["Transkript"];
 
-  if (insights) {
-    target.append(el("h5", { className: "preview-h", textContent: "Kern-Insights" }));
+  if (beschreibung) {
+    target.append(el("h5", { className: "preview-h", textContent: "Beschreibung" }));
     const div = el("div", { className: "preview-md" });
-    div.innerHTML = renderMarkdown(insights);
+    div.innerHTML = renderMarkdown(beschreibung);
     target.append(div);
   }
   if (summary) {
@@ -493,7 +488,7 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
     target.append(div);
   }
   if (transcript) {
-    target.append(el("h5", { className: "preview-h", textContent: "Transcript" }));
+    target.append(el("h5", { className: "preview-h", textContent: "Transkript" }));
     // Transcript-Sektion ist meist nur ein Wikilink — extract und mache Vault-File-Read-Link
     const wl = transcript.match(/\[\[([^\]]+)\]\]/);
     if (wl) {
@@ -527,25 +522,25 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId, vaultName
         }
       });
       target.append(a);
-      const obsidianA = el("button", {
+      const explorerA = el("button", {
         type: "button",
-        textContent: "  •  in Obsidian öffnen",
+        textContent: "  •  im Explorer öffnen",
         className: "obsidian-link-btn",
       });
-      obsidianA.addEventListener("click", () => openInObsidian(vaultName, transcriptPath));
-      target.append(obsidianA);
+      explorerA.addEventListener("click", () => openTool("vault_explorer", { initialFile: transcriptPath, vaultId }));
+      target.append(explorerA);
     } else {
       const div = el("div", { className: "preview-md" });
       div.innerHTML = renderMarkdown(transcript);
       target.append(div);
     }
   }
-  if (!insights && !summary && !transcript) {
-    target.append(el("div", { className: "empty", textContent: "Noch keine Insights, Summary oder Transcript. Werden automatisch ergänzt sobald du das Video pullst oder im Wiki-Workflow ergänzt." }));
+  if (!beschreibung && !summary && !transcript) {
+    target.append(el("div", { className: "empty", textContent: "Noch keine Beschreibung, Summary oder Transkript. Werden automatisch ergänzt sobald du das Video pullst oder im Wiki-Workflow ergänzt." }));
   }
 }
 
-async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusEl, button, onDone }) {
+async function runPullPending({ httpBase, vaultId, playlistName, statusEl, button, onDone }) {
   // Custom-Dialog statt nativem confirm — wegen Summary-Checkbox
   const summarize = await showPullPendingDialog(playlistName);
   if (summarize === null) return; // Abbrechen
@@ -557,7 +552,7 @@ async function runPullPending({ httpBase, vaultId, playlistName, saeule, statusE
   statusEl.textContent = `Starte Orchestrierung${summarizeNote} — bitte Extension geöffnet halten und Browser nicht schließen…`;
 
   try {
-    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/pull_pending?saeule=${encodeURIComponent(saeule)}`;
+    const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/pull_pending`;
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -652,7 +647,7 @@ function formatOrchestrationResult(r) {
   return lines.join("\n");
 }
 
-function showRemoveDialog({ httpBase, vaultId, playlistName, saeule, item, onDone }) {
+function showRemoveDialog({ httpBase, vaultId, playlistName, item, onDone }) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker remove-dialog" });
   dialog.append(el("h3", { textContent: `'${item.title}' entfernen?` }));
@@ -680,7 +675,7 @@ function showRemoveDialog({ httpBase, vaultId, playlistName, saeule, item, onDon
     status.textContent = "läuft...";
     try {
       const matchValue = item.url || item.title;
-      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items/delete?saeule=${encodeURIComponent(saeule)}`;
+      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items/delete`;
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -804,9 +799,9 @@ function showMultiYoutubePicker(httpBase, vault, items) {
   // Neue Playlist Section
   const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neue Playlist anlegen:" });
   const newName = el("input", { type: "text", placeholder: "Name (z.B. Karpathy-Videos)", value: autoPlaylistName });
-  const newSaeule = el("input", { type: "text", placeholder: "Säule (default: knowledge-library/ai)", value: "knowledge-library/ai" });
+  const newThema = el("input", { type: "text", placeholder: "Thema (frei, optional — z.B. ai)" });
   const createBtn = el("button", { type: "button", textContent: "Anlegen + alle hinzufügen", className: "primary" });
-  dialog.append(sep, newName, newSaeule, createBtn);
+  dialog.append(sep, newName, newThema, createBtn);
 
   const cancelBtn = el("button", { type: "button", className: "secondary", textContent: "Abbrechen" });
   dialog.append(cancelBtn);
@@ -827,8 +822,8 @@ function showMultiYoutubePicker(httpBase, vault, items) {
       }
       for (const p of playlists) {
         const btn = el("button", { type: "button", className: "playlist-pick-btn" });
-        btn.textContent = `[${p.saeule}] ${p.name} (${p.item_count})`;
-        btn.addEventListener("click", () => bulkAddToPlaylist(httpBase, vault.id, p.name, p.saeule, items, status, () => overlay.remove()));
+        btn.textContent = `${p.thema ? "[" + p.thema + "] " : ""}${p.name} (${p.item_count})`;
+        btn.addEventListener("click", () => bulkAddToPlaylist(httpBase, vault.id, p.name, items, status, () => overlay.remove()));
         playlistList.append(btn);
       }
     } catch (err) {
@@ -838,15 +833,15 @@ function showMultiYoutubePicker(httpBase, vault, items) {
 
   createBtn.addEventListener("click", async () => {
     const name = newName.value.trim();
-    const saeule = newSaeule.value.trim() || "knowledge-library/ai";
+    const thema = newThema.value.trim() || null;
     if (!name) { status.textContent = "Name fehlt"; status.className = "tool-status error"; return; }
     createBtn.disabled = true;
     status.textContent = "lege Playlist an…";
     try {
-      const r = await fetch(`${httpBase}/tools/playlists/${vault.id}?saeule=${encodeURIComponent(saeule)}`, {
+      const r = await fetch(`${httpBase}/tools/playlists/${vault.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, thema }),
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
@@ -861,11 +856,11 @@ function showMultiYoutubePicker(httpBase, vault, items) {
       createBtn.disabled = false;
       return;
     }
-    await bulkAddToPlaylist(httpBase, vault.id, name, saeule, items, status, () => overlay.remove());
+    await bulkAddToPlaylist(httpBase, vault.id, name, items, status, () => overlay.remove());
   });
 }
 
-async function bulkAddToPlaylist(httpBase, vaultId, playlistName, saeule, items, statusEl, onDone) {
+async function bulkAddToPlaylist(httpBase, vaultId, playlistName, items, statusEl, onDone) {
   statusEl.textContent = `füge 0/${items.length} hinzu…`;
   statusEl.className = "tool-status";
   let added = 0, duplicate = 0;
@@ -873,7 +868,7 @@ async function bulkAddToPlaylist(httpBase, vaultId, playlistName, saeule, items,
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     try {
-      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items?saeule=${encodeURIComponent(saeule)}`;
+      const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items`;
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -23,9 +23,9 @@ def video_brain_resync(vault_id: str) -> dict[str, Any]:
 
 
 @router.post("/tools/video-brain/sync/{vault_id}/{slug}")
-def video_brain_sync_one(vault_id: str, slug: str, saeule: str = "ki") -> dict[str, Any]:
+def video_brain_sync_one(vault_id: str, slug: str) -> dict[str, Any]:
     """Spiegelt ein einzelnes Video manuell."""
-    return _vb_sync.sync_video(vault_id, slug, saeule)
+    return _vb_sync.sync_video(vault_id, slug)
 
 
 @router.get("/tools/video-brain/status")

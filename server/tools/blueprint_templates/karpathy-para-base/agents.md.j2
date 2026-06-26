@@ -17,8 +17,7 @@ vault/
 │   └─ todos.md
 │
 ├─ raw/                # immutable Quellen
-│   ├─ youtube/<channel>/<slug>.md
-│   ├─ transcripts/<datum>-<slug>.md
+│   ├─ youtube/<datum>-<slug>.md   # Video-Meta + Transkript inline
 │   ├─ artikel/<slug>.md
 │   ├─ eigene-notizen/<slug>.md
 │   ├─ kunden-input/<kunde>/<slug>.md
@@ -58,19 +57,26 @@ EwtosBrain darf **standardmäßig nur** in `inbox/` schreiben. Schreib-Zugriff a
 - Tags: Englisch, Kleinbuchstaben
 - Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`
 
+## Themen-Dimension
+
+Die Ordner sind flach (PARA). Das Sachgebiet wird **nicht** über Ordner abgebildet, sondern über das freie Frontmatter-Feld `thema` (z.B. `ai`, `marketing`, `health`, `web-development`). Es gibt keine Whitelist — wähle den treffendsten Slug. Filtern in Obsidian via Suche `thema: ai` oder Dataview.
+
 ## Frontmatter (Beispiele)
 
-Video-Master-Page:
+Video-Master-Page (Schema siehe `templates/video.md`):
 ```yaml
 ---
 typ: video
-bucket: resources
-topic: ai
 titel: <text>
 status: aktiv
 quelle_url: https://...
-youtuber: <handle>
-transcript: raw/transcripts/YYYY-MM-DD-<slug>.md
+video_id: <VIDEO_ID>
+thumbnail_url: https://i.ytimg.com/vi/<VIDEO_ID>/maxresdefault.jpg
+kanal: <Kanalname>
+thema: ai
+transcript: raw/youtube/YYYY-MM-DD-<slug>.md
+tags: [video]
+zuletzt: YYYY-MM-DD
 ---
 ```
 

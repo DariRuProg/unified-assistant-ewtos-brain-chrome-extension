@@ -323,8 +323,7 @@ def save_video_to_raw(
     url: str,
     title: str,
     transcript: str,
-    saeule: str,
-    playlist_name: str,
+    playlist_name: str = "",
     tags: list[str] | None = None,
     channel: str | None = None,
     duration: str | None = None,
@@ -333,11 +332,12 @@ def save_video_to_raw(
     upload_date: str | None = None,
     thumbnail_url: str | None = None,
     description: str | None = None,
+    thema: str | None = None,
 ) -> dict[str, Any]:
-    """Save a video transcript to vault/raw/<saeule>/<date>-<slug>.md.
+    """Save a video transcript to vault/raw/youtube/<date>-<slug>.md.
 
     Permissions: requires `write_raw` on the target vault.
-    Optionale Metadaten (kanal/dauer/aufrufe/likes/upload/thumbnail/beschreibung)
+    Optionale Metadaten (kanal/dauer/aufrufe/likes/upload/thumbnail/beschreibung/thema)
     werden nur geschrieben wenn vorhanden — sonst ehrlich weggelassen.
     Returns {raw_path, slug, vault}.
     """
@@ -350,12 +350,11 @@ def save_video_to_raw(
             f"In den Einstellungen aktivieren: 'EwtosBrain darf in raw/ schreiben'."
         )
 
-    saeule = saeulen.safe_raw_subpath(saeule)
     today = date.today().isoformat()
     slug = _slugify(title or url)
 
     vault_root = Path(vault["path"])
-    raw_dir = vault_root / "raw" / saeule
+    raw_dir = vault_root / "raw" / "youtube"
     raw_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{today}-{slug}.md"
     raw_file = raw_dir / filename
@@ -374,11 +373,12 @@ def save_video_to_raw(
         f"datum: {today}",
         f"quelle: {url}",
         f"titel: {title.strip() if title else ''}",
-        f"saeule: {saeule}",
         f"target_playlist: {playlist_name.strip() if playlist_name else ''}",
         f"tags: [{', '.join(tag_list)}]",
         "typ: video",
     ]
+    if thema:
+        frontmatter_lines.append(f"thema: {thema}")
     if channel:
         frontmatter_lines.append(f"kanal: {channel}")
     if duration:
@@ -405,7 +405,7 @@ def save_video_to_raw(
     body = "\n\n".join(parts) + "\n"
     raw_file.write_text(f"{frontmatter}\n\n{body}", encoding="utf-8")
 
-    raw_rel = f"raw/{saeule}/{raw_file.name}"
+    raw_rel = f"raw/youtube/{raw_file.name}"
     return {
         "raw_path": raw_rel,
         "slug": raw_file.stem,

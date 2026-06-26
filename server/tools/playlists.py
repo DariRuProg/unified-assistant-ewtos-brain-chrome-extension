@@ -1,15 +1,16 @@
-"""Playlists — themen-kuratierte Video-Sammlungen pro Wiki-Säule.
+"""Playlists — themen-kuratierte Video-Sammlungen unter wiki/resources/playlists/.
 
-Pfad-Schema: `wiki/<saeule>/playlists/<slug>.md`. Default-Säule ist `ki`.
-Jede Playlist ist eine .md mit H2-Item-Blöcken:
+Pfad-Schema: `wiki/resources/playlists/<slug>.md` (flach, PARA). Die Themen-Achse
+ist das freie Frontmatter-Feld `thema` (kein Ordner). Jede Playlist ist eine .md
+mit H2-Item-Blöcken:
     ## <Video-Titel>
     - **Channel:** <youtuber>
     - **Video:** <url>
-    - **Page:** [[wiki/<saeule>/videos/<slug>]]
+    - **Page:** [[wiki/resources/videos/<slug>]]
     - *(hinzugefügt YYYY-MM-DD)*
 
 Master-Daten (Summary, Transcript-Link, Metadata) liegen in der Video-Page
-(`wiki/<saeule>/videos/<slug>.md`). Playlists referenzieren nur.
+(`wiki/resources/videos/<slug>.md`). Playlists referenzieren nur.
 """
 from __future__ import annotations
 
@@ -30,9 +31,9 @@ ADDED_RE = re.compile(r"^-?\s*\*\(hinzugefügt\s+(\d{4}-\d{2}-\d{2})\)\*\s*$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
-def playlist_dir_rel(saeule: str) -> Path:
-    """Relativer Pfad zum Playlist-Ordner einer Säule (z.B. wiki/ki/playlists)."""
-    return Path("wiki") / saeule / "playlists"
+def playlist_dir_rel() -> Path:
+    """Relativer Pfad zum flachen Playlist-Ordner (wiki/resources/playlists)."""
+    return saeulen.PLAYLISTS_REL
 
 
 def _slugify(text: str) -> str:
@@ -52,22 +53,22 @@ def _vault_root(vault_id: str) -> Path:
     return Path(vault["path"])
 
 
-def _playlist_dir(vault_id: str, saeule: str) -> Path:
+def _playlist_dir(vault_id: str) -> Path:
     root = _vault_root(vault_id)
-    p = root / playlist_dir_rel(saeule)
+    p = root / playlist_dir_rel()
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def _playlist_path(vault_id: str, name: str, saeule: str) -> Path:
-    return _playlist_dir(vault_id, saeule) / f"{_slugify(name)}.md"
+def _playlist_path(vault_id: str, name: str) -> Path:
+    return _playlist_dir(vault_id) / f"{_slugify(name)}.md"
 
 
-def _update_playlist_index(root: Path, saeule: str, slug: str, name: str, thema: str | None) -> None:
-    """Trägt eine neue Playlist in wiki/<saeule>/playlists/index.md ein.
+def _update_playlist_index(root: Path, slug: str, name: str, thema: str | None) -> None:
+    """Trägt eine neue Playlist in wiki/resources/playlists/index.md ein.
     Legt index.md an falls sie nicht existiert. Kein Duplikat wenn Slug bereits verlinkt."""
-    index_path = root / "wiki" / saeule / "playlists" / "index.md"
-    entry_link = f"[[wiki/{saeule}/playlists/{slug}]]"
+    index_path = root / playlist_dir_rel() / "index.md"
+    entry_link = f"[[wiki/resources/playlists/{slug}]]"
     label = f"{name} ({thema})" if thema else name
     new_line = f"- {entry_link} — {label}"
 
@@ -88,14 +89,14 @@ def _update_playlist_index(root: Path, saeule: str, slug: str, name: str, thema:
         )
 
 
-def _empty_playlist(name: str, thema: str | None, saeule: str) -> str:
+def _empty_playlist(name: str, thema: str | None, quelle_url: str | None = None) -> str:
     today = date.today().isoformat()
-    fm = ["---", f"typ: {saeulen.typ_from_saeule(saeule)}", f"titel: {name}", "status: aktiv"]
-    if thema:
-        fm.append(f"thema: {thema}")
+    fm = ["---", "typ: playlist", f"titel: {name}"]
+    fm.append(f"quelle_url: {quelle_url.strip() if quelle_url else ''}")
+    if thema and thema.strip():
+        fm.append(f"thema: {thema.strip()}")
     fm.extend([
-        "tags: [playlist, video]",
-        "quellen: []",
+        "tags: [playlist]",
         f"zuletzt: {today}",
         "---",
         "",
@@ -168,13 +169,16 @@ def _format_item_block(item: dict) -> str:
 # --- Public API ----------------------------------------------------------
 
 
-def _list_playlists_for_saeule(vault_id: str, saeule: str) -> list[dict]:
-    """Listet Playlists einer einzelnen Säule (interner Helper)."""
+def list_playlists(vault_id: str) -> list[dict]:
+    """Listet alle Playlists des Vaults unter wiki/resources/playlists/.
+
+    Liefert pro Eintrag `{name, slug, thema, path, item_count}`.
+    """
     vault = settings.get_vault(vault_id)
     if not vault:
         raise ValueError(f"Vault {vault_id} nicht gefunden")
     root = Path(vault["path"])
-    pdir = root / playlist_dir_rel(saeule)
+    pdir = root / playlist_dir_rel()
     if not pdir.exists():
         return []
     out = []
@@ -187,60 +191,45 @@ def _list_playlists_for_saeule(vault_id: str, saeule: str) -> list[dict]:
         items = _parse_items_from_body(body)
         title_match = re.search(r"^titel:\s*(.+)$", text, re.MULTILINE)
         title = title_match.group(1).strip() if title_match else p.stem
+        thema_match = re.search(r"^thema:\s*(.+)$", text, re.MULTILINE)
         out.append({
             "name": title,
             "slug": p.stem,
-            "saeule": saeule,
+            "thema": thema_match.group(1).strip() if thema_match else "",
             "path": str(p.relative_to(root)).replace("\\", "/"),
             "item_count": len(items),
         })
     return out
 
 
-def list_playlists(vault_id: str, saeule: str | None = None) -> list[dict]:
-    """Listet Playlists. saeule=None → über alle erlaubten Säulen, sonst nur die angegebene.
-
-    Liefert pro Eintrag `{name, slug, saeule, path, item_count}`.
-    """
-    if saeule is None:
-        out: list[dict] = []
-        for s in saeulen.list_allowed():
-            out.extend(_list_playlists_for_saeule(vault_id, s))
-        return out
-    s = saeulen.validate_saeule(saeule)
-    return _list_playlists_for_saeule(vault_id, s)
-
-
-def get_playlist(vault_id: str, name: str, saeule: str | None = None) -> dict:
-    s = saeulen.validate_saeule(saeule)
+def get_playlist(vault_id: str, name: str) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
         raise ValueError(f"Vault {vault_id} nicht gefunden")
-    p = Path(vault["path"]) / playlist_dir_rel(s) / f"{_slugify(name)}.md"
+    p = Path(vault["path"]) / playlist_dir_rel() / f"{_slugify(name)}.md"
     if not p.exists():
-        raise ValueError(f"Playlist '{name}' nicht gefunden in Säule '{s}'")
+        raise ValueError(f"Playlist '{name}' nicht gefunden")
     text = p.read_text(encoding="utf-8")
     _, body = _split_frontmatter(text)
     items = _parse_items_from_body(body)
-    return {"name": name, "slug": p.stem, "saeule": s, "items": items, "path": str(p)}
+    return {"name": name, "slug": p.stem, "items": items, "path": str(p)}
 
 
 def create_playlist(
     vault_id: str,
     name: str,
     thema: str | None = None,
-    saeule: str | None = None,
+    quelle_url: str | None = None,
 ) -> dict:
     name = (name or "").strip()
     if not name:
         raise ValueError("Playlist-Name darf nicht leer sein")
-    s = saeulen.validate_saeule(saeule)
-    p = _playlist_path(vault_id, name, s)
+    p = _playlist_path(vault_id, name)
     if p.exists():
-        raise ValueError(f"Playlist '{name}' existiert bereits ({p.name}) in Säule '{s}'")
-    p.write_text(_empty_playlist(name, thema, s), encoding="utf-8")
-    _update_playlist_index(Path(settings.get_vault(vault_id)["path"]), s, p.stem, name, thema)
-    return {"created": True, "name": name, "slug": p.stem, "saeule": s, "path": str(p)}
+        raise ValueError(f"Playlist '{name}' existiert bereits ({p.name})")
+    p.write_text(_empty_playlist(name, thema, quelle_url), encoding="utf-8")
+    _update_playlist_index(Path(settings.get_vault(vault_id)["path"]), p.stem, name, thema)
+    return {"created": True, "name": name, "slug": p.stem, "path": str(p)}
 
 
 def add_to_playlist(
@@ -254,19 +243,18 @@ def add_to_playlist(
     published: str | None = None,
     likes: str | None = None,
     description: str | None = None,
-    saeule: str | None = None,
+    thema: str | None = None,
 ) -> dict:
     """Add a video to a playlist. Creates/updates the master video page in
-    wiki/<saeule>/videos/<slug>.md, then writes a thin reference block in the
+    wiki/resources/videos/<slug>.md, then writes a thin reference block in the
     playlist file."""
     url = (url or "").strip()
     if not url:
         raise ValueError("URL darf nicht leer sein")
-    s = saeulen.validate_saeule(saeule)
-    p = _playlist_path(vault_id, name, s)
+    p = _playlist_path(vault_id, name)
     if not p.exists():
         raise ValueError(
-            f"Playlist '{name}' nicht gefunden in Säule '{s}' — vorher mit create_playlist anlegen."
+            f"Playlist '{name}' nicht gefunden — vorher mit create_playlist anlegen."
         )
     title = (title or url).strip()
     text = p.read_text(encoding="utf-8")
@@ -278,7 +266,11 @@ def add_to_playlist(
         if it.get("url") == url:
             return {"added": False, "reason": "duplicate", "url": url, "title": it["title"]}
 
-    # Create or extend video page in the same Säule
+    # Create or extend master video page (thema aus der Playlist-Frontmatter erben falls nicht gesetzt)
+    if thema is None:
+        thema_match = re.search(r"^thema:\s*(.+)$", fm, re.MULTILINE)
+        thema = thema_match.group(1).strip() if thema_match else None
+
     playlist_slug = p.stem
     video_res = videos.upsert_video(
         vault_id=vault_id,
@@ -291,9 +283,9 @@ def add_to_playlist(
         published=published,
         likes=likes,
         description=description,
-        saeule=s,
+        thema=thema,
     )
-    page_link = f"wiki/{s}/videos/{video_res['slug']}"
+    page_link = f"wiki/resources/videos/{video_res['slug']}"
 
     item = {
         "title": title,
@@ -309,7 +301,6 @@ def add_to_playlist(
     return {
         "added": True,
         "name": name,
-        "saeule": s,
         "url": url,
         "title": title,
         "video_page": page_link,
@@ -321,7 +312,6 @@ def remove_from_playlist(
     vault_id: str,
     name: str,
     match: str,
-    saeule: str | None = None,
     also_delete_master: bool = False,
 ) -> dict:
     """Remove an item-block (H2 + bullet lines) from the playlist file.
@@ -335,16 +325,15 @@ def remove_from_playlist(
 
     Wenn `also_delete_master=True`:
     - Falls das Video in keiner anderen Playlist mehr ist (became_orphan),
-      wird die Master-Page UND das raw/transcripts-File gelöscht.
+      wird die Master-Page UND das raw-Transcript-File gelöscht.
     - Ansonsten bleibt die Master-Page erhalten (Hinweis im Returnwert).
     """
     needle = (match or "").strip().lower()
     if not needle:
         raise ValueError("match darf nicht leer sein")
-    s = saeulen.validate_saeule(saeule)
-    p = _playlist_path(vault_id, name, s)
+    p = _playlist_path(vault_id, name)
     if not p.exists():
-        raise ValueError(f"Playlist '{name}' nicht gefunden in Säule '{s}'")
+        raise ValueError(f"Playlist '{name}' nicht gefunden")
     text = p.read_text(encoding="utf-8")
     fm, body = _split_frontmatter(text)
 
@@ -362,7 +351,7 @@ def remove_from_playlist(
     target = matches[0]
     target_title = target["title"]
     target_page = (target.get("page") or "").strip()
-    # Slug aus page = "wiki/<saeule>/videos/<slug>"
+    # Slug aus page = "wiki/resources/videos/<slug>"
     target_slug = target_page.rsplit("/", 1)[-1] if target_page else None
 
     # Walk lines and skip the matching block (from its H2 until next H2 or EOF)
@@ -387,16 +376,15 @@ def remove_from_playlist(
     transcript_deleted = None
     became_orphan = False
     if target_slug:
-        upd = videos.remove_from_playlists_array(vault_id, target_slug, playlist_slug, s)
+        upd = videos.remove_from_playlists_array(vault_id, target_slug, playlist_slug)
         became_orphan = bool(upd.get("became_orphan"))
         if also_delete_master and became_orphan and upd.get("exists"):
-            res = videos.delete_video(vault_id, target_slug, s)
+            res = videos.delete_video(vault_id, target_slug)
             master_deleted = bool(res.get("deleted"))
             transcript_deleted = res.get("transcript_path")
 
     return {
         "removed": True,
-        "saeule": s,
         "title": target_title,
         "video_slug": target_slug,
         "became_orphan": became_orphan,

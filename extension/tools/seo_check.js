@@ -18,6 +18,9 @@ export async function runSeoCheck(_params = {}) {
         h1: qsa("h1"),
         h2: qsa("h2"),
         h3: qsa("h3"),
+        headings: Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+          .map((el) => ({ level: Number(el.tagName[1]), text: el.innerText.trim() }))
+          .filter((h) => h.text),
         canonical: qs('link[rel="canonical"]')?.href || "",
         og_title: qs('meta[property="og:title"]')?.content || "",
         og_description: qs('meta[property="og:description"]')?.content || "",

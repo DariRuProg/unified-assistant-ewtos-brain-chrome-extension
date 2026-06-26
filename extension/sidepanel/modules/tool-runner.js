@@ -2,7 +2,7 @@
 import { state } from '../state.js';
 import { el } from '../dom.js';
 import { content } from './dom-refs.js';
-import { GROUPS, renderTabs, renderToolList, renderQuickActions, applyQuickRowVisibility } from './nav.js';
+import { GROUPS, renderSidebar, renderToolList, renderQuickActions, applyQuickRowVisibility, updateCrumb } from './nav.js';
 import { renderYoutubeTranscript } from '../renderers/youtube.js';
 import { renderNotesFile, renderTodos } from '../renderers/notes.js';
 import { renderChat } from '../renderers/chat.js';
@@ -46,14 +46,18 @@ export function openTool(toolId, options = null) {
   const renderer = TOOL_RENDERERS[toolId];
   if (!renderer) return;
   runToolCleanup();
+  state.searchQuery = "";
+  const searchEl = document.getElementById("tool-search");
+  if (searchEl) searchEl.value = "";
   for (const g of GROUPS) {
     if (g.tools.some((t) => t.id === toolId)) { state.activeTab = g.id; break; }
   }
   state.activeTool = toolId;
   state.pendingToolOptions = options;
-  renderTabs();
+  renderSidebar();
   renderQuickActions();
   applyQuickRowVisibility();
+  updateCrumb();
 
   content.replaceChildren();
   const view = el("section", { className: "tool-view" });
@@ -73,9 +77,12 @@ export function openTool(toolId, options = null) {
 function closeTool() {
   runToolCleanup();
   state.activeTool = null;
+  state.activeTab = "all";
   state.panelTitle = null;
   state.panelBody = null;
+  renderSidebar();
   renderQuickActions();
   applyQuickRowVisibility();
   renderToolList();
+  updateCrumb();
 }

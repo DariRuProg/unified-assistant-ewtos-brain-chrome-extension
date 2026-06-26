@@ -68,6 +68,8 @@ export async function runColorPicker(_params = {}) {
         css_vars: cssVars,
         computed,
         has_design_system: Object.keys(cssVars).length > 0,
+        hostname: window.location.hostname,
+        url: window.location.href,
       };
     },
   });

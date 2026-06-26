@@ -32,7 +32,7 @@ export async function getActiveVaultId(httpBase) {
 }
 
 // Hängt vault_id als Query-Param an eine URL an. Unterstützt URLs, die bereits
-// einen Query-String haben (z.B. /tools/playlists/<id>?saeule=...).
+// einen Query-String haben (z.B. /tools/bookmarks?foo=bar).
 export function withVaultId(url, vaultId) {
   if (!vaultId) return url;
   const sep = url.includes("?") ? "&" : "?";

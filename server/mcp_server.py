@@ -217,34 +217,21 @@ def delete_bookmark(match: str, vault_id: str | None = None) -> dict:
     return bookmarks.delete_bookmark(match, vault_id=vault_id)
 
 
-# --- Playlists (wiki/<saeule>/playlists/) ---------------------------------
+# --- Playlists (wiki/resources/playlists/) --------------------------------
 
-_SAEULE_DOC = (
-    "saeule: Wiki-Säule (z.B. 'knowledge-library/ai', "
-    "'work/crafts/web-development/skills/wordpress', "
-    "'knowledge-library/industries/medical'). "
-    "Default 'knowledge-library/ai'. Erlaubte Werte siehe `tools/saeulen.py`."
-)
+@mcp.tool()
+def list_playlists(vault_id: str) -> list[dict]:
+    """Listet alle Playlists eines Vaults (wiki/resources/playlists/) mit Item-Count.
+
+    Jeder Eintrag enthält `name`, `slug`, `thema`, `path`, `item_count`.
+    """
+    return playlists.list_playlists(vault_id)
 
 
 @mcp.tool()
-def list_playlists(vault_id: str, saeule: str | None = None) -> list[dict]:
-    """Listet Playlists eines Vaults mit Item-Count.
-
-    saeule=None liefert Playlists aus ALLEN erlaubten Säulen.
-    saeule='knowledge-library/ai'|'work/crafts/web-development/skills/wordpress'|...
-    filtert auf eine Säule. Jeder Eintrag enthält ein `saeule`-Feld zur Identifikation.
-    """
-    return playlists.list_playlists(vault_id, saeule=saeule)
-
-
-@mcp.tool()
-def get_playlist(vault_id: str, name: str, saeule: str | None = None) -> dict:
-    """Gibt eine Playlist mit allen Items (Titel, Channel, URL, Page-Link) zurück.
-
-    saeule defaultet auf 'knowledge-library/ai', wenn nicht angegeben.
-    """
-    return playlists.get_playlist(vault_id, name, saeule=saeule)
+def get_playlist(vault_id: str, name: str) -> dict:
+    """Gibt eine Playlist mit allen Items (Titel, Channel, URL, Page-Link) zurück."""
+    return playlists.get_playlist(vault_id, name)
 
 
 @mcp.tool()
@@ -252,14 +239,12 @@ def create_playlist(
     vault_id: str,
     name: str,
     thema: str | None = None,
-    saeule: str | None = None,
 ) -> dict:
-    """Legt eine neue Playlist unter wiki/<saeule>/playlists/<slug>.md an.
+    """Legt eine neue Playlist unter wiki/resources/playlists/<slug>.md an.
 
-    `thema` optional (Frontmatter-Property, z.B. 'ki', 'health', 'seo').
-    `saeule` defaultet auf 'knowledge-library/ai'.
+    `thema` optional (freies Frontmatter-Feld, z.B. 'ai', 'health', 'marketing').
     """
-    return playlists.create_playlist(vault_id, name, thema=thema, saeule=saeule)
+    return playlists.create_playlist(vault_id, name, thema=thema)
 
 
 @mcp.tool()
@@ -270,13 +255,12 @@ def add_to_playlist(
     title: str | None = None,
     youtuber: str | None = None,
     dauer: str | None = None,
-    saeule: str | None = None,
+    thema: str | None = None,
 ) -> dict:
     """Fügt ein Video zu einer Playlist hinzu (legt Master-Video-Page in
-    wiki/<saeule>/videos/ an oder erweitert die playlists-Liste, falls existiert).
+    wiki/resources/videos/ an oder erweitert die playlists-Liste, falls existiert).
 
-    `saeule` muss zur Playlist passen (Default 'knowledge-library/ai'). Master-Video-Page
-    wird in derselben Säule angelegt.
+    `thema` optional (freies Frontmatter-Feld); wird sonst aus der Playlist geerbt.
     """
     return playlists.add_to_playlist(
         vault_id,
@@ -285,7 +269,7 @@ def add_to_playlist(
         title=title,
         youtuber=youtuber,
         dauer=dauer,
-        saeule=saeule,
+        thema=thema,
     )
 
 
@@ -294,24 +278,17 @@ def remove_from_playlist(
     vault_id: str,
     name: str,
     match: str,
-    saeule: str | None = None,
 ) -> dict:
-    """Entfernt ein Item aus einer Playlist per Substring-Match (Titel oder URL).
-
-    `saeule` defaultet auf 'knowledge-library/ai'.
-    """
-    return playlists.remove_from_playlist(vault_id, name, match, saeule=saeule)
+    """Entfernt ein Item aus einer Playlist per Substring-Match (Titel oder URL)."""
+    return playlists.remove_from_playlist(vault_id, name, match)
 
 
-# --- Videos (wiki/<saeule>/videos/) ---------------------------------------
+# --- Videos (wiki/resources/videos/) --------------------------------------
 
 @mcp.tool()
-def get_video(vault_id: str, slug: str, saeule: str | None = None) -> dict | None:
-    """Lädt eine Video-Page (Frontmatter + Body) per Slug. None wenn nicht gefunden.
-
-    `saeule` defaultet auf 'knowledge-library/ai'.
-    """
-    return videos.get_video(vault_id, slug, saeule=saeule)
+def get_video(vault_id: str, slug: str) -> dict | None:
+    """Lädt eine Video-Page (Frontmatter + Body) per Slug. None wenn nicht gefunden."""
+    return videos.get_video(vault_id, slug)
 
 
 @mcp.tool()
@@ -322,14 +299,10 @@ def upsert_video(
     youtuber: str | None = None,
     dauer: str | None = None,
     playlist_slug: str | None = None,
-    saeule: str | None = None,
+    thema: str | None = None,
 ) -> dict:
-    """Legt eine Video-Page an oder ergänzt sie (idempotent per URL/Slug).
-
-    `saeule` defaultet auf 'knowledge-library/ai'. Wenn Video bereits in einer anderen
-    Säule existiert, wird in der angegebenen Säule eine zweite Master-Page erstellt
-    (bekannte Limitation, siehe Plan).
-    """
+    """Legt eine Video-Page (wiki/resources/videos/) an oder ergänzt sie
+    (idempotent per URL/Slug). `thema` ist ein freies Frontmatter-Feld."""
     return videos.upsert_video(
         vault_id,
         title,
@@ -337,7 +310,7 @@ def upsert_video(
         youtuber=youtuber,
         dauer=dauer,
         playlist_slug=playlist_slug,
-        saeule=saeule,
+        thema=thema,
     )
 
 
@@ -379,23 +352,19 @@ def save_transcript(
     video_slug: str,
     transcript_text: str,
     with_timestamps: bool = False,
-    saeule: str | None = None,
 ) -> dict:
-    """Speichert ein bereits geholtes Transcript in raw/transcripts/<datum>-<slug>.md
-    und verlinkt es in der Master-Video-Page (in wiki/<saeule>/videos/).
+    """Speichert ein bereits geholtes Transcript in raw/youtube/<datum>-<slug>.md
+    und verlinkt es in der Master-Video-Page (wiki/resources/videos/).
 
     Nutze diesen Tool, wenn du den Transcript-Text bereits hast (z.B. aus
     einer anderen Quelle). Für YouTube-Pull aus dem Browser:
     `pull_transcript_via_extension`.
-
-    `saeule` muss zur Video-Master-Page passen (Default 'knowledge-library/ai').
     """
     return transcript_writer.save_transcript(
         vault_id,
         video_slug,
         transcript_text,
         with_timestamps=with_timestamps,
-        saeule=saeule,
     )
 
 
@@ -403,7 +372,6 @@ def save_transcript(
 def pull_pending_transcripts(
     vault_id: str,
     playlist_name: str,
-    saeule: str | None = None,
     with_timestamps: bool = False,
 ) -> dict:
     """Bulk-Pull aller pending Transcripts einer Playlist (Multi-Video-Orchestrator).
@@ -414,18 +382,16 @@ def pull_pending_transcripts(
 
     Long-running: pro Item ~10-15s, deshalb httpx-Timeout 900s (15 Min).
 
-    `saeule` defaultet auf 'knowledge-library/ai'. `summarize` ist absichtlich NICHT exposed —
-    Claude Code soll Summaries selbst auf eigener Subscription schreiben.
+    `summarize` ist absichtlich NICHT exposed — Claude Code soll Summaries
+    selbst auf eigener Subscription schreiben.
 
     Returns: Statistik {total, transcribed, skipped_already_done, failed: [...],
     aborted, abort_reason}.
     """
     target = f"http://{config.HOST}:{config.PORT}/tools/playlists/{vault_id}/{playlist_name}/pull_pending"
-    params = {"saeule": saeule} if saeule else {}
     try:
         r = httpx.post(
             target,
-            params=params,
             json={"with_timestamps": with_timestamps, "summarize": False},
             timeout=900,
         )

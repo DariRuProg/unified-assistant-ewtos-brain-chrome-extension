@@ -8,9 +8,15 @@ Vault: **{{ vault_name }}**. Dieser Vault folgt der **Karpathy-Pipeline** (`inbo
 - `journal/YYYY-MM-DD.md` — automatische Briefing-Archive (vom „Morgen"-Tool gefüllt).
 - `log.md` — append-only Audit der strukturellen Vault-Änderungen.
 
+## Themen-Dimension (`thema`)
+
+Die Ordnerstruktur ist **flach**: Videos, Playlists und Creators liegen immer direkt unter `wiki/resources/` — es gibt **keinen Ordner pro Sachgebiet**. PARA ordnet nach Lebenszyklus (Projects/Areas/Resources/Archive), nicht nach Thema.
+
+Das Sachgebiet wird über das **freie Frontmatter-Feld `thema`** abgebildet (z.B. `ai`, `marketing`, `health`, `web-development`). Es gibt bewusst **keine Whitelist** — wähle den treffendsten Slug, neue Themen brauchen keine Schema-Änderung. Filtern in Obsidian per Suche `thema: ai` oder via Dataview/Bases.
+
 ## Konventionen
 
 - Dateinamen: Kleinbuchstaben, Bindestriche.
 - Datum: ISO 8601 (`YYYY-MM-DD`).
 - Wikilinks: `[[wiki/resources/videos/video-slug]]` oder kurz `[[video-slug]]`.
-- Frontmatter: jede `wiki/`-Seite hat `typ`, `titel`, `status`, `zuletzt`.
+- Frontmatter: jede `wiki/`-Seite hat `typ`, `titel`, `status`, `zuletzt`; `thema` optional als Themen-Achse.

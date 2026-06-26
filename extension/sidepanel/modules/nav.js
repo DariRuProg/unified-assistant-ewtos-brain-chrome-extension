@@ -1,7 +1,7 @@
 // Navigation (Tabs, Tool-Liste) + Quick-Actions. ewtos.com
 import { el } from '../dom.js';
 import { state } from '../state.js';
-import { content, quickActions, tabsNav } from './dom-refs.js';
+import { content, quickActions, navSidebarMain, viewCrumb } from './dom-refs.js';
 import { openTool } from './tool-runner.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
 
@@ -10,35 +10,55 @@ export const GROUPS = [
     id: "chat",
     label: "Chat",
     icon: "💬",
+    sub: "Mit Vault oder aktiver Seite reden",
     tools: [
       { id: "chat", label: "Chat mit Vault", hint: "Fragen an den Vault (Karpathy-Methode)", icon: "📚" },
       { id: "chat_web", label: "Chat mit Seite", hint: "Mit dem Inhalt des aktiven Tabs chatten", icon: "🌐", openOptions: { startMode: "page" } },
     ],
   },
   {
-    id: "vault",
-    label: "Vault",
-    icon: "📚",
+    id: "notes",
+    label: "Notizen",
+    icon: "📝",
+    sub: "Dein App-eigener Schreibtisch",
     tools: [
-      { id: "vault_explorer", label: "Explorer",         hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
-      { id: "scratchpad",     label: "Note-Taker",       hint: "globaler Scratchpad", icon: "📝" },
-      { id: "todos",          label: "Todos",            hint: "klickbare Liste mit Due-Dates", icon: "✅" },
-      { id: "playlists",      label: "Playlists",        hint: "Video-Sammlungen pro Säule", icon: "🎵" },
-      { id: "bookmarks",      label: "Bookmarks",        hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
+      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
+      { id: "todos",      label: "Todos",      hint: "klickbare Liste mit Due-Dates", icon: "✅" },
+      { id: "bookmarks",  label: "Bookmarks",  hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
         actions: [
           { label: "Neuen Bookmark", icon: "+", action: "add" },
           { label: "Markierte Tabs erfassen", icon: "⇲", action: "capture_tabs" },
           { label: "URLs der Tabs kopieren", icon: "⧉", action: "copy_urls" },
         ],
       },
-      { id: "vault_health",     label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
-      { id: "ingest_document",  label: "Dokument-Ingest",  hint: "PDF, TXT oder Markdown in raw/ ablegen", icon: "📥" },
+    ],
+  },
+  {
+    id: "vault",
+    label: "Vault",
+    icon: "📚",
+    sub: "Das Wissens-Dateisystem",
+    tools: [
+      { id: "vault_explorer",  label: "Explorer",         hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
+      { id: "ingest_document", label: "Dokument-Ingest",  hint: "PDF, TXT oder Markdown in raw/ ablegen", icon: "📥" },
+      { id: "vault_health",    label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
+    ],
+  },
+  {
+    id: "video",
+    label: "Video",
+    icon: "🎬",
+    sub: "YouTube & gesammelte Playlists",
+    tools: [
+      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
+      { id: "playlists",          label: "Playlists",          hint: "Video-Sammlungen (Thema im Frontmatter)", icon: "🎵" },
     ],
   },
   {
     id: "web",
     label: "Web",
     icon: "🌐",
+    sub: "Tools für die aktuelle Webseite",
     tools: [
       { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄",
         actions: [
@@ -46,26 +66,19 @@ export const GROUPS = [
           { label: "Komplette Seite scrapen", icon: "▸", action: "scrape_full" },
         ],
       },
-      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
-    ],
-  },
-  {
-    id: "analyse",
-    label: "Analyse",
-    icon: "🔬",
-    tools: [
       { id: "seo_check",     label: "SEO-Check",     hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
-      { id: "image_analyse", label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
+      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
     ],
   },
   {
-    id: "extras",
-    label: "Extras",
+    id: "bilder",
+    label: "Bilder",
     icon: "🎨",
+    sub: "Analyse, Generierung, Farben, Screenshots",
     tools: [
-      { id: "url_extractor",  label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
-      { id: "image_generator", label: "Image-Gen",   hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
-      { id: "color_picker",   label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
+      { id: "image_analyse",   label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
+      { id: "image_generator", label: "Image-Gen",     hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
+      { id: "color_picker",    label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
       { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸",
         actions: [
           { label: "Sichtbar", icon: "▸", action: "shot_visible" },
@@ -83,8 +96,6 @@ export const QUICK_SPECIAL = {
 };
 
 export const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
-
-export const QUICK_SLOT_COUNT = 5;
 
 function getQuickOption(id) {
   if (!id) return null;
@@ -117,37 +128,14 @@ function runQuickSlot(id) {
   openTool(id);
 }
 
-async function setViewMode(mode) {
-  if (state.toolViewMode === mode) return;
-  state.toolViewMode = mode;
-  await chrome.storage.local.set({ toolViewMode: state.toolViewMode });
-  renderTabs();
-  if (!state.activeTool) renderToolList();
-}
-
 export function renderQuickActions() {
   quickActions.replaceChildren();
 
-  while (state.quickSlots.length < QUICK_SLOT_COUNT) state.quickSlots.push(null);
-  if (state.quickSlots.length > QUICK_SLOT_COUNT) state.quickSlots = state.quickSlots.slice(0, QUICK_SLOT_COUNT);
-
   const row = el("div", { className: "quick-row" });
-  const allFilled = state.quickSlots.every((id) => !!id);
 
   state.quickSlots.forEach((slotId, idx) => {
     const opt = getQuickOption(slotId);
-    if (!opt) {
-      const plus = el("button", {
-        type: "button",
-        className: "quick-btn quick-plus",
-        title: "Slot belegen",
-      });
-      plus.append(el("span", { className: "quick-icon", textContent: "+" }));
-      plus.append(el("span", { textContent: "Slot" }));
-      plus.addEventListener("click", () => openQuickEditor(idx));
-      row.append(plus);
-      return;
-    }
+    if (!opt) return;
     const btn = el("button", {
       type: "button",
       className: "quick-btn" + (state.activeTool === opt.id ? " active" : ""),
@@ -164,17 +152,6 @@ export function renderQuickActions() {
   });
 
   quickActions.append(row);
-
-  if (allFilled) {
-    const edit = el("button", {
-      type: "button",
-      className: "quick-edit-trigger",
-      title: "Quick-Slots bearbeiten",
-      textContent: "✎",
-    });
-    edit.addEventListener("click", () => openQuickEditor(null));
-    quickActions.append(edit);
-  }
 }
 
 async function saveQuickSlots() {
@@ -185,12 +162,12 @@ async function saveQuickSlots() {
 function openSlotContextMenu(x, y, idx) {
   document.querySelectorAll(".slot-context-menu").forEach((m) => m.remove());
   const menu = el("div", { className: "slot-context-menu" });
-  const change = el("button", { type: "button", textContent: "Slot ändern…" });
-  const remove = el("button", { type: "button", textContent: "Slot leeren" });
-  change.addEventListener("click", () => { menu.remove(); openQuickEditor(idx); });
+  const change = el("button", { type: "button", textContent: "Bearbeiten…" });
+  const remove = el("button", { type: "button", textContent: "Entfernen" });
+  change.addEventListener("click", () => { menu.remove(); openQuickEditor(); });
   remove.addEventListener("click", async () => {
     menu.remove();
-    state.quickSlots[idx] = null;
+    state.quickSlots.splice(idx, 1);
     await saveQuickSlots();
   });
   menu.append(change, remove);
@@ -213,183 +190,188 @@ function openSlotContextMenu(x, y, idx) {
   }, 0);
 }
 
-export function openQuickEditor(targetIdx) {
+export function openQuickEditor() {
   document.querySelectorAll(".quick-editor").forEach((e) => e.remove());
   const editor = el("div", { className: "quick-editor" });
   const head = el("div", { className: "quick-editor-head" });
-  const title = el("span", { className: "title",
-    textContent: targetIdx === null ? "Quick-Slots bearbeiten" : `Slot ${targetIdx + 1} belegen`,
-  });
+  const title = el("span", { className: "title", textContent: "Favoriten-Buttons bearbeiten" });
   const closeBtn = el("button", { type: "button", className: "close", textContent: "✕" });
   closeBtn.addEventListener("click", () => editor.remove());
   head.append(title, closeBtn);
 
   const slotsRow = el("div", { className: "quick-editor-slots" });
+  const picker = el("div", { className: "quick-editor-picker" });
+
   function renderSlotsRow() {
     slotsRow.replaceChildren();
+    if (state.quickSlots.length === 0) {
+      slotsRow.append(el("span", { className: "qe-empty", textContent: "Noch keine Favoriten — unten ein Tool wählen." }));
+      return;
+    }
     state.quickSlots.forEach((slotId, idx) => {
       const opt = getQuickOption(slotId);
-      const slot = el("button", { type: "button",
-        className: "qe-slot" + (opt ? "" : " empty") + (selectedIdx === idx ? " selected" : ""),
-        title: opt ? `Slot ${idx + 1}: ${opt.label} (klick = leeren)` : `Slot ${idx + 1} (leer)`,
-      });
-      slot.append(el("span", { className: "ico", textContent: opt ? opt.icon : "+" }));
-      slot.append(el("span", { className: "lbl", textContent: opt ? opt.label : `Slot ${idx + 1}` }));
+      if (!opt) return;
+      const slot = el("button", { type: "button", className: "qe-slot", title: `${opt.label} entfernen` });
+      slot.append(el("span", { className: "ico", textContent: opt.icon }));
+      slot.append(el("span", { className: "lbl", textContent: opt.label }));
       slot.addEventListener("click", async () => {
-        if (opt) {
-          state.quickSlots[idx] = null;
-          await saveQuickSlots();
-          renderSlotsRow();
-        } else {
-          selectedIdx = idx;
-          renderSlotsRow();
-        }
+        state.quickSlots.splice(idx, 1);
+        await saveQuickSlots();
+        renderSlotsRow();
+        renderPicker();
       });
       slotsRow.append(slot);
     });
   }
-  let selectedIdx = targetIdx !== null ? targetIdx : state.quickSlots.findIndex((s) => !s);
-  if (selectedIdx < 0) selectedIdx = 0;
+
+  function renderPicker() {
+    picker.replaceChildren();
+    const used = new Set(state.quickSlots.filter(Boolean));
+    for (const opt of getAllQuickOptions()) {
+      const item = el("button", { type: "button", className: "qe-pick" + (used.has(opt.id) ? " used" : "") });
+      item.append(el("span", { className: "ico", textContent: opt.icon }));
+      item.append(el("span", { className: "lbl", textContent: opt.label }));
+      if (opt.group) item.append(el("span", { className: "grp", textContent: opt.group }));
+      item.addEventListener("click", async () => {
+        if (used.has(opt.id)) return;
+        state.quickSlots.push(opt.id);
+        await saveQuickSlots();
+        renderSlotsRow();
+        renderPicker();
+      });
+      picker.append(item);
+    }
+  }
+
   renderSlotsRow();
+  renderPicker();
 
   const hint = el("div", { className: "qe-hint",
-    textContent: "Wähle ein Tool für den markierten Slot (oder klicke einen Slot zum Leeren):",
+    textContent: "Tool anklicken = hinzufügen · Favorit oben anklicken = entfernen",
   });
-
-  const picker = el("div", { className: "quick-editor-picker" });
-  const used = new Set(state.quickSlots.filter(Boolean));
-  for (const opt of getAllQuickOptions()) {
-    const item = el("button", { type: "button", className: "qe-pick" });
-    item.append(el("span", { className: "ico", textContent: opt.icon }));
-    item.append(el("span", { className: "lbl", textContent: opt.label }));
-    if (opt.group) item.append(el("span", { className: "grp", textContent: opt.group }));
-    if (used.has(opt.id)) item.classList.add("used");
-    item.addEventListener("click", async () => {
-      const idx = selectedIdx;
-      const existing = state.quickSlots.indexOf(opt.id);
-      if (existing >= 0 && existing !== idx) state.quickSlots[existing] = null;
-      state.quickSlots[idx] = opt.id;
-      await saveQuickSlots();
-      const nextEmpty = state.quickSlots.findIndex((s) => !s);
-      if (nextEmpty >= 0) {
-        selectedIdx = nextEmpty;
-        renderSlotsRow();
-        item.classList.add("used");
-      } else {
-        editor.remove();
-      }
-    });
-    picker.append(item);
-  }
 
   editor.append(head, slotsRow, hint, picker);
   quickActions.after(editor);
 }
 
-export async function loadQuickRowPref() {
-  const { hideQuickRowOnTool: pref } = await chrome.storage.local.get("hideQuickRowOnTool");
-  state.hideQuickRowOnTool = !!pref;
-  applyQuickRowVisibility();
-}
-
 export function applyQuickRowVisibility() {
-  if (state.hideQuickRowOnTool && state.activeTool) quickActions.classList.add("hidden");
-  else quickActions.classList.remove("hidden");
+  const searching = !!(state.searchQuery || "").trim();
+  const show = state.showQuickRow && state.activeTab === "all" && !state.activeTool && !searching;
+  quickActions.classList.toggle("hidden", !show);
 }
 
-export function renderTabs() {
-  tabsNav.replaceChildren();
-  for (const g of GROUPS) {
+export function updateCrumb() {
+  if (!viewCrumb) return;
+  if (state.activeTool || state.activeTab === "all") { viewCrumb.textContent = ""; return; }
+  const g = GROUPS.find((x) => x.id === state.activeTab);
+  viewCrumb.textContent = g ? " / " + g.label : "";
+}
+
+export function renderSidebar() {
+  navSidebarMain.replaceChildren();
+  const items = [{ id: "all", label: "Alles", icon: "▦" }, ...GROUPS];
+  for (const it of items) {
     const b = el("button", {
       type: "button",
-      className: "tab" + (g.id === state.activeTab ? " active" : ""),
-      textContent: (g.icon ? g.icon + " " : "") + g.label,
+      title: it.label,
+      textContent: it.icon,
+      className: "nav-item" + (it.id === state.activeTab ? " active" : ""),
     });
     b.addEventListener("click", () => {
-      state.activeTab = g.id;
+      state.activeTab = it.id;
       state.activeTool = null;
-      renderTabs();
+      renderSidebar();
       renderToolList();
-      if (g.autoOpen && g.tools.filter(t => !t.separator).length === 1) {
-        openTool(g.tools.find(t => !t.separator).id);
-      }
+      applyQuickRowVisibility();
+      updateCrumb();
     });
-    tabsNav.append(b);
+    navSidebarMain.append(b);
   }
-  const vt = el("div", { className: "view-toggle" });
-  const listBtn = el("button", {
-    type: "button",
-    className: "vt-btn first" + (state.toolViewMode === "list" ? " active" : ""),
-    title: "Listen-Ansicht",
-    textContent: "☰",
+}
+
+function buildToolRow(t) {
+  const hasActions = Array.isArray(t.actions) && t.actions.length > 0;
+  const li = el("li", { className: "tool-row" });
+  li.append(el("span", { className: "tr-ico", textContent: t.icon || "•" }));
+  const txt = el("span", { className: "tr-txt" });
+  txt.append(el("span", { className: "tr-label", textContent: t.label }));
+  if (t.hint) txt.append(el("span", { className: "tr-hint", textContent: t.hint }));
+  li.append(txt);
+  li.addEventListener("click", (e) => {
+    if (e.target.closest(".tool-caret, .tool-popover")) return;
+    openTool(t.id, t.openOptions || null);
   });
-  const gridBtn = el("button", {
-    type: "button",
-    className: "vt-btn last" + (state.toolViewMode === "grid" ? " active" : ""),
-    title: "Kachel-Ansicht",
-    textContent: "⊞",
+  if (!hasActions) {
+    li.append(el("span", { className: "tr-caret", textContent: "›" }));
+    return li;
+  }
+  const caret = el("button", { type: "button", className: "tool-caret", title: "Weitere Aktionen", textContent: "▾" });
+  const pop = el("div", { className: "tool-popover" });
+  for (const a of t.actions) {
+    const item = el("button", { type: "button", className: "tool-popover-item" });
+    item.append(
+      el("span", { className: "tpi-ico", textContent: a.icon || "▸" }),
+      el("span", { textContent: a.label }),
+    );
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pop.classList.remove("open");
+      openTool(t.id, { action: a.action });
+    });
+    pop.append(item);
+  }
+  caret.addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.querySelectorAll(".tool-popover.open").forEach(p => { if (p !== pop) p.classList.remove("open"); });
+    pop.classList.toggle("open");
   });
-  listBtn.addEventListener("click", () => setViewMode("list"));
-  gridBtn.addEventListener("click", () => setViewMode("grid"));
-  vt.append(listBtn, gridBtn);
-  tabsNav.append(vt);
+  li.append(caret, pop);
+  return li;
 }
 
 export function renderToolList() {
   content.replaceChildren();
-  const group = GROUPS.find((g) => g.id === state.activeTab);
-  if (!group) return;
 
-  const list = el("ul", { className: "tools " + state.toolViewMode });
-  for (const t of group.tools) {
-    if (t.separator) {
-      list.append(el("li", { className: "tool-separator", textContent: t.label }));
-      continue;
-    }
-    const hasActions = Array.isArray(t.actions) && t.actions.length > 0;
-    const li = el("li", { className: "tool" + (t.soon ? " soon" : "") + (hasActions ? " has-caret" : "") });
-    if (state.toolViewMode === "grid" && t.icon) {
-      li.append(el("span", { className: "tool-icon", textContent: t.icon }));
-    }
-    li.append(el("span", { className: "tool-label", textContent: t.label }));
-    if (state.toolViewMode === "list" && t.hint) {
-      li.append(el("span", { className: "hint", textContent: t.hint }));
-    }
-    if (state.toolViewMode === "grid" && t.hint) {
-      li.append(el("span", { className: "tool-hint", textContent: t.hint }));
-    }
-    if (t.soon) {
-      li.append(el("span", { className: "badge", textContent: "bald" }));
-    } else {
-      li.addEventListener("click", (e) => {
-        if (e.target.closest(".tool-caret, .tool-popover")) return;
-        openTool(t.id, t.openOptions || null);
-      });
-    }
-    if (hasActions && !t.soon) {
-      const caret = el("button", { type: "button", className: "tool-caret", title: "Weitere Aktionen", textContent: "▾" });
-      const pop = el("div", { className: "tool-popover" });
-      for (const a of t.actions) {
-        const item = el("button", { type: "button", className: "tool-popover-item" });
-        item.append(
-          el("span", { className: "tpi-ico", textContent: a.icon || "▸" }),
-          el("span", { textContent: a.label }),
-        );
-        item.addEventListener("click", (e) => {
-          e.stopPropagation();
-          pop.classList.remove("open");
-          openTool(t.id, { action: a.action });
-        });
-        pop.append(item);
+  const q = (state.searchQuery || "").trim().toLowerCase();
+  if (q) {
+    const results = el("ul", { className: "tools" });
+    const matches = [];
+    for (const g of GROUPS) {
+      for (const t of g.tools) {
+        const hay = `${t.label} ${t.hint || ""} ${g.label}`.toLowerCase();
+        if (hay.includes(q)) matches.push(t);
       }
-      caret.addEventListener("click", (e) => {
-        e.stopPropagation();
-        document.querySelectorAll(".tool-popover.open").forEach(p => { if (p !== pop) p.classList.remove("open"); });
-        pop.classList.toggle("open");
-      });
-      li.append(caret, pop);
     }
-    list.append(li);
+    if (matches.length === 0) {
+      results.append(el("li", { className: "search-empty", textContent: `Keine Treffer für „${state.searchQuery.trim()}"` }));
+    } else {
+      for (const t of matches) results.append(buildToolRow(t));
+    }
+    content.append(results);
+    return;
+  }
+
+  const list = el("ul", { className: "tools" });
+
+  if (state.activeTab === "all") {
+    for (const g of GROUPS) {
+      const sec = el("li", { className: "tool-sec" });
+      sec.append(el("span", { className: "ts-ico", textContent: g.icon }));
+      sec.append(el("span", { className: "ts-label", textContent: g.label }));
+      list.append(sec);
+      for (const t of g.tools) list.append(buildToolRow(t));
+    }
+  } else {
+    const group = GROUPS.find((g) => g.id === state.activeTab);
+    if (!group) return;
+    const head = el("li", { className: "group-head" });
+    const title = el("span", { className: "gh-title" });
+    title.append(el("span", { className: "gh-ico", textContent: group.icon }));
+    title.append(el("span", { className: "gh-label", textContent: group.label }));
+    head.append(title);
+    if (group.sub) head.append(el("span", { className: "gh-sub", textContent: group.sub }));
+    list.append(head);
+    for (const t of group.tools) list.append(buildToolRow(t));
   }
   content.append(list);
 }

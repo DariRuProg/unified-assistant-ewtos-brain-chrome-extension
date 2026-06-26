@@ -8,36 +8,42 @@
 </head>
 <body>
   <header>
-    <h1>EwtosBrain</h1>
+    <input id="tool-search" class="tool-search" type="search" placeholder="Tools suchen…" autocomplete="off" aria-label="Tools suchen" />
     <div class="header-right">
       <div class="status">
         <span id="status-dot" class="dot offline" title="verbinde..."></span>
       </div>
       <button id="dark-toggle" class="dark-toggle" type="button" title="Dark/Light Mode">&#9728;</button>
-      <div class="burger-wrap">
-        <button id="burger-btn" class="burger" type="button" title="Menü" aria-haspopup="true" aria-expanded="false">&#9776;</button>
-        <div id="burger-menu" class="burger-menu hidden" role="menu">
-          <button id="edit-quick-slots" type="button" role="menuitem">Quick-Slots bearbeiten…</button>
-          <button id="open-options" type="button" role="menuitem">Einstellungen</button>
-          <button id="reconnect" type="button" role="menuitem">Neu verbinden</button>
-        </div>
-      </div>
+      <button id="burger-btn" class="burger" type="button" title="Navigation" aria-haspopup="true" aria-expanded="false" aria-controls="nav-sidebar">&#9776;</button>
     </div>
   </header>
 
-  <nav id="tabs" class="tabs"></nav>
+  <div class="workspace">
+    <div class="work-main">
+      <div id="quick-actions" class="quick-actions hidden"></div>
 
-  <div id="quick-actions" class="quick-actions"></div>
+      <div id="offline-banner" class="offline-banner hidden">
+        <span id="offline-banner-text">
+          <strong>Server nicht erreichbar.</strong>
+          Starte die EwtosBrain-Server-App (Tray-Icon) — im Dev per <code>start-server.bat</code>.
+        </span>
+        <button id="retry-connect" type="button">Erneut verbinden</button>
+      </div>
 
-  <div id="offline-banner" class="offline-banner hidden">
-    <span id="offline-banner-text">
-      <strong>Server nicht erreichbar.</strong>
-      Starte die EwtosBrain-Server-App (Tray-Icon) — im Dev per <code>start-server.bat</code>.
-    </span>
-    <button id="retry-connect" type="button">Erneut verbinden</button>
+      <main id="content"></main>
+    </div>
+
+    <aside id="nav-sidebar" class="nav-sidebar" aria-hidden="true">
+      <div id="nav-sidebar-main"></div>
+      <div class="nav-sidebar-foot">
+        <button id="toggle-favbar" class="nav-item" type="button" title="Schnell-Buttons ein/aus">&#11088;</button>
+        <button id="edit-quick-slots" class="nav-item" type="button" title="Schnell-Buttons anpassen">&#9998;</button>
+        <div class="nav-divider"></div>
+        <button id="open-options" class="nav-item" type="button" title="Einstellungen">&#9881;</button>
+        <button id="reconnect" class="nav-item" type="button" title="Neu verbinden">&#8635;</button>
+      </div>
+    </aside>
   </div>
-
-  <main id="content"></main>
 
   <script src="sidepanel.js" type="module"></script>
 </body>

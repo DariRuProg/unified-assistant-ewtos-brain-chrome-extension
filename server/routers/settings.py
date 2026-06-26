@@ -36,6 +36,7 @@ class SettingsUpdate(BaseModel):
     elevenlabs_voice_id: str | None = None
     chat_tts_enabled: bool | None = None
     chat_show_sources: bool | None = None
+    chat_show_activity: bool | None = None
     # video-brain Sync
     video_brain_supabase_url: str | None = None
     video_brain_supabase_anon_key: str | None = None
@@ -68,6 +69,7 @@ def _public_settings() -> dict[str, Any]:
         "elevenlabs_voice_id": s.get("elevenlabs_voice_id") or "",
         "chat_tts_enabled": bool(s.get("chat_tts_enabled", False)),
         "chat_show_sources": bool(s.get("chat_show_sources", True)),
+        "chat_show_activity": bool(s.get("chat_show_activity", True)),
         # video-brain Sync
         "video_brain_supabase_url": s.get("video_brain_supabase_url") or "",
         "video_brain_supabase_anon_key_set": bool(s.get("video_brain_supabase_anon_key")),

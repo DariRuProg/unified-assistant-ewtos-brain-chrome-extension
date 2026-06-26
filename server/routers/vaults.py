@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from tools import wiki_reader
-from tools import saeulen as saeulen_tool
 from tools import blueprint as blueprint_tool
 import chat
 import settings
@@ -92,11 +91,6 @@ def vaults_generate_prompt(req: GeneratePromptRequest) -> dict[str, Any]:
     except Exception as e:
         log.exception("Prompt generation error")
         raise HTTPException(500, str(e))
-
-
-@router.get("/vaults/{vault_id}/saeulen")
-def vaults_saeulen(vault_id: str) -> dict[str, Any]:
-    return {"saeulen": saeulen_tool.list_allowed()}
 
 
 @router.get("/vaults/{vault_id}/raw_folders")

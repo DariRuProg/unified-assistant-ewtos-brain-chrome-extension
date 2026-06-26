@@ -20,6 +20,7 @@ router = APIRouter()
 class ChatSendRequest(BaseModel):
     message: str
     page_context: str | None = None
+    pinned_file: dict | None = None  # {"vault_id", "rel_path"} — Datei-Chat (schreibfähig)
 
 
 class PageChatRequest(BaseModel):
@@ -35,6 +36,8 @@ class SourceChatRequest(BaseModel):
     message: str
     history: list[dict] = []
     strict_source: bool = True
+    include_tools: bool = False
+    vault_id: str | None = None
 
 
 # Static routes declared before {vault_id} routes so "page"/"source" aren't matched as vault_id.
@@ -64,6 +67,8 @@ def chat_source_stream(req: SourceChatRequest) -> StreamingResponse:
             req.message,
             req.history,
             strict_source=req.strict_source,
+            include_tools=req.include_tools,
+            vault_id=req.vault_id,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -84,7 +89,7 @@ def chat_clear(vault_id: str) -> dict[str, Any]:
 def chat_stream(vault_id: str, req: ChatSendRequest) -> StreamingResponse:
     """SSE stream of chat events: tool_start, tool_end, text_delta, done, error."""
     return StreamingResponse(
-        chat.send_stream(vault_id, req.message, page_context=req.page_context),
+        chat.send_stream(vault_id, req.message, page_context=req.page_context, pinned_file=req.pinned_file),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -101,7 +106,7 @@ def chat_load(vault_id: str) -> dict[str, Any]:
 @router.post("/tools/chat/{vault_id}")
 def chat_send(vault_id: str, req: ChatSendRequest) -> dict[str, Any]:
     try:
-        return chat.send(vault_id, req.message, page_context=req.page_context)
+        return chat.send(vault_id, req.message, page_context=req.page_context, pinned_file=req.pinned_file)
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:

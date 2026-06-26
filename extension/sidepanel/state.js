@@ -1,12 +1,12 @@
 // Shared mutable state for sidepanel modules. ewtos.com
 export const state = {
-  activeTab: "chat",
+  activeTab: "all",
   activeTool: null,
-  toolViewMode: "list",
   panelTitle: null,
   panelBody: null,
   quickSlots: ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"],
-  hideQuickRowOnTool: false,
+  showQuickRow: false,
+  searchQuery: "",
   lastFetchData: null,
   pendingToolOptions: null,
   _chatPageModeScrape: null,

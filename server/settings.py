@@ -45,6 +45,7 @@ EDITABLE_KEYS = {
     "elevenlabs_voice_id",
     "chat_tts_enabled",
     "chat_show_sources",
+    "chat_show_activity",
     "api_key",
     # video-brain Sync
     "video_brain_supabase_url",

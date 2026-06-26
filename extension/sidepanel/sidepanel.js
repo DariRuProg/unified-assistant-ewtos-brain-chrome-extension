@@ -4,8 +4,8 @@ import { applyTheme, updateDarkToggleIcon } from './modules/theme.js';
 import { state } from './state.js';
 import { checkPendingBrainPick, checkActiveTabForYoutube } from './renderers/briefing.js';
 import { checkPendingPlaylistPick } from './renderers/playlists.js';
-import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, burgerMenu } from './modules/dom-refs.js';
-import { renderTabs, renderToolList, renderQuickActions, openQuickEditor, loadQuickRowPref, applyQuickRowVisibility, QUICK_SLOT_COUNT } from './modules/nav.js';
+import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, navSidebar, toggleFavbarBtn, toolSearch } from './modules/dom-refs.js';
+import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb } from './modules/nav.js';
 import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
 
 // Keep the background Service Worker alive via a persistent port.
@@ -21,15 +21,17 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
     await chrome.storage.local.get(["theme", "darkMode"]);
   applyTheme(theme, darkMode);
   updateDarkToggleIcon(darkMode);
-  state.toolViewMode = (await chrome.storage.local.get("toolViewMode")).toolViewMode || "list";
   const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
-  if (Array.isArray(stored)) {
-    state.quickSlots = stored.slice(0, QUICK_SLOT_COUNT);
-    while (state.quickSlots.length < QUICK_SLOT_COUNT) state.quickSlots.push(null);
-  }
-  renderTabs();
+  if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
+  state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
+  const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
+  if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
+  if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
+  syncFavbarToggle();
+  renderSidebar();
   renderQuickActions();
-  await loadQuickRowPref();
+  applyQuickRowVisibility();
+  updateCrumb();
   if (!state.activeTool) renderToolList();
 })();
 
@@ -40,9 +42,17 @@ chrome.storage.onChanged.addListener((changes) => {
       updateDarkToggleIcon(darkMode);
     });
   }
-  if (changes.hideQuickRowOnTool !== undefined) {
-    state.hideQuickRowOnTool = !!changes.hideQuickRowOnTool.newValue;
+  if (changes.showQuickRow !== undefined) {
+    state.showQuickRow = !!changes.showQuickRow.newValue;
+    syncFavbarToggle();
+    renderQuickActions();
     applyQuickRowVisibility();
+  }
+  if (changes.uiIconScale !== undefined) {
+    document.documentElement.style.setProperty("--ui-icon-scale", changes.uiIconScale.newValue ?? 1.15);
+  }
+  if (changes.uiFontScale !== undefined) {
+    document.documentElement.style.setProperty("--ui-font-scale", changes.uiFontScale.newValue ?? 1);
   }
   if (changes.playlistPick && changes.playlistPick.newValue) {
     checkPendingPlaylistPick();
@@ -62,7 +72,7 @@ chrome.storage.onChanged.addListener((changes) => {
 
 
 setStatus(false, "verbinde...");
-renderTabs();
+renderSidebar();
 renderToolList();
 renderQuickActions();
 checkPendingPlaylistPick();
@@ -134,42 +144,67 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 openOptions.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
-  closeBurgerMenu();
-});
-
-document.getElementById("edit-quick-slots").addEventListener("click", () => {
-  closeBurgerMenu();
-  openQuickEditor(null);
+  closeNavSidebar();
 });
 
 reconnectBtn.addEventListener("click", () => {
   setStatus(false, "verbinde...");
   chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
-  closeBurgerMenu();
+  closeNavSidebar();
 });
 
+function syncFavbarToggle() {
+  if (toggleFavbarBtn) toggleFavbarBtn.classList.toggle("active", state.showQuickRow);
+}
+toggleFavbarBtn.addEventListener("click", () => {
+  state.showQuickRow = !state.showQuickRow;
+  chrome.storage.local.set({ showQuickRow: state.showQuickRow });
+  syncFavbarToggle();
+  renderQuickActions();
+  applyQuickRowVisibility();
+});
+document.getElementById("edit-quick-slots").addEventListener("click", () => {
+  openQuickEditor(null);
+});
 
+toolSearch.addEventListener("input", () => {
+  state.searchQuery = toolSearch.value;
+  if (state.searchQuery.trim()) state.activeTool = null;
+  renderToolList();
+  applyQuickRowVisibility();
+});
+toolSearch.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.querySelector("#content .tool-row")?.click();
+  } else if (e.key === "Escape") {
+    toolSearch.value = "";
+    state.searchQuery = "";
+    renderToolList();
+    applyQuickRowVisibility();
+    toolSearch.blur();
+  }
+});
 
-function openBurgerMenu() {
-  burgerMenu.classList.remove("hidden");
+// Navigation als Push-Sidebar (rechts): ☰ togglet, bleibt offen bis erneut
+// geschlossen wird (per ☰ oder Escape).
+function openNavSidebar() {
+  navSidebar.classList.add("open");
+  navSidebar.setAttribute("aria-hidden", "false");
   burgerBtn.setAttribute("aria-expanded", "true");
 }
-function closeBurgerMenu() {
-  burgerMenu.classList.add("hidden");
+function closeNavSidebar() {
+  navSidebar.classList.remove("open");
+  navSidebar.setAttribute("aria-hidden", "true");
   burgerBtn.setAttribute("aria-expanded", "false");
 }
 burgerBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  if (burgerMenu.classList.contains("hidden")) openBurgerMenu();
-  else closeBurgerMenu();
-});
-document.addEventListener("click", (e) => {
-  if (burgerMenu.classList.contains("hidden")) return;
-  if (e.target === burgerBtn || burgerMenu.contains(e.target)) return;
-  closeBurgerMenu();
+  if (navSidebar.classList.contains("open")) closeNavSidebar();
+  else openNavSidebar();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !burgerMenu.classList.contains("hidden")) closeBurgerMenu();
+  if (e.key === "Escape" && navSidebar.classList.contains("open")) closeNavSidebar();
 });
 
 document.getElementById("retry-connect")?.addEventListener("click", () => {

@@ -8,10 +8,15 @@ Plus helpers to find the vault's CLAUDE.md (used as the live system prompt).
 """
 from __future__ import annotations
 
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 # Prefixes/names to ignore when listing (Obsidian internals, hidden, system).
 IGNORED_NAMES = {".obsidian", ".trash", ".git", "node_modules", "__pycache__"}
+
+# Versteckter Sicherungs-Ordner für Inhalte, die vor einem Überschreiben gesichert werden.
+BACKUP_DIRNAME = ".ewtos-backups"
 
 
 def resolve_dir(vault_path: str) -> Path:
@@ -98,6 +103,27 @@ def search_files(vault_path: str, q: str, max_results: int = 30) -> list[dict]:
     return results
 
 
+def backup_file(vault_path: str, rel_path: str) -> str | None:
+    """Sichert eine bestehende, nicht-leere Datei vor dem Überschreiben nach
+    <root>/.ewtos-backups/<rel>.<zeitstempel>.bak. Returns den Backup-rel_path oder
+    None (Datei fehlt/leer). Traversal-geschützt via _safe_resolve."""
+    p = _safe_resolve(vault_path, rel_path)
+    if not p.exists() or not p.is_file():
+        return None
+    try:
+        if p.stat().st_size == 0:
+            return None
+    except OSError:
+        return None
+    root = resolve_dir(vault_path).resolve()
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_rel = f"{BACKUP_DIRNAME}/{rel_path}.{ts}.bak"
+    dest = (root / backup_rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(p, dest)
+    return backup_rel.replace("\\", "/")
+
+
 def write_file(vault_path: str, rel_path: str, content: str) -> None:
     """Überschreibt eine bestehende .md-Datei."""
     p = _safe_resolve(vault_path, rel_path)
@@ -135,6 +161,17 @@ def read_asset(vault_path: str, rel_path: str) -> tuple[bytes, str]:
     if not p.exists() or not p.is_file():
         raise FileNotFoundError(f"Asset nicht gefunden: {rel_path}")
     return p.read_bytes(), _ASSET_MIMES[ext]
+
+
+def write_asset(vault_path: str, rel_path: str, data: bytes) -> str:
+    """Schreibt ein Binär-Asset (Bild) in den Vault. Returns den posix-rel_path.
+    Pfad-Traversal-geschützt via _safe_resolve; nur Bild-Endungen erlaubt."""
+    p = _safe_resolve(vault_path, rel_path)
+    if p.suffix.lower() not in _ASSET_MIMES:
+        raise ValueError(f"Dateityp nicht erlaubt: {p.suffix or '(keine)'}")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    return rel_path.replace("\\", "/")
 
 
 def delete_path(vault_path: str, rel_path: str) -> str:

@@ -38,3 +38,6 @@ dist/
 
 # Lokale Referenz-Materialien (große PDFs, nicht versionieren)
 wissen-ueber-obsidian/
+
+# Graphify Knowledge Graph Output
+graphify-out/

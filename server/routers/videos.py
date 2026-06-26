@@ -24,11 +24,10 @@ def videos_save_transcript(
     vault_id: str,
     slug: str,
     req: TranscriptSaveRequest,
-    saeule: str | None = None,
 ) -> dict[str, Any]:
     try:
         return transcript_writer.save_transcript(
-            vault_id, slug, req.transcript, req.with_timestamps, saeule=saeule,
+            vault_id, slug, req.transcript, req.with_timestamps,
         )
     except PermissionError as e:
         raise HTTPException(403, str(e))
@@ -37,9 +36,9 @@ def videos_save_transcript(
 
 
 @router.post("/tools/videos/{vault_id}/{slug}/summary")
-def videos_generate_summary(vault_id: str, slug: str, saeule: str | None = None) -> dict[str, Any]:
+def videos_generate_summary(vault_id: str, slug: str) -> dict[str, Any]:
     try:
-        return summary_writer.generate_summary(vault_id, slug, saeule=saeule)
+        return summary_writer.generate_summary(vault_id, slug)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except ValueError as e:

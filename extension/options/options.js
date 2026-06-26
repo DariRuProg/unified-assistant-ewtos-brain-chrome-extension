@@ -35,7 +35,7 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "openrouterBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel", "chatHeavyOpsMode", "elevenlabsVoiceId"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "openrouterBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel", "chatHeavyOpsMode", "elevenlabsVoiceId", "videoBrainSupabaseUrl", "videoBrainSupabaseUserId"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
   maxUserTurns: "max_user_turns",
@@ -48,6 +48,8 @@ const SERVER_KEY_MAP = {
   setupAgentModel: "setup_agent_model",
   chatHeavyOpsMode: "chat_heavy_ops_mode",
   elevenlabsVoiceId: "elevenlabs_voice_id",
+  videoBrainSupabaseUrl: "video_brain_supabase_url",
+  videoBrainSupabaseUserId: "video_brain_supabase_user_id",
 };
 
 // Provider-spezifische Modell-Hints + Datalist-Werte
@@ -779,7 +781,7 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
 // ----- Initial load -----
 
 (async () => {
-  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "hideQuickRowOnTool", "explorerShowHidden", "explorerAllowDelete"]);
+  const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "showQuickRow", "uiIconScale", "uiFontScale", "explorerShowHidden", "explorerAllowDelete"]);
   for (const key of CLIENT_FIELDS) {
     const e = document.getElementById(key);
     if (e && stored[key] !== undefined) e.value = stored[key];
@@ -789,11 +791,27 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
   setActiveSwatch(theme);
   applyThemeToPage(theme, stored.darkMode || false);
 
-  const hideQR = document.getElementById("hideQuickRowOnTool");
-  hideQR.checked = !!stored.hideQuickRowOnTool;
-  hideQR.addEventListener("change", () => {
-    chrome.storage.local.set({ hideQuickRowOnTool: hideQR.checked });
+  const showQR = document.getElementById("showQuickRow");
+  showQR.checked = !!stored.showQuickRow;
+  showQR.addEventListener("change", () => {
+    chrome.storage.local.set({ showQuickRow: showQR.checked });
   });
+
+  const iconScale = document.getElementById("uiIconScale");
+  if (iconScale) {
+    iconScale.value = String(stored.uiIconScale ?? 1.15);
+    iconScale.addEventListener("change", () => {
+      chrome.storage.local.set({ uiIconScale: parseFloat(iconScale.value) });
+    });
+  }
+
+  const fontScale = document.getElementById("uiFontScale");
+  if (fontScale) {
+    fontScale.value = String(stored.uiFontScale ?? 1);
+    fontScale.addEventListener("change", () => {
+      chrome.storage.local.set({ uiFontScale: parseFloat(fontScale.value) });
+    });
+  }
 
   const showHidden = document.getElementById("explorerShowHidden");
   if (showHidden) {
@@ -825,6 +843,9 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
     setApiKeyBadge("gemini", server.gemini_api_key_set);
     setApiKeyBadge("youtube", server.youtube_api_key_set);
     setApiKeyBadge("elevenlabs", server.elevenlabs_api_key_set);
+    setApiKeyBadge("videoBrainSupabaseAnonKey", server.video_brain_supabase_anon_key_set);
+    setApiKeyBadge("videoBrainSupabaseServiceKey", server.video_brain_supabase_service_key_set);
+    setApiKeyBadge("videoBrainLicense", server.video_brain_license_key_set);
     const ttsToggle = document.getElementById("chatTtsEnabled");
     if (ttsToggle) ttsToggle.checked = !!server.chat_tts_enabled;
     const chatShowSources = document.getElementById("chatShowSources");
@@ -990,6 +1011,9 @@ document.getElementById("save").addEventListener("click", async () => {
     ["geminiApiKey", "gemini_api_key"],
     ["youtubeApiKey", "youtube_api_key"],
     ["elevenlabsApiKey", "elevenlabs_api_key"],
+    ["videoBrainSupabaseAnonKey", "video_brain_supabase_anon_key"],
+    ["videoBrainSupabaseServiceKey", "video_brain_supabase_service_key"],
+    ["videoBrainLicenseKey", "video_brain_license_key"],
   ];
   const ttsToggleEl = document.getElementById("chatTtsEnabled");
   if (ttsToggleEl) serverPayload.chat_tts_enabled = ttsToggleEl.checked;
@@ -1028,5 +1052,30 @@ document.getElementById("save").addEventListener("click", async () => {
 
   if (serverUrlChanged) {
     chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
+  }
+});
+
+// ── video-brain QR-Pairing ──────────────────────────────────────────────────
+
+document.getElementById("generateVideoBrainQrBtn")?.addEventListener("click", async () => {
+  const hint = document.getElementById("videoBrainQrHint");
+  const container = document.getElementById("videoBrainQrCanvas");
+  const wrapper = document.getElementById("videoBrainQrContainer");
+  hint.textContent = "";
+
+  try {
+    const data = await jfetch("/tools/video-brain/pair-config");
+    if (!data.supabase_url || !data.supabase_anon_key || !data.user_id) {
+      hint.textContent = "Supabase-URL, Anon-Key und User-ID müssen zuerst gespeichert sein.";
+      return;
+    }
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+    const appUrl = `https://video-brain.ewtos.com/setup?c=${payload}`;
+    container.innerHTML = "";
+    new QRCode(container, { text: appUrl, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+    wrapper.style.display = "block";
+    hint.textContent = appUrl;
+  } catch (e) {
+    hint.textContent = `Fehler: ${e.message}`;
   }
 });

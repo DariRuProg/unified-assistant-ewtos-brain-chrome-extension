@@ -21,7 +21,7 @@ import logging
 from typing import Any
 
 import settings
-from tools import playlists, saeulen, transcript_writer, videos
+from tools import playlists, transcript_writer, videos
 from tools import youtube_transcript_fallback
 
 log = logging.getLogger(__name__)
@@ -36,9 +36,9 @@ SUMMARY_PLACEHOLDER = "_(noch keine Zusammenfassung)_"
 _active_lock = asyncio.Lock()
 
 
-def _summary_missing(vault_id: str, slug: str, saeule: str) -> bool:
+def _summary_missing(vault_id: str, slug: str) -> bool:
     try:
-        p = videos.video_path(vault_id, slug, saeule)
+        p = videos.video_path(vault_id, slug)
         return SUMMARY_PLACEHOLDER in p.read_text(encoding="utf-8")
     except Exception:
         return False
@@ -48,25 +48,22 @@ async def pull_pending_transcripts(
     vault_id: str,
     playlist_name: str,
     bridge,
-    saeule: str | None = None,
     with_timestamps: bool = False,
     summarize: bool = False,
 ) -> dict[str, Any]:
     """Hole alle pending Transcripts einer Playlist seriell ab.
 
     Args:
-        vault_id, playlist_name, saeule: identifizieren die Playlist (Default 'knowledge-library/ai').
+        vault_id, playlist_name: identifizieren die Playlist (wiki/resources/playlists/).
         bridge: ExtensionBridge-Instanz aus main.py (für `bridge.call`).
         with_timestamps: wenn True, Transcript mit `[HH:MM:SS]`-Prefix.
         summarize: wenn True, ruft pro erfolgreich-transcribed Item zusätzlich
-            `summary_writer.generate_summary`. Achtung: kostet Anthropic-Tokens.
+            `summary_writer.generate_summary`. Achtung: kostet LLM-Tokens.
 
     Returns:
         Statistik-Dict: total, transcribed, skipped_already_done, failed,
         aborted (mit abort_reason), failed_summaries (bei summarize=True).
     """
-    s = saeulen.validate_saeule(saeule)
-
     if not settings.vault_permission(vault_id, "write_raw"):
         raise PermissionError("write_raw-Recht fehlt im Vault — in den Einstellungen aktivieren")
     if not settings.vault_permission(vault_id, "write_playlists"):
@@ -77,7 +74,6 @@ async def pull_pending_transcripts(
     if _active_lock.locked():
         return {
             "playlist": playlist_name,
-            "saeule": s,
             "total": 0,
             "transcribed": 0,
             "skipped_already_done": 0,
@@ -87,23 +83,21 @@ async def pull_pending_transcripts(
         }
 
     async with _active_lock:
-        return await _run(vault_id, playlist_name, s, bridge, with_timestamps, summarize)
+        return await _run(vault_id, playlist_name, bridge, with_timestamps, summarize)
 
 
 async def _run(
     vault_id: str,
     playlist_name: str,
-    saeule: str,
     bridge,
     with_timestamps: bool,
     summarize: bool,
 ) -> dict[str, Any]:
-    playlist = playlists.get_playlist(vault_id, playlist_name, saeule=saeule)
+    playlist = playlists.get_playlist(vault_id, playlist_name)
     items = playlist.get("items") or []
 
     result: dict[str, Any] = {
         "playlist": playlist_name,
-        "saeule": saeule,
         "total": len(items),
         "transcribed": 0,
         "skipped_already_done": 0,
@@ -130,7 +124,7 @@ async def _run(
 
         # Pending-Check via Master-Page-Frontmatter
         try:
-            video = videos.get_video(vault_id, slug, saeule=saeule)
+            video = videos.get_video(vault_id, slug)
         except Exception as e:
             result["failed"].append({"title": title, "url": url, "error": f"get_video: {e}"})
             continue
@@ -139,7 +133,7 @@ async def _run(
             continue
         existing = (video["frontmatter"].get("transcript") or "")
         has_transcript = isinstance(existing, str) and bool(existing.strip())
-        needs_summary = summarize and _summary_missing(vault_id, slug, saeule)
+        needs_summary = summarize and _summary_missing(vault_id, slug)
 
         if has_transcript and not needs_summary:
             result["skipped_already_done"] += 1
@@ -194,7 +188,7 @@ async def _run(
 
             try:
                 transcript_writer.save_transcript(
-                    vault_id, slug, text, with_timestamps=with_timestamps, saeule=saeule,
+                    vault_id, slug, text, with_timestamps=with_timestamps,
                 )
                 result["transcribed"] += 1
             except PermissionError as e:
@@ -210,7 +204,7 @@ async def _run(
         if summarize:
             try:
                 from tools import summary_writer
-                summary_writer.generate_summary(vault_id, slug, saeule=saeule)
+                summary_writer.generate_summary(vault_id, slug)
                 result["summarized"] += 1
             except Exception as e:
                 result["failed_summaries"].append({"title": title, "error": str(e)})

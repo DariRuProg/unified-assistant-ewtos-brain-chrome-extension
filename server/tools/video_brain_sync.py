@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
@@ -96,6 +97,10 @@ def _customer_cfg() -> dict[str, str]:
     if not user_id:
         raise PermissionError("video_brain_supabase_user_id nicht konfiguriert (Options → video-brain)")
     return {"url": url.rstrip("/"), "service_key": service_key, "user_id": user_id}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _sb_headers(service_key: str) -> dict[str, str]:
@@ -240,7 +245,12 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
     if transcript_rel:
         transcript_text = _read_transcript_file(vault_path, str(transcript_rel))
     else:
-        transcript_text = _extract_section(body, "Transkript") or _extract_section(body, "Transcript")
+        raw_section = _extract_section(body, "Transkript") or _extract_section(body, "Transcript")
+        if raw_section and raw_section.strip().startswith("Siehe "):
+            ref_path = raw_section.strip().removeprefix("Siehe ").strip()
+            transcript_text = _read_transcript_file(vault_path, ref_path)
+        else:
+            transcript_text = raw_section
 
     # Body-Sektionen (Säulen-Schema nach Summary-Generate)
     kern_section = _extract_section(body, "Kern-Insights")
@@ -271,7 +281,7 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
         metadata["channel_url"] = channel_url
 
     # Live-Enrichment: fehlende Felder via yt-dlp nachladen
-    if not yt_view_count and not metadata.get("description"):
+    if not yt_view_count or not metadata.get("description"):
         try:
             from tools.youtube_metadata import fetch_metadata as _yt_meta
             live = _yt_meta(video_id)
@@ -312,6 +322,7 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
         "creator_slug": _slugify(channel) if channel else None,
         "metadata_json": json.dumps(metadata, ensure_ascii=False) if metadata else None,
         "vault_synced": True,
+        "last_seen_at": _now_iso(),
     }
 
 
@@ -330,7 +341,7 @@ def _upsert_history(cfg: dict, row: dict) -> None:
 
 # --- Öffentliche API ---------------------------------------------------------
 
-def sync_video(vault_id: str, video_slug: str, saeule: str | None = None) -> dict:
+def sync_video(vault_id: str, video_slug: str) -> dict:
     """Spiegelt ein einzelnes fertig verarbeitetes Video in die Kunden-Supabase.
     Non-blocking: gibt immer ein dict zurück, wirft nie (Fehler nur geloggt)."""
     try:
@@ -340,13 +351,12 @@ def sync_video(vault_id: str, video_slug: str, saeule: str | None = None) -> dic
 
         cfg = _customer_cfg()
 
-        from tools import videos as videos_tool, saeulen
-        s = saeulen.validate_saeule(saeule)
+        from tools import videos as videos_tool
         vault = settings.get_vault(vault_id)
         if not vault:
             return {"ok": False, "reason": f"vault {vault_id} nicht gefunden"}
 
-        video_data = videos_tool.get_video(vault_id, video_slug, s)
+        video_data = videos_tool.get_video(vault_id, video_slug)
         if not video_data:
             return {"ok": False, "reason": f"video {video_slug} nicht gefunden"}
 

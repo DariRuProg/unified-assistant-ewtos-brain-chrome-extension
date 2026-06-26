@@ -2,7 +2,7 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
-import { renderMarkdown, renderLineDiff } from '../markdown.js';
+import { renderMarkdown, renderLineDiff, openInObsidian } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
 
 const VH_SEVERITY = {
@@ -10,6 +10,27 @@ const VH_SEVERITY = {
   warn: { icon: "🟡", label: "Warnung" },
   info: { icon: "🔵", label: "Info" },
 };
+
+// Modell-agnostischer Copy-Paste-Prompt zum Ingesten aller noch nicht ingesteten
+// Roh-Quellen. In Claude Code oder ein beliebiges LLM mit Vault-Zugriff einfügen.
+function buildIngestPrompt(paths) {
+  const list = paths.map((p) => `- ${p}`).join("\n");
+  return [
+    "Ingeste folgende Roh-Quellen in meinen Obsidian-Vault nach der Karpathy-Methode (raw/ → wiki/).",
+    "",
+    "Für JEDE Quelle:",
+    "1. Roh-Datei lesen.",
+    "2. Passende Vorlage aus templates/ nehmen (Video → templates/video.md, Creator → creator.md, Playlist → playlist.md, sonst wissensseite.md/quelle.md). Frontmatter-Keys + Sektionen exakt übernehmen.",
+    "3. Kuratierte Wiki-Page im passenden PARA-Ordner anlegen — Videos/Playlists/Creators flach unter wiki/resources/, sonst wiki/projects|areas|resources/. Sachgebiet als freies Frontmatter-Feld `thema` (kein Ordner pro Thema).",
+    "4. Bidirektional verlinken: Wiki-Page `## Quellen` → [[raw/...]], Roh-Datei-Frontmatter `kuratiert_in: \"[[wiki/...]]\"`.",
+    "5. Seite in den passenden `## Pages`-Index-Hub eintragen.",
+    "Am Ende EINEN gesammelten Eintrag in log.md (Datum — was ingested).",
+    "Dateinamen kebab-case + ISO-Datum. Frag nach, bevor du bestehende Pages überschreibst.",
+    "",
+    "Quellen:",
+    list,
+  ].join("\n");
+}
 
 export async function renderVaultExplorer() {
   state.panelTitle.textContent = "Vault-Explorer";
@@ -28,30 +49,7 @@ export async function renderVaultExplorer() {
   const searchBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "Suchen" });
   const guideBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "📖", title: "Anleitung öffnen" });
   guideBtn.addEventListener("click", () => openFile("anleitung.md"));
-  const newFileBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "+ Datei", title: "Neue Datei anlegen" });
-  newFileBtn.addEventListener("click", async () => {
-    if (!currentVaultId) return;
-    const name = prompt("Dateiname (z.B. meine-notiz.md):");
-    if (!name || !name.trim()) return;
-    const rel = name.trim().endsWith(".md") ? name.trim() : name.trim() + ".md";
-    try {
-      const res = await fetch(`${httpBase}/tools/vault_file_new/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(rel)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "" }),
-      });
-      if (res.ok) {
-        currentFile = null;
-        await renderView();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert("Fehler: " + (err.detail || "Unbekannt"));
-      }
-    } catch (err) {
-      alert("Fehler: " + (err.message || err));
-    }
-  });
-  searchRow.append(searchInput, searchBtn, guideBtn, newFileBtn);
+  searchRow.append(searchInput, searchBtn, guideBtn);
   header.append(vaultSelect, searchRow);
 
   const breadcrumb = el("div", { className: "vault-breadcrumb" });
@@ -418,6 +416,19 @@ export async function renderVaultExplorer() {
           });
         });
         viewerActions.append(chatBtn);
+        // Obsidian wird NUR hier angeboten — bei einer im Vault-Explorer geöffneten Datei.
+        const obsidianBtn = el("button", {
+          type: "button",
+          className: "vault-obsidian-btn obsidian-button",
+          textContent: "✎ In Obsidian öffnen",
+          title: "Diese Datei in Obsidian öffnen (externe App)",
+        });
+        obsidianBtn.addEventListener("click", () => {
+          const v = vaultsById[currentVaultId];
+          const vaultName = v ? (v.path.split(/[\\/]/).filter(Boolean).pop() || v.name) : "";
+          openInObsidian(vaultName, currentFile);
+        });
+        viewerActions.append(obsidianBtn);
         if (canWrite) {
           const editBtn = el("button", { type: "button", className: "vault-edit-btn", textContent: "Bearbeiten" });
           const rawContent = data.content || "";
@@ -732,6 +743,34 @@ export async function renderVaultHealth() {
       renderUpgradeAffordance();
     }
 
+    const uningested = findings.filter((f) => f.category === "raw_uningested" && f.path);
+    if (uningested.length) {
+      const box = el("div", { className: "vh-ingest-box" });
+      box.append(el("div", {
+        className: "vh-ingest-title",
+        textContent: `📥 ${uningested.length} Roh-Quelle(n) noch nicht ingested`,
+      }));
+      const btn = el("button", {
+        type: "button",
+        className: "vh-ingest-btn",
+        textContent: "Ingest-Prompt kopieren",
+        title: "Prompt mit allen uningesteten Quellen in die Zwischenablage — in beliebiges LLM (Subscription) einfügen",
+      });
+      btn.addEventListener("click", async () => {
+        const prompt = buildIngestPrompt(uningested.map((f) => f.path));
+        try {
+          await navigator.clipboard.writeText(prompt);
+          btn.textContent = "✓ Kopiert";
+          setTimeout(() => { btn.textContent = "Ingest-Prompt kopieren"; }, 2000);
+        } catch (_) {
+          setStatus("Clipboard nicht verfügbar — Prompt im Status unten.", "error");
+          setStatus(prompt);
+        }
+      });
+      box.append(btn);
+      listBox.append(box);
+    }
+
     for (const sevKey of ["error", "warn", "info"]) {
       const group = findings.filter((f) => f.severity === sevKey);
       if (!group.length) continue;
@@ -741,7 +780,17 @@ export async function renderVaultHealth() {
         const row = el("div", { className: "vh-finding vh-sev-" + sevKey });
         const head = el("div", { className: "vh-finding-head" });
         head.append(el("span", { className: "vh-badge", textContent: f.category }));
-        if (f.path) head.append(el("code", { className: "vh-path", textContent: f.path }));
+        if (f.path) {
+          const pathEl = el("code", { className: "vh-path", textContent: f.path });
+          // Datei-Pfade (nicht Ordner) anklickbar → im Vault-Explorer öffnen.
+          if (!f.path.endsWith("/")) {
+            pathEl.classList.add("clickable");
+            pathEl.title = "Im Vault-Explorer öffnen";
+            pathEl.addEventListener("click", () =>
+              openTool("vault_explorer", { initialFile: f.path, vaultId: currentVaultId }));
+          }
+          head.append(pathEl);
+        }
         row.append(head);
         row.append(el("div", { className: "vh-msg", textContent: f.message }));
         if (f.recommendation) row.append(el("div", { className: "vh-rec", textContent: "→ " + f.recommendation }));

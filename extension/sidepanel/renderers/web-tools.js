@@ -244,13 +244,70 @@ export function renderPageScrape() {
 export function renderSeoCheck() {
   state.panelTitle.textContent = "SEO-Check";
 
-  const runBtn = el("button", { textContent: "Aktiven Tab analysieren" });
+  const refreshBtn = el("button", { type: "button", className: "secondary", textContent: "↻ Neu analysieren" });
   const status = el("div", { className: "tool-status" });
   const output = el("div");
   output.style.cssText = "margin-top:8px;font-size:13px;line-height:1.6;";
 
-  runBtn.addEventListener("click", async () => {
-    runBtn.disabled = true;
+  let hMode = "level"; // "level" | "chrono"
+
+  const row = (label, value) => {
+    if (!value && value !== 0) return null;
+    const wrap = el("div");
+    wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
+    const lbl = el("span", { textContent: label + ": " });
+    lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
+    wrap.append(lbl, document.createTextNode(value));
+    return wrap;
+  };
+
+  const headingRow = (items, label) => {
+    if (!items?.length) return null;
+    const wrap = el("div");
+    wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
+    const lbl = el("span", { textContent: `${label} (${items.length}): ` });
+    lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
+    const ul = el("ul");
+    ul.style.cssText = "margin:2px 0 0 16px;padding:0;";
+    items.slice(0, 5).forEach((t) => ul.append(el("li", { textContent: t })));
+    if (items.length > 5) ul.append(el("li", { textContent: `… +${items.length - 5} weitere` }));
+    wrap.append(lbl, ul);
+    return wrap;
+  };
+
+  function renderHeadingBlock(data, container) {
+    container.replaceChildren();
+    const toggle = el("div", { className: "scrape-mode-row" });
+    toggle.style.margin = "4px 0";
+    const levelBtn = el("button", { type: "button", className: "scrape-mode-btn" + (hMode === "level" ? " active" : ""), textContent: "Nach Ebene" });
+    const chronoBtn = el("button", { type: "button", className: "scrape-mode-btn" + (hMode === "chrono" ? " active" : ""), textContent: "Chronologisch" });
+    levelBtn.addEventListener("click", () => { if (hMode !== "level") { hMode = "level"; renderHeadingBlock(data, container); } });
+    chronoBtn.addEventListener("click", () => { if (hMode !== "chrono") { hMode = "chrono"; renderHeadingBlock(data, container); } });
+    toggle.append(levelBtn, chronoBtn);
+    container.append(toggle);
+
+    if (hMode === "level") {
+      [headingRow(data.h1, "H1"), headingRow(data.h2, "H2"), headingRow(data.h3, "H3")]
+        .forEach((node) => { if (node) container.append(node); });
+    } else {
+      const headings = data.headings || [];
+      if (!headings.length) {
+        container.append(el("div", { textContent: "Keine Überschriften gefunden", style: "color:var(--muted,#888);padding:3px 0;" }));
+        return;
+      }
+      for (const h of headings) {
+        const r = el("div");
+        r.style.cssText = `padding:2px 0;padding-left:${(h.level - 1) * 14}px;border-bottom:1px solid var(--border,#eee);`;
+        const lvl = el("span", { textContent: `H${h.level}` });
+        lvl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:6px;font-size:11px;";
+        r.append(lvl, document.createTextNode(h.text));
+        container.append(r);
+      }
+    }
+  }
+
+  async function runSeo() {
+    refreshBtn.disabled = true;
     status.textContent = "analysiere...";
     status.className = "tool-status";
     output.replaceChildren();
@@ -266,39 +323,14 @@ export function renderSeoCheck() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
 
-      const row = (label, value) => {
-        if (!value && value !== 0) return null;
-        const wrap = el("div");
-        wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
-        const lbl = el("span", { textContent: label + ": " });
-        lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
-        wrap.append(lbl, document.createTextNode(value));
-        return wrap;
-      };
+      [row("URL", data.url), row("Title", data.title), row("Description", data.description), row("Canonical", data.canonical), row("Robots", data.robots)]
+        .forEach((node) => { if (node) output.append(node); });
 
-      const headingRow = (items, label) => {
-        if (!items?.length) return null;
-        const wrap = el("div");
-        wrap.style.cssText = "padding:3px 0;border-bottom:1px solid var(--border,#eee);";
-        const lbl = el("span", { textContent: `${label} (${items.length}): ` });
-        lbl.style.cssText = "font-weight:600;color:var(--muted,#888);margin-right:4px;";
-        const ul = el("ul");
-        ul.style.cssText = "margin:2px 0 0 16px;padding:0;";
-        items.slice(0, 5).forEach((t) => ul.append(el("li", { textContent: t })));
-        if (items.length > 5) ul.append(el("li", { textContent: `… +${items.length - 5} weitere` }));
-        wrap.append(lbl, ul);
-        return wrap;
-      };
+      const hBlock = el("div");
+      output.append(hBlock);
+      renderHeadingBlock(data, hBlock);
 
       [
-        row("URL", data.url),
-        row("Title", data.title),
-        row("Description", data.description),
-        row("Canonical", data.canonical),
-        row("Robots", data.robots),
-        headingRow(data.h1, "H1"),
-        headingRow(data.h2, "H2"),
-        headingRow(data.h3, "H3"),
         row("OG Title", data.og_title),
         row("OG Description", data.og_description),
         row("OG Image", data.og_image),
@@ -313,27 +345,45 @@ export function renderSeoCheck() {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
     } finally {
-      runBtn.disabled = false;
+      refreshBtn.disabled = false;
     }
-  });
+  }
 
-  state.panelBody.append(runBtn, status, output);
+  refreshBtn.addEventListener("click", runSeo);
+  state.panelBody.append(refreshBtn, status, output);
+  runSeo();
 }
 
 export function renderImageAnalyse() {
   state.panelTitle.textContent = "Image-Analyse";
 
-  const runBtn = el("button", { textContent: "Bilder analysieren" });
-  const status = el("div", { className: "tool-status" });
-  const summary = el("div", { className: "tool-status" });
-  const list = el("div");
-  list.style.cssText = "overflow-y:auto;max-height:420px;display:flex;flex-direction:column;gap:6px;margin-top:8px;";
+  let currentImages = [];
 
-  runBtn.addEventListener("click", async () => {
-    runBtn.disabled = true;
+  const downloadAll = () => {
+    for (const img of currentImages) {
+      const filename = (img.src || img.url || "").split("/").pop().split("?")[0] || "image.jpg";
+      chrome.downloads.download({ url: img.src || img.url, filename });
+    }
+  };
+
+  const refreshBtn = el("button", { type: "button", className: "secondary", textContent: "↻ Neu" });
+  const dlAllBtn = el("button", { type: "button", className: "secondary", textContent: "Alle herunterladen", style: "display:none" });
+  dlAllBtn.addEventListener("click", downloadAll);
+  const headerRow = el("div");
+  headerRow.style.cssText = "display:flex;gap:8px;flex:0 0 auto;";
+  headerRow.append(refreshBtn, dlAllBtn);
+
+  const status = el("div", { className: "tool-status", style: "flex:0 0 auto;" });
+  const summary = el("div", { className: "tool-status", style: "flex:0 0 auto;" });
+  const list = el("div");
+  list.style.cssText = "overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;margin-top:8px;";
+
+  async function runImages() {
+    refreshBtn.disabled = true;
     status.textContent = "analysiere...";
     status.className = "tool-status";
     summary.textContent = "";
+    dlAllBtn.style.display = "none";
     list.replaceChildren();
     try {
       const httpBase = await getHttpBase();
@@ -348,9 +398,11 @@ export function renderImageAnalyse() {
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
 
       const { images = [], total = 0, missing_alt = 0 } = data;
+      currentImages = images;
       status.textContent = "fertig";
       status.className = "tool-status success";
       summary.textContent = `${total} Bilder${missing_alt > 0 ? `, ${missing_alt} ohne Alt-Text` : ""}`;
+      dlAllBtn.style.display = images.length > 1 ? "" : "none";
 
       for (const img of images) {
         const card = el("div");
@@ -372,7 +424,6 @@ export function renderImageAnalyse() {
         } else {
           altEl.textContent = img.alt;
         }
-        info.append(dims, altEl);
         const dlBtn = el("button", { type: "button", className: "secondary", textContent: "Download" });
         dlBtn.style.cssText = "margin-top:4px;font-size:11px;padding:2px 8px;";
         dlBtn.addEventListener("click", () => {
@@ -383,48 +434,186 @@ export function renderImageAnalyse() {
         card.append(thumb, info);
         list.append(card);
       }
-
-      if (images.length > 1) {
-        const dlAllBtn = el("button", { type: "button", className: "secondary", textContent: "Alle herunterladen" });
-        dlAllBtn.style.marginTop = "6px";
-        dlAllBtn.addEventListener("click", () => {
-          for (const img of images) {
-            const filename = (img.src || img.url || "").split("/").pop().split("?")[0] || "image.jpg";
-            chrome.downloads.download({ url: img.src || img.url, filename });
-          }
-        });
-        list.append(dlAllBtn);
-      }
     } catch (err) {
       status.textContent = err.message || String(err);
       status.className = "tool-status error";
     } finally {
-      runBtn.disabled = false;
+      refreshBtn.disabled = false;
     }
-  });
+  }
 
-  state.panelBody.append(runBtn, status, summary, list);
+  refreshBtn.addEventListener("click", runImages);
+  state.panelBody.append(headerRow, status, summary, list);
+  runImages();
+}
+
+const COLOR_STORE_KEY = "colorExtractions";
+const COLOR_FORMAT_KEY = "colorCopyFormat";
+const COLOR_MAX = 8;
+
+// Beliebigen CSS-Farbstring zu {r,g,b} normalisieren (Canvas-basiert).
+const _colorCanvas = document.createElement("canvas");
+const _colorCtx = _colorCanvas.getContext("2d", { willReadFrequently: true });
+function isValidColor(input) {
+  if (!input || typeof input !== "string") return false;
+  _colorCtx.fillStyle = "#000"; _colorCtx.fillStyle = input; const a = _colorCtx.fillStyle;
+  _colorCtx.fillStyle = "#fff"; _colorCtx.fillStyle = input; const b = _colorCtx.fillStyle;
+  return a === b;
+}
+function parseRgb(input) {
+  _colorCtx.clearRect(0, 0, 1, 1);
+  _colorCtx.fillStyle = input;
+  _colorCtx.fillRect(0, 0, 1, 1);
+  const d = _colorCtx.getImageData(0, 0, 1, 1).data;
+  return { r: d[0], g: d[1], b: d[2] };
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const dd = max - min;
+    s = l > 0.5 ? dd / (2 - max - min) : dd / (max + min);
+    if (max === r) h = (g - b) / dd + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / dd + 2;
+    else h = (r - g) / dd + 4;
+    h /= 6;
+  }
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+function formatColor(input, fmt) {
+  if (!isValidColor(input)) return input; // z.B. Nicht-Farb-CSS-Variable: roh kopieren
+  const { r, g, b } = parseRgb(input);
+  if (fmt === "rgb") return `rgb(${r}, ${g}, ${b})`;
+  if (fmt === "hsl") { const { h, s, l } = rgbToHsl(r, g, b); return `hsl(${h}, ${s}%, ${l}%)`; }
+  return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
 export function renderColorPicker() {
   state.panelTitle.textContent = "Color-Picker";
 
-  const runBtn = el("button", { textContent: "Farben extrahieren" });
-  const status = el("div", { className: "tool-status" });
-  const output = el("div");
-  output.style.cssText = "margin-top:8px;font-size:12px;";
+  let extractions = [];
+  let copyFormat = "hex";
 
-  const swatch = (value) => {
+  const runBtn = el("button", { textContent: "Farben extrahieren" });
+  const eyeBtn = el("button", { type: "button", className: "secondary", textContent: "🎨 Aus Seite" });
+  const status = el("div", { className: "tool-status" });
+
+  // Format-Umschalter (HEX / RGB / HSL)
+  const fmtRow = el("div", { className: "scrape-mode-row" });
+  fmtRow.style.margin = "6px 0";
+  const fmtBtns = {};
+  ["hex", "rgb", "hsl"].forEach((fmt) => {
+    const b = el("button", { type: "button", className: "scrape-mode-btn", textContent: fmt.toUpperCase() });
+    b.addEventListener("click", () => {
+      if (copyFormat === fmt) return;
+      copyFormat = fmt;
+      chrome.storage.local.set({ [COLOR_FORMAT_KEY]: fmt });
+      Object.entries(fmtBtns).forEach(([k, btn]) => btn.classList.toggle("active", k === fmt));
+    });
+    fmtBtns[fmt] = b;
+    fmtRow.append(b);
+  });
+
+  const eyeResult = el("div");
+  eyeResult.style.cssText = "margin-top:6px;font-size:12px;";
+
+  // Sammlung — horizontal, neueste Extraktion links
+  const collection = el("div");
+  collection.style.cssText = "display:flex;gap:10px;overflow-x:auto;margin-top:10px;padding-bottom:6px;align-items:flex-start;";
+
+  function flashCopied(value) {
+    status.textContent = "✓ kopiert: " + value;
+    status.className = "tool-status success";
+  }
+
+  // Swatch, der bei Klick die Farbe im gewählten Format kopiert.
+  function copySwatch(value) {
     const s = el("span");
-    s.style.cssText = `display:inline-block;width:16px;height:16px;border:1px solid var(--border,#ccc);background:${value};vertical-align:middle;margin-right:6px;border-radius:2px;flex-shrink:0;`;
+    s.style.cssText = `display:inline-block;width:16px;height:16px;border:1px solid var(--border,#ccc);background:${value};vertical-align:middle;margin-right:6px;border-radius:2px;flex-shrink:0;cursor:pointer;`;
+    s.title = "Klicken zum Kopieren";
+    s.addEventListener("click", () => {
+      const out = formatColor(value, copyFormat);
+      navigator.clipboard.writeText(out);
+      flashCopied(out);
+    });
     return s;
-  };
+  }
+
+  function saveExtractions() {
+    chrome.storage.local.set({ [COLOR_STORE_KEY]: extractions });
+  }
+
+  function buildCard(ex) {
+    const card = el("div");
+    card.style.cssText = "flex:0 0 auto;min-width:200px;max-width:260px;border:1px solid var(--border,#ddd);border-radius:6px;padding:8px;background:var(--bg-card,transparent);";
+
+    const head = el("div");
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;";
+    const titleWrap = el("div");
+    titleWrap.style.cssText = "min-width:0;overflow:hidden;";
+    const host = el("div", { textContent: ex.hostname || "Seite" });
+    host.style.cssText = "font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+    const when = el("div", { textContent: new Date(ex.ts).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) });
+    when.style.cssText = "font-size:10px;color:var(--muted,#888);";
+    titleWrap.append(host, when);
+    const delBtn = el("button", { type: "button", className: "secondary", textContent: "×", title: "Entfernen" });
+    delBtn.style.cssText = "font-size:12px;padding:0 8px;flex-shrink:0;align-self:flex-start;";
+    delBtn.addEventListener("click", () => {
+      extractions = extractions.filter((e) => e !== ex);
+      saveExtractions();
+      renderCollection();
+    });
+    head.append(titleWrap, delBtn);
+    card.append(head);
+
+    const cssVars = ex.css_vars || {};
+    if (Object.keys(cssVars).length > 0) {
+      const sec = el("div");
+      sec.append(el("strong", { textContent: "CSS-Variablen", style: "font-size:11px;" }));
+      for (const [name, value] of Object.entries(cssVars)) {
+        const row = el("div");
+        row.style.cssText = "display:flex;align-items:center;margin:3px 0;font-size:11px;";
+        const lbl = el("span", { textContent: `${name}: ${value}` });
+        lbl.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        row.append(copySwatch(value), lbl);
+        sec.append(row);
+      }
+      card.append(sec);
+    }
+
+    if (ex.computed?.length > 0) {
+      const sec = el("div");
+      sec.style.marginTop = "8px";
+      sec.append(el("strong", { textContent: "Key-Elemente", style: "font-size:11px;" }));
+      for (const item of ex.computed) {
+        const row = el("div");
+        row.style.cssText = "display:flex;align-items:center;gap:4px;margin:3px 0;font-size:11px;";
+        const lbl = el("span", { textContent: item.selector });
+        lbl.style.cssText = "width:80px;color:var(--muted,#888);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        row.append(lbl);
+        if (item.color) row.append(copySwatch(item.color));
+        if (item.background) row.append(copySwatch(item.background));
+        sec.append(row);
+      }
+      card.append(sec);
+    }
+    return card;
+  }
+
+  function renderCollection() {
+    collection.replaceChildren();
+    if (!extractions.length) {
+      collection.append(el("div", { textContent: "Noch keine Farben extrahiert.", style: "color:var(--muted,#888);font-size:12px;" }));
+      return;
+    }
+    for (const ex of extractions) collection.append(buildCard(ex));
+  }
 
   runBtn.addEventListener("click", async () => {
     runBtn.disabled = true;
     status.textContent = "extrahiere...";
     status.className = "tool-status";
-    output.replaceChildren();
     try {
       const httpBase = await getHttpBase();
       const res = await fetch(`${httpBase}/tools/color_picker`, {
@@ -437,40 +626,22 @@ export function renderColorPicker() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
 
-      if (data.has_design_system && Object.keys(data.css_vars || {}).length > 0) {
-        const sec = el("div");
-        sec.append(el("strong", { textContent: "CSS-Variablen" }));
-        for (const [name, value] of Object.entries(data.css_vars)) {
-          const row = el("div");
-          row.style.cssText = "display:flex;align-items:center;margin:3px 0;";
-          row.append(swatch(value), document.createTextNode(`${name}: ${value}`));
-          sec.append(row);
-        }
-        output.append(sec);
-      }
-
-      if (data.computed?.length > 0) {
-        const sec = el("div");
-        sec.style.marginTop = "10px";
-        sec.append(el("strong", { textContent: "Key-Elemente" }));
-        for (const item of data.computed) {
-          const row = el("div");
-          row.style.cssText = "display:flex;align-items:center;gap:4px;margin:3px 0;";
-          const lbl = el("span", { textContent: item.selector });
-          lbl.style.cssText = "width:90px;color:var(--muted,#888);flex-shrink:0;";
-          row.append(lbl);
-          if (item.color) row.append(swatch(item.color));
-          if (item.background) row.append(swatch(item.background));
-          sec.append(row);
-        }
-        output.append(sec);
-      }
-
       if (!data.has_design_system && !data.computed?.length) {
         status.textContent = "Keine Farben gefunden";
         status.className = "tool-status";
         return;
       }
+
+      const ex = {
+        hostname: data.hostname || "Seite",
+        ts: Date.now(),
+        css_vars: data.css_vars || {},
+        computed: data.computed || [],
+      };
+      // Pro Domain nur eine Karte: bestehende ersetzen, neueste nach vorn.
+      extractions = [ex, ...extractions.filter((e) => e.hostname !== ex.hostname)].slice(0, COLOR_MAX);
+      saveExtractions();
+      renderCollection();
       status.textContent = "fertig";
       status.className = "tool-status success";
     } catch (err) {
@@ -480,10 +651,6 @@ export function renderColorPicker() {
       runBtn.disabled = false;
     }
   });
-
-  const eyeBtn = el("button", { type: "button", className: "secondary", textContent: "🎨 Aus Seite" });
-  const eyeResult = el("div");
-  eyeResult.style.cssText = "margin-top:6px;font-size:12px;";
 
   eyeBtn.addEventListener("click", async () => {
     if (!window.EyeDropper) {
@@ -497,11 +664,13 @@ export function renderColorPicker() {
       eyeResult.replaceChildren();
       const row = el("div");
       row.style.cssText = "display:flex;align-items:center;gap:6px;margin:3px 0;";
-      const hexCopy = el("span", { textContent: sRGBHex });
-      hexCopy.style.cssText = "cursor:pointer;";
-      hexCopy.title = "Kopieren";
-      hexCopy.addEventListener("click", () => navigator.clipboard.writeText(sRGBHex));
-      row.append(swatch(sRGBHex), hexCopy);
+      const label = el("span", { textContent: sRGBHex });
+      label.style.cssText = "cursor:pointer;";
+      label.title = "Klicken zum Kopieren";
+      const copy = () => { const out = formatColor(sRGBHex, copyFormat); navigator.clipboard.writeText(out); flashCopied(out); };
+      label.addEventListener("click", copy);
+      const sw = copySwatch(sRGBHex);
+      row.append(sw, label);
       eyeResult.append(row);
     } catch {
       // ESC gedrückt — kein Fehler zeigen
@@ -511,7 +680,15 @@ export function renderColorPicker() {
   const btnRow = el("div");
   btnRow.style.cssText = "display:flex;gap:8px;";
   btnRow.append(runBtn, eyeBtn);
-  state.panelBody.append(btnRow, eyeResult, status, output);
+  state.panelBody.append(btnRow, fmtRow, eyeResult, status, collection);
+
+  // Gespeicherten Zustand laden und Sammlung aufbauen.
+  chrome.storage.local.get([COLOR_STORE_KEY, COLOR_FORMAT_KEY]).then((stored) => {
+    extractions = Array.isArray(stored[COLOR_STORE_KEY]) ? stored[COLOR_STORE_KEY] : [];
+    copyFormat = ["hex", "rgb", "hsl"].includes(stored[COLOR_FORMAT_KEY]) ? stored[COLOR_FORMAT_KEY] : "hex";
+    Object.entries(fmtBtns).forEach(([k, btn]) => btn.classList.toggle("active", k === copyFormat));
+    renderCollection();
+  });
 }
 
 export function renderScreenshot() {
