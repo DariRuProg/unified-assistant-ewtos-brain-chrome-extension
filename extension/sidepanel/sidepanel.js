@@ -39,6 +39,10 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
+  if (changes.uiLanguage !== undefined) {
+    location.reload();
+    return;
+  }
   if (changes.theme !== undefined || changes.darkMode !== undefined) {
     chrome.storage.local.get(["theme", "darkMode"], ({ theme = "neutral", darkMode = false }) => {
       applyTheme(theme, darkMode);

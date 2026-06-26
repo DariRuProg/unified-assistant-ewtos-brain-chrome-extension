@@ -1,5 +1,5 @@
 // ewtos.com
-import { initI18n, t, localizeDom } from '../i18n/i18n.js';
+import { initI18n, t, localizeDom, getLang, setLang } from '../i18n/i18n.js';
 
 const CLIENT_FIELDS = ["serverUrl"];
 
@@ -813,6 +813,12 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
 (async () => {
   await initI18n();
   localizeDom();
+
+  const langSelect = document.getElementById("uiLanguage");
+  if (langSelect) {
+    langSelect.value = getLang();
+    langSelect.addEventListener("change", () => setLang(langSelect.value));
+  }
 
   const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "showQuickRow", "uiIconScale", "uiFontScale", "explorerShowHidden", "explorerAllowDelete"]);
   for (const key of CLIENT_FIELDS) {
