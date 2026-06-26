@@ -1,30 +1,7 @@
 // ewtos.com
+import { initI18n, t, localizeDom } from '../i18n/i18n.js';
+
 const CLIENT_FIELDS = ["serverUrl"];
-
-// ── Language selector ─────────────────────────────────────────────────────────
-
-(function () {
-  const el = document.getElementById("uiLanguage");
-  if (!el) return;
-  chrome.storage.local.get("uiLanguage", ({ uiLanguage }) => {
-    el.value = uiLanguage || "en";
-  });
-  el.addEventListener("change", async () => {
-    const lang = el.value;
-    await chrome.storage.local.set({ uiLanguage: lang });
-    try {
-      const { serverUrl } = await chrome.storage.local.get("serverUrl");
-      const base = (serverUrl || "ws://localhost:9988/ws")
-        .replace(/^ws:/, "http:").replace(/^wss:/, "https:").replace(/\/ws$/, "");
-      await fetch(`${base}/settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ui_language: lang }),
-      });
-    } catch {}
-    location.reload();
-  });
-})();
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -77,61 +54,64 @@ const SERVER_KEY_MAP = {
   videoBrainSupabaseUserId: "video_brain_supabase_user_id",
 };
 
-// Provider-spezifische Modell-Hints + Datalist-Werte
-const PROVIDER_MODELS = {
-  anthropic: {
-    hint: "Modelle: claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5",
-    placeholder: "claude-opus-4-7",
-    options: [
-      ["claude-opus-4-7", "claude-opus-4-7 (Default, am stärksten für Tool-Use)"],
-      ["claude-sonnet-4-6", "claude-sonnet-4-6 (günstiger)"],
-      ["claude-haiku-4-5", "claude-haiku-4-5 (schnell, günstig)"],
-    ],
-  },
-  openai: {
-    hint: "Modelle: gpt-4o / gpt-4o-mini / o1-mini",
-    placeholder: "gpt-4o-mini",
-    options: [
-      ["gpt-4o", "gpt-4o"],
-      ["gpt-4o-mini", "gpt-4o-mini (günstiger)"],
-      ["o1-mini", "o1-mini (reasoning)"],
-    ],
-  },
-  ollama: {
-    hint: "Modelle (vorher pullen: ollama pull <name>): llama3.1:8b / qwen2.5:7b / mistral-nemo",
-    placeholder: "llama3.1:8b",
-    options: [
-      ["llama3.1:8b", "llama3.1:8b (tool-fähig)"],
-      ["qwen2.5:7b", "qwen2.5:7b (tool-fähig)"],
-      ["mistral-nemo", "mistral-nemo"],
-    ],
-  },
-  mistral: {
-    hint: "Modelle: mistral-large-latest / mistral-small-latest",
-    placeholder: "mistral-large-latest",
-    options: [
-      ["mistral-large-latest", "mistral-large-latest"],
-      ["mistral-small-latest", "mistral-small-latest (günstiger)"],
-    ],
-  },
-  openrouter: {
-    hint: "Beliebiges Modell als Slug (provider/model), z.B. anthropic/claude-sonnet-4.6 / openai/gpt-4o / google/gemini-2.0-flash",
-    placeholder: "anthropic/claude-sonnet-4.6",
-    options: [
-      ["anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-4.6"],
-      ["openai/gpt-4o", "openai/gpt-4o"],
-      ["google/gemini-2.0-flash", "google/gemini-2.0-flash"],
-      ["meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct"],
-    ],
-  },
-};
+// Provider-spezifische Modell-Hints + Datalist-Werte (lazy — t() wird erst nach initI18n() korrekt)
+function getProviderModels() {
+  return {
+    anthropic: {
+      hint: t("options.anthropic_models_hint"),
+      placeholder: "claude-opus-4-7",
+      options: [
+        ["claude-opus-4-7", t("options.model_claude_opus_label")],
+        ["claude-sonnet-4-6", t("options.model_claude_sonnet_label")],
+        ["claude-haiku-4-5", t("options.model_claude_haiku_label")],
+      ],
+    },
+    openai: {
+      hint: t("options.openai_models_hint"),
+      placeholder: "gpt-4o-mini",
+      options: [
+        ["gpt-4o", "gpt-4o"],
+        ["gpt-4o-mini", t("options.model_gpt4o_mini_label")],
+        ["o1-mini", t("options.model_o1_mini_label")],
+      ],
+    },
+    ollama: {
+      hint: t("options.ollama_models_hint"),
+      placeholder: "llama3.1:8b",
+      options: [
+        ["llama3.1:8b", t("options.model_llama_label")],
+        ["qwen2.5:7b", t("options.model_qwen_label")],
+        ["mistral-nemo", "mistral-nemo"],
+      ],
+    },
+    mistral: {
+      hint: t("options.mistral_models_hint"),
+      placeholder: "mistral-large-latest",
+      options: [
+        ["mistral-large-latest", "mistral-large-latest"],
+        ["mistral-small-latest", t("options.model_mistral_small_label")],
+      ],
+    },
+    openrouter: {
+      hint: t("options.openrouter_models_hint"),
+      placeholder: "anthropic/claude-sonnet-4.6",
+      options: [
+        ["anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-4.6"],
+        ["openai/gpt-4o", "openai/gpt-4o"],
+        ["google/gemini-2.0-flash", "google/gemini-2.0-flash"],
+        ["meta-llama/llama-3.3-70b-instruct", "meta-llama/llama-3.3-70b-instruct"],
+      ],
+    },
+  };
+}
 
 function updateProviderUI(provider) {
   document.querySelectorAll(".provider-field").forEach((el) => {
     el.classList.toggle("hidden", el.dataset.provider !== provider);
   });
 
-  const cfg = PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
+  const models = getProviderModels();
+  const cfg = models[provider] || models.anthropic;
   const hint = document.getElementById("llmModelHint");
   if (hint) hint.textContent = cfg.hint;
   const modelInput = document.getElementById("llmModel");
@@ -152,10 +132,10 @@ function setApiKeyBadge(provider, isSet) {
   const badge = document.getElementById(`${provider}ApiKeyStatus`);
   if (!badge) return;
   if (isSet) {
-    badge.textContent = "(gesetzt — leer lassen, um nicht zu ändern)";
+    badge.textContent = t("options.api_key_set");
     badge.style.color = "#22c55e";
   } else {
-    badge.textContent = "(noch nicht gesetzt)";
+    badge.textContent = t("options.api_key_unset");
     badge.style.color = "#ef4444";
   }
 }
@@ -252,7 +232,7 @@ async function refreshVaults() {
   vaultsContainer.replaceChildren();
   const vaults = await loadVaults();
   if (!vaults.length) {
-    vaultsContainer.append(el("div", { className: "empty-vaults", textContent: "Noch kein Vault verbunden." }));
+    vaultsContainer.append(el("div", { className: "empty-vaults", textContent: t("options.no_vault_connected") }));
     return;
   }
   for (const v of vaults) {
@@ -297,35 +277,40 @@ function renderVaultCard(vault) {
   const body = el("div", { className: "vault-body" });
 
   const nameField = el("div", { className: "field" });
-  nameField.append(el("label", { textContent: "Name" }));
+  nameField.append(el("label", { textContent: t("options.vault_name_label") }));
   const nameInput = el("input", { type: "text", value: vault.name });
   nameField.append(nameInput);
 
   const pathField = el("div", { className: "field" });
-  pathField.append(el("label", { textContent: "Pfad" }));
+  pathField.append(el("label", { textContent: t("options.vault_path_label") }));
   const pathInput = el("input", { type: "text", value: vault.path });
   pathField.append(pathInput);
 
   const promptField = el("div", { className: "field" });
-  promptField.append(el("label", { textContent: "System-Prompt (optional Override)" }));
+  promptField.append(el("label", { textContent: t("options.vault_system_prompt_label") }));
   const claudeMdHint = vault.has_claude_md
-    ? "✓ <code>CLAUDE.md</code> im Vault gefunden — Feld leer lassen, dann wird sie automatisch als System-Prompt verwendet. Schreib hier nur was rein wenn du die CLAUDE.md überschreiben willst."
-    : "✗ Keine <code>CLAUDE.md</code> im Vault. Wenn dieses Feld leer bleibt nutzt der Bot einen minimalen Default — leg eine CLAUDE.md im Vault an oder schreib hier einen Prompt.";
+    ? t("options.vault_claude_md_found")
+    : t("options.vault_claude_md_missing");
   const promptHint = el("div", { className: "hint" });
   promptHint.innerHTML = claudeMdHint;
   const promptArea = el("textarea", { value: vault.system_prompt || "" });
   const promptLinks = el("div", { className: "vault-prompt-links", style: "display:flex;gap:8px;margin-top:6px;" });
-  const genBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "KI-Prompt generieren" });
-  const copyBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "Anweisung kopieren" });
+  const genBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: t("options.vault_gen_prompt_btn") });
+  const copyBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: t("options.vault_copy_instruction_btn") });
   promptLinks.append(genBtn, copyBtn);
   promptField.append(promptHint, promptArea, promptLinks);
 
   // --- Module-Sektion: Katalog-getriebener Aufbau + Erweiterungen ---
   const moduleSection = el("div", { className: "field" });
-  moduleSection.append(el("label", { textContent: "Module — Aufbau & Erweiterungen" }));
+  moduleSection.append(el("label", { textContent: t("options.vault_modules_label") }));
   const modHint = el("div", { className: "hint" });
-  modHint.innerHTML = 'Wähle, was dieser Vault können soll — alles non-destruktiv (bestehende Dateien bleiben). Oder <a href="#" class="vault-interview-link">per Interview einrichten/erweitern</a>.';
-  modHint.querySelector(".vault-interview-link").addEventListener("click", (e) => {
+  modHint.append(document.createTextNode(t("options.vault_modules_hint_prefix") + " "));
+  const interviewLink = document.createElement("a");
+  interviewLink.href = "#";
+  interviewLink.className = "vault-interview-link";
+  interviewLink.textContent = t("options.vault_modules_interview_link");
+  modHint.append(interviewLink, document.createTextNode("."));
+  interviewLink.addEventListener("click", (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL(`setup/agent.html?vault_id=${encodeURIComponent(vault.id)}&mode=extend`) });
   });
@@ -335,7 +320,7 @@ function renderVaultCard(vault) {
 
   async function applyModule(blueprintId, meta, btn) {
     btn.disabled = true;
-    setStatus(`wende „${meta.name}" an…`);
+    setStatus(t("options.vault_module_applying", { name: meta.name }));
     try {
       const res = blueprintId
         ? await jfetch(`/vaults/${vault.id}/apply_blueprint`, {
@@ -345,16 +330,16 @@ function renderVaultCard(vault) {
         : await jfetch(`/vaults/${vault.id}/scaffold`, { method: "POST" });
       const created = (res.created || []).length;
       if (!appliedLocal.includes(meta.id)) appliedLocal.push(meta.id);
-      setStatus(`„${meta.name}" angewandt — ${created} neu angelegt (non-destruktiv).`, "success");
+      setStatus(t("options.vault_module_applied", { name: meta.name, count: created }), "success");
       await renderModules();
     } catch (err) {
-      setStatus("Fehler: " + err.message, "error");
+      setStatus(t("common.error_msg", { message: err.message }), "error");
       btn.disabled = false;
     }
   }
 
   async function renderModules() {
-    moduleList.replaceChildren(el("div", { className: "hint", textContent: "lade Module…" }));
+    moduleList.replaceChildren(el("div", { className: "hint", textContent: t("options.vault_modules_loading") }));
     const catalog = await loadBlueprintCatalog();
     const active = computeActiveBlueprints(appliedLocal, catalog);
     moduleList.replaceChildren();
@@ -365,14 +350,14 @@ function renderVaultCard(vault) {
       info.append(el("div", { className: "hint", textContent: b.when_to_use || b.description || "" }));
       const right = el("div", { style: "white-space:nowrap;display:flex;gap:6px;align-items:center;" });
       if (active.has(b.id)) {
-        right.append(el("span", { textContent: "✓ aktiv", style: "color:#22c55e;font-weight:600;font-size:12px;" }));
+        right.append(el("span", { textContent: t("options.vault_module_active"), style: "color:#22c55e;font-weight:600;font-size:12px;" }));
         if (isBase) {
-          const r = el("button", { type: "button", className: "secondary btn-sm", textContent: "auffrischen" });
+          const r = el("button", { type: "button", className: "secondary btn-sm", textContent: t("options.vault_module_refresh") });
           r.addEventListener("click", () => applyModule(null, b, r));
           right.append(r);
         }
       } else {
-        const add = el("button", { type: "button", className: "btn-sm", textContent: isBase ? "Basis anlegen" : "Hinzufügen" });
+        const add = el("button", { type: "button", className: "btn-sm", textContent: isBase ? t("options.vault_module_create_base") : t("options.vault_module_add") });
         add.addEventListener("click", () => applyModule(isBase ? null : b.id, b, add));
         right.append(add);
       }
@@ -381,43 +366,43 @@ function renderVaultCard(vault) {
     };
     for (const b of catalog.filter((x) => x.category === "base" && x.id !== "empty")) moduleList.append(mkRow(b, true));
     const addons = catalog.filter((x) => x.category === "addon");
-    if (addons.length) moduleList.append(el("div", { textContent: "Erweiterungen", style: "margin-top:10px;font-weight:600;opacity:0.7;font-size:12px;" }));
+    if (addons.length) moduleList.append(el("div", { textContent: t("options.vault_addons_label"), style: "margin-top:10px;font-weight:600;opacity:0.7;font-size:12px;" }));
     for (const b of addons) moduleList.append(mkRow(b, false));
   }
 
   const permsField = el("div", { className: "field" });
-  permsField.append(el("label", { textContent: "Berechtigungen für EwtosBrain in diesem Vault" }));
+  permsField.append(el("label", { textContent: t("options.vault_perms_label") }));
   const permsHint = el("div", { className: "hint" });
-  permsHint.innerHTML = "Standard: nur Lese-Zugriff auf <code>wiki/</code> + <code>raw/</code> sowie Schreiben in der globalen Notiz-Inbox <code>notes/</code>. Hier zusätzlich Schreibrechte freischalten.";
+  permsHint.innerHTML = t("options.vault_perms_hint");
   const writeRawLabel = el("label", { className: "checkbox-row" });
   const writeRawCheckbox = el("input", { type: "checkbox" });
   writeRawCheckbox.checked = !!(vault.permissions && vault.permissions.write_raw);
-  const writeRawText = el("span", { textContent: "EwtosBrain darf in raw/ schreiben (Promote-to-raw-Tool)" });
+  const writeRawText = el("span", { textContent: t("options.vault_write_raw_label") });
   writeRawLabel.append(writeRawCheckbox, writeRawText);
 
   const writePlaylistsLabel = el("label", { className: "checkbox-row" });
   const writePlaylistsCheckbox = el("input", { type: "checkbox" });
   writePlaylistsCheckbox.checked = !!(vault.permissions && vault.permissions.write_playlists);
-  const writePlaylistsText = el("span", { textContent: "EwtosBrain darf Playlists in wiki/ki/playlists/ verwalten" });
+  const writePlaylistsText = el("span", { textContent: t("options.vault_write_playlists_label") });
   writePlaylistsLabel.append(writePlaylistsCheckbox, writePlaylistsText);
 
   const writeFilesLabel = el("label", { className: "checkbox-row" });
   const writeFilesCheckbox = el("input", { type: "checkbox" });
   writeFilesCheckbox.checked = !!(vault.permissions && vault.permissions.write_files);
-  const writeFilesText = el("span", { textContent: "EwtosBrain darf .md-Dateien bearbeiten und neue anlegen (Editor im Vault-Explorer)" });
+  const writeFilesText = el("span", { textContent: t("options.vault_write_files_label") });
   writeFilesLabel.append(writeFilesCheckbox, writeFilesText);
 
   const localNotesLabel = el("label", { className: "checkbox-row" });
   const localNotesCheckbox = el("input", { type: "checkbox" });
   localNotesCheckbox.checked = !!vault.use_local_notes;
-  const localNotesText = el("span", { textContent: "Eigene Notes-Inbox in diesem Vault (Scratchpad/Todos/Bookmarks in <vault>/notes/)" });
+  const localNotesText = el("span", { textContent: t("options.vault_notes_local_label") });
   localNotesLabel.append(localNotesCheckbox, localNotesText);
 
   permsField.append(permsHint, writeRawLabel, writePlaylistsLabel, writeFilesLabel, localNotesLabel);
 
-  const saveBtn = el("button", { type: "button", textContent: "Speichern" });
-  const exportBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: "Blueprint exportieren" });
-  const delBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
+  const saveBtn = el("button", { type: "button", textContent: t("options.vault_save") });
+  const exportBtn = el("button", { type: "button", className: "secondary btn-sm", textContent: t("options.vault_export_btn") });
+  const delBtn = el("button", { type: "button", className: "danger", textContent: t("common.delete") });
 
   exportBtn.addEventListener("click", async () => {
     try {
@@ -432,11 +417,11 @@ function renderVaultCard(vault) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus("Blueprint exportiert", "success");
+      setStatus(t("options.vault_exported"), "success");
     } catch (err) {
       const msg = err.status === 404
-        ? "Kein Blueprint für diesen Vault — Setup-Agent zuerst durchlaufen"
-        : "Export-Fehler: " + err.message;
+        ? t("options.vault_no_blueprint")
+        : t("options.vault_export_error", { message: err.message });
       setStatus(msg, "error");
     }
   });
@@ -445,7 +430,7 @@ function renderVaultCard(vault) {
 
   // Erweitert: Berechtigungen + Export ausklappbar
   const advanced = el("details", { className: "vault-advanced", style: "margin:6px 0;" });
-  advanced.append(el("summary", { textContent: "Erweitert — Berechtigungen & Export", style: "cursor:pointer;font-weight:600;" }));
+  advanced.append(el("summary", { textContent: t("options.vault_advanced_label"), style: "cursor:pointer;font-weight:600;" }));
   const exportRow = el("div", { className: "field" });
   exportRow.append(exportBtn);
   advanced.append(permsField, exportRow);
@@ -477,15 +462,15 @@ function renderVaultCard(vault) {
 
   genBtn.addEventListener("click", async () => {
     const path = pathInput.value.trim();
-    if (!path) { setStatus("Pfad fehlt", "error"); return; }
+    if (!path) { setStatus(t("options.vault_path_missing"), "error"); return; }
     genBtn.disabled = true;
-    setStatus("generiere... (paar Sekunden)");
+    setStatus(t("options.vault_generating_prompt"));
     try {
       const result = await generatePrompt(path);
       promptArea.value = result.prompt;
-      setStatus(`fertig — überprüfe und speichere`, "success");
+      setStatus(t("options.vault_prompt_done"), "success");
     } catch (err) {
-      setStatus("Fehler: " + err.message, "error");
+      setStatus(t("common.error_msg", { message: err.message }), "error");
     } finally {
       genBtn.disabled = false;
     }
@@ -493,13 +478,13 @@ function renderVaultCard(vault) {
 
   copyBtn.addEventListener("click", async () => {
     const path = pathInput.value.trim();
-    if (!path) { setStatus("Pfad fehlt", "error"); return; }
+    if (!path) { setStatus(t("options.vault_path_missing"), "error"); return; }
     try {
       const result = await previewClaudeMd(path);
       await navigator.clipboard.writeText(result.generator_instruction);
-      setStatus("Anweisung in Zwischenablage — füg sie in einem beliebigen LLM ein", "success");
+      setStatus(t("options.vault_instruction_copied"), "success");
     } catch (err) {
-      setStatus("Fehler: " + err.message, "error");
+      setStatus(t("common.error_msg", { message: err.message }), "error");
     }
   });
 
@@ -519,25 +504,24 @@ function renderVaultCard(vault) {
       });
       titleStrong.textContent = updated.name;
       pathSummary.textContent = updated.path;
-      setStatus("gespeichert", "success");
+      setStatus(t("options.vault_save_status"), "success");
     } catch (err) {
-      setStatus("Fehler: " + err.message, "error");
+      setStatus(t("common.error_msg", { message: err.message }), "error");
     } finally {
       saveBtn.disabled = false;
     }
   });
 
   delBtn.addEventListener("click", async () => {
-    if (!confirm(`Vault "${vault.name}" wirklich löschen? Auch der Chat-Verlauf wird gelöscht.`)) return;
+    if (!confirm(t("options.vault_delete_confirm", { name: vault.name }))) return;
     try {
       await deleteVault(vault.id);
       card.remove();
-      // If list empty after removal, show placeholder
       if (!vaultsContainer.querySelector(".vault-card")) {
-        vaultsContainer.append(el("div", { className: "empty-vaults", textContent: "Noch kein Vault verbunden." }));
+        vaultsContainer.append(el("div", { className: "empty-vaults", textContent: t("options.no_vault_connected") }));
       }
     } catch (err) {
-      setStatus("Fehler: " + err.message, "error");
+      setStatus(t("common.error_msg", { message: err.message }), "error");
     }
   });
 
@@ -557,25 +541,46 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ----- Briefing profiles (Baustein-Komposer) -----
 
 // Quellen-Spec: Label + konfigurierbare Parameter je Baustein.
-const BRIEFING_SOURCE_SPECS = {
-  wetter:             { label: "Wetter", params: [{ key: "standorte", label: "Standorte (kommagetrennt)", type: "csv", placeholder: "Paderborn, Kavala" }] },
-  todos:              { label: "Offene Todos", params: [] },
-  recent_videos:      { label: "Neueste Videos", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
-  recent_pages:       { label: "Zuletzt geändert", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }, { key: "bucket", label: "Ordner (optional)", type: "text", placeholder: "z.B. areas" }] },
-  active_projects:    { label: "Aktive Projekte", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
-  scratchpad:         { label: "Scratchpad", params: [{ key: "limit", label: "Zeilen", type: "number", default: 10 }] },
-  last_journal:       { label: "Letztes Journal", params: [] },
-  fristen:            { label: "Fristen & Deadlines", params: [] },
-  lernstreak:         { label: "Lernstreak", params: [] },
-  vertrags_fristen:   { label: "Vertrags-Fristen", params: [] },
-  kampagnen_kickoffs: { label: "Kampagnen-Kickoffs", params: [] },
-  workshops:          { label: "Workshops", params: [{ key: "within", label: "Zeitfenster (Tage)", type: "number", default: 60 }] },
-  anniversaries:      { label: "Jahrestage", params: [{ key: "within", label: "Zeitfenster (Tage)", type: "number", default: 30 }] },
-  youtube_trending:   { label: "YouTube-Trending", params: [{ key: "youtube_nische", label: "Nische (Suchbegriffe)", type: "text", placeholder: "n8n automation tutorial" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
-  competitor_videos:  { label: "Konkurrenz-Videos", params: [{ key: "competitor_channels", label: "Channel-IDs (eine pro Zeile)", type: "lines", placeholder: "UCxxxxxxxxxxxxxxxxxxxxxx" }, { key: "limit", label: "Anzahl", type: "number", default: 5 }] },
-  playlist_trending:  { label: "Playlist-Trending", params: [{ key: "limit", label: "Anzahl", type: "number", default: 5 }] },
-  recommendations:    { label: "Empfehlungen", params: [{ key: "recommendations_lookback_days", label: "Lookback (Tage)", type: "number", default: 14 }] },
-};
+// Labels werden lazy via t() aufgelöst (nach initI18n()).
+function getBriefingSourceSpecs() {
+  return {
+    wetter:             { label: t("options.briefing_source_wetter"), params: [{ key: "standorte", label: t("options.briefing_param_standorte"), type: "csv", placeholder: t("options.briefing_param_standorte_placeholder") }] },
+    todos:              { label: t("options.briefing_source_todos"), params: [] },
+    recent_videos:      { label: t("options.briefing_source_recent_videos"), params: [{ key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }] },
+    recent_pages:       { label: t("options.briefing_source_recent_pages"), params: [{ key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }, { key: "bucket", label: t("options.briefing_param_bucket"), type: "text", placeholder: t("options.briefing_param_bucket_placeholder") }] },
+    active_projects:    { label: t("options.briefing_source_active_projects"), params: [{ key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }] },
+    scratchpad:         { label: t("options.briefing_source_scratchpad"), params: [{ key: "limit", label: t("options.briefing_param_lines"), type: "number", default: 10 }] },
+    last_journal:       { label: t("options.briefing_source_last_journal"), params: [] },
+    fristen:            { label: t("options.briefing_source_fristen"), params: [] },
+    lernstreak:         { label: t("options.briefing_source_lernstreak"), params: [] },
+    vertrags_fristen:   { label: t("options.briefing_source_vertrags_fristen"), params: [] },
+    kampagnen_kickoffs: { label: t("options.briefing_source_kampagnen_kickoffs"), params: [] },
+    workshops:          { label: t("options.briefing_source_workshops"), params: [{ key: "within", label: t("options.briefing_param_within_days"), type: "number", default: 60 }] },
+    anniversaries:      { label: t("options.briefing_source_anniversaries"), params: [{ key: "within", label: t("options.briefing_param_within_days"), type: "number", default: 30 }] },
+    youtube_trending:   { label: t("options.briefing_source_youtube_trending"), params: [{ key: "youtube_nische", label: t("options.briefing_param_nische"), type: "text", placeholder: t("options.briefing_param_nische_placeholder") }, { key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }] },
+    competitor_videos:  { label: t("options.briefing_source_competitor_videos"), params: [{ key: "competitor_channels", label: t("options.briefing_param_channels"), type: "lines", placeholder: "UCxxxxxxxxxxxxxxxxxxxxxx" }, { key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }] },
+    playlist_trending:  { label: t("options.briefing_source_playlist_trending"), params: [{ key: "limit", label: t("options.briefing_param_limit"), type: "number", default: 5 }] },
+    recommendations:    { label: t("options.briefing_source_recommendations"), params: [{ key: "recommendations_lookback_days", label: t("options.briefing_param_lookback_days"), type: "number", default: 14 }] },
+  };
+}
+
+// BRIEFING_SOURCE_SPECS als getter (lazy nach initI18n)
+const BRIEFING_SOURCE_SPECS_PROXY = new Proxy({}, {
+  get(_, key) {
+    return getBriefingSourceSpecs()[key];
+  },
+  ownKeys() {
+    return Object.keys(getBriefingSourceSpecs());
+  },
+  has(_, key) {
+    return key in getBriefingSourceSpecs();
+  },
+  getOwnPropertyDescriptor(_, key) {
+    const val = getBriefingSourceSpecs()[key];
+    return val !== undefined ? { value: val, enumerable: true, configurable: true } : undefined;
+  },
+});
+const BRIEFING_SOURCE_SPECS = BRIEFING_SOURCE_SPECS_PROXY;
 
 // Spiegelt den Backend-Shim _params_for: alte flache Felder als Fallback.
 const BRIEFING_LEGACY_FIELDS = {
@@ -596,7 +601,7 @@ async function loadBriefingProfiles() {
     const profiles = Array.isArray(json.data) ? json.data : (json.data?.profiles || []);
     renderBriefingProfiles(profiles);
   } catch {
-    document.getElementById("briefing-profiles-list").textContent = "Server nicht erreichbar";
+    document.getElementById("briefing-profiles-list").textContent = t("options.server_unreachable");
   }
 }
 
@@ -604,7 +609,7 @@ function renderBriefingProfiles(profiles) {
   const list = document.getElementById("briefing-profiles-list");
   list.replaceChildren();
   if (!profiles.length) {
-    list.append(el("div", { className: "empty-vaults", textContent: "Keine Profile vorhanden." }));
+    list.append(el("div", { className: "empty-vaults", textContent: t("options.briefing_no_profiles") }));
     return;
   }
   for (const p of profiles) {
@@ -625,14 +630,14 @@ function renderBriefingProfiles(profiles) {
     }
 
     const actions = el("div", { style: "display:flex; gap:6px;" });
-    const editBtn = el("button", { type: "button", className: "secondary", textContent: "Bearbeiten" });
+    const editBtn = el("button", { type: "button", className: "secondary", textContent: t("common.edit") });
     editBtn.addEventListener("click", () => openBriefingEditor(p));
     actions.append(editBtn);
 
-    const deleteBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
+    const deleteBtn = el("button", { type: "button", className: "danger", textContent: t("common.delete") });
     deleteBtn.disabled = p.id === "default";
     deleteBtn.addEventListener("click", async () => {
-      if (!confirm(`Profil "${p.name}" löschen?`)) return;
+      if (!confirm(t("options.briefing_profile_delete_confirm", { name: p.name }))) return;
       const base = await getHttpBase();
       await fetch(`${base}/tools/briefing/profiles/${p.id}`, { method: "DELETE" });
       loadBriefingProfiles();
@@ -742,7 +747,7 @@ function resetBriefingForm() {
   renderBriefingBlocks();
   refreshSourcePicker();
   const saveBtn = document.getElementById("briefing-save-new");
-  if (saveBtn) saveBtn.textContent = "Profil speichern";
+  if (saveBtn) saveBtn.textContent = t("options.briefing_save");
 }
 
 function openBriefingEditor(profile) {
@@ -752,7 +757,7 @@ function openBriefingEditor(profile) {
   renderBriefingBlocks();
   refreshSourcePicker();
   const saveBtn = document.getElementById("briefing-save-new");
-  if (saveBtn) saveBtn.textContent = "Änderungen speichern";
+  if (saveBtn) saveBtn.textContent = t("options.briefing_save_changes");
   const form = document.getElementById("briefing-new-form");
   form.style.display = "block";
   document.getElementById("briefing-add-btn").style.display = "none";
@@ -806,6 +811,9 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
 // ----- Initial load -----
 
 (async () => {
+  await initI18n();
+  localizeDom();
+
   const stored = await chrome.storage.local.get([...CLIENT_FIELDS, "theme", "darkMode", "showQuickRow", "uiIconScale", "uiFontScale", "explorerShowHidden", "explorerAllowDelete"]);
   for (const key of CLIENT_FIELDS) {
     const e = document.getElementById(key);
@@ -901,11 +909,11 @@ async function refreshBlueprints() {
     const data = await jfetch("/blueprints");
     blueprints = Array.isArray(data) ? data : (data.blueprints || []);
   } catch (err) {
-    list.append(el("div", { className: "empty-vaults", textContent: "Server nicht erreichbar." }));
+    list.append(el("div", { className: "empty-vaults", textContent: t("options.server_unreachable") }));
     return;
   }
   if (!blueprints.length) {
-    list.append(el("div", { className: "empty-vaults", textContent: "Keine Blueprints vorhanden." }));
+    list.append(el("div", { className: "empty-vaults", textContent: t("options.blueprints_empty") }));
     return;
   }
   for (const bp of blueprints) {
@@ -924,13 +932,13 @@ function renderBlueprintCard(bp) {
   const tags = el("div", { className: "source-tags" });
   const sourceTag = el("span", {
     className: "source-tag",
-    textContent: bp.source === "builtin" ? "Built-in" : "Importiert",
+    textContent: bp.source === "builtin" ? t("options.blueprint_source_builtin") : t("options.blueprint_source_imported"),
   });
   tags.append(sourceTag);
   if (bp.trusted) {
-    tags.append(el("span", { className: "source-tag", textContent: "✓ Signiert" }));
+    tags.append(el("span", { className: "source-tag", textContent: t("options.blueprint_signed") }));
   } else if (bp.source !== "builtin") {
-    tags.append(el("span", { className: "source-tag", textContent: "⚠ Unsigniert" }));
+    tags.append(el("span", { className: "source-tag", textContent: t("options.blueprint_unsigned") }));
   }
   title.append(tags);
 
@@ -941,14 +949,14 @@ function renderBlueprintCard(bp) {
   header.append(title);
 
   if (bp.source !== "builtin") {
-    const delBtn = el("button", { type: "button", className: "danger", textContent: "Löschen" });
+    const delBtn = el("button", { type: "button", className: "danger", textContent: t("common.delete") });
     delBtn.addEventListener("click", async () => {
-      if (!confirm(`Blueprint "${bp.name}" wirklich löschen?`)) return;
+      if (!confirm(t("options.blueprint_delete_confirm", { name: bp.name }))) return;
       try {
         await jfetch(`/blueprints/${encodeURIComponent(bp.id)}`, { method: "DELETE" });
         refreshBlueprints();
       } catch (err) {
-        alert("Fehler: " + err.message);
+        alert(t("common.error_msg", { message: err.message }));
       }
     });
     header.append(delBtn);
@@ -966,7 +974,7 @@ document.getElementById("btn-blueprint-import")?.addEventListener("click", async
 
   const file = fileInput.files?.[0];
   if (!file) {
-    status.textContent = "Keine Datei gewählt.";
+    status.textContent = t("options.blueprint_no_file");
     status.className = "vault-status error";
     return;
   }
@@ -976,7 +984,7 @@ document.getElementById("btn-blueprint-import")?.addEventListener("click", async
     const text = await file.text();
     blueprint = JSON.parse(text);
   } catch (err) {
-    status.textContent = "Datei ist kein gültiges JSON: " + err.message;
+    status.textContent = t("options.blueprint_invalid_json", { message: err.message });
     status.className = "vault-status error";
     return;
   }
@@ -988,24 +996,22 @@ document.getElementById("btn-blueprint-import")?.addEventListener("click", async
       body: JSON.stringify({ blueprint }),
     });
     if (res && res.trusted === false) {
-      const proceed = confirm(
-        "Dieses Blueprint ist nicht signiert. Es kann beliebige Dateien in deinem Vault anlegen.\n\nTrotzdem importieren?"
-      );
+      const proceed = confirm(t("options.blueprint_unsigned_confirm"));
       if (!proceed) {
         if (res.blueprint_id) {
           await jfetch(`/blueprints/${encodeURIComponent(res.blueprint_id)}`, { method: "DELETE" }).catch(() => {});
         }
-        status.textContent = "Import abgebrochen.";
+        status.textContent = t("options.blueprint_import_cancelled");
         status.className = "vault-status";
         return;
       }
     }
-    status.textContent = `Importiert: ${res.blueprint_id || "ok"}`;
+    status.textContent = t("options.blueprint_imported", { id: res.blueprint_id || "ok" });
     status.className = "vault-status success";
     fileInput.value = "";
     refreshBlueprints();
   } catch (err) {
-    status.textContent = "Import-Fehler: " + err.message;
+    status.textContent = t("options.blueprint_import_error", { message: err.message });
     status.className = "vault-status error";
   }
 });
@@ -1071,7 +1077,7 @@ document.getElementById("save").addEventListener("click", async () => {
 
   const saved = document.getElementById("saved");
   saved.hidden = false;
-  saved.textContent = serverError ? `lokal gespeichert (Server: ${serverError})` : "gespeichert";
+  saved.textContent = serverError ? t("options.saved_local_error", { error: serverError }) : t("common.saved");
   saved.style.color = serverError ? "#ef4444" : "#22c55e";
   setTimeout(() => (saved.hidden = true), serverError ? 4000 : 1500);
 
@@ -1091,7 +1097,7 @@ document.getElementById("generateVideoBrainQrBtn")?.addEventListener("click", as
   try {
     const data = await jfetch("/tools/video-brain/pair-config");
     if (!data.supabase_url || !data.supabase_anon_key || !data.user_id) {
-      hint.textContent = "Supabase-URL, Anon-Key und User-ID müssen zuerst gespeichert sein.";
+      hint.textContent = t("options.qr_supabase_missing");
       return;
     }
     const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
@@ -1101,6 +1107,6 @@ document.getElementById("generateVideoBrainQrBtn")?.addEventListener("click", as
     wrapper.style.display = "block";
     hint.textContent = appUrl;
   } catch (e) {
-    hint.textContent = `Fehler: ${e.message}`;
+    hint.textContent = t("common.error_msg", { message: e.message });
   }
 });

@@ -1,5 +1,6 @@
 // @author Dario | ewtos.com
 // EwtosBrain Setup-Agent — Chat-UI für interaktiven Vault-Blueprint-Aufbau.
+import { initI18n, t, localizeDom } from '../i18n/i18n.js';
 
 const params = new URLSearchParams(location.search);
 const VAULT_ID = params.get('vault_id');
@@ -125,7 +126,7 @@ let blueprintView = 'tree'; // wird durch initBlueprintViewSwitch ueberschrieben
 function renderBlueprint(bp) {
   workingBlueprint = bp;
   if (!bp) {
-    summaryEl.textContent = 'Noch keine Daten.';
+    summaryEl.textContent = t('agent.no_blueprint');
     sectionsEl.replaceChildren();
     jsonEl.textContent = '{}';
     return;
@@ -220,7 +221,7 @@ function renderTreeRoot(root) {
   if (!hasAnything) {
     const empty = document.createElement('div');
     empty.className = 'bp-tree-empty';
-    empty.textContent = 'Noch keine Ordner / Dateien.';
+    empty.textContent = t('agent.blueprint_empty');
     wrap.append(empty);
     return wrap;
   }
@@ -270,7 +271,7 @@ function renderTreeNode(node, depth) {
     const empty = document.createElement('div');
     empty.className = 'bp-tree-empty';
     empty.style.paddingLeft = '4px';
-    empty.textContent = 'leer';
+    empty.textContent = t('agent.folder_empty');
     children.append(empty);
   }
   det.append(children);
@@ -327,7 +328,7 @@ function renderSection(title, items, labelFn) {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = 'Leer';
+    empty.textContent = t('agent.none');
     det.append(empty);
   } else {
     const ul = document.createElement('ul');
@@ -345,7 +346,7 @@ function renderSection(title, items, labelFn) {
 // ── Session-Start ─────────────────────────────────────────────────────────
 async function startSession() {
   if (!VAULT_ID) {
-    appendMessage('Fehler: vault_id fehlt in URL.', 'error');
+    appendMessage(t('agent.vault_missing'), 'error');
     return false;
   }
 
@@ -382,7 +383,7 @@ async function startSession() {
     inputEl.focus();
     return true;
   } catch (e) {
-    appendMessage('Konnte Setup-Agent-Session nicht starten: ' + e.message, 'error');
+    appendMessage(t('agent.session_failed', { message: e.message }), 'error');
     return false;
   }
 }
@@ -399,7 +400,7 @@ async function tryRestoreSession() {
     workingBlueprint = res.working_blueprint;
     renderBlueprint(workingBlueprint);
     vaultInfoEl.textContent = `Vault: ${setupAgentSession.vault_id} · fortgesetzt`;
-    appendMessage('Session fortgesetzt.', 'system');
+    appendMessage(t('agent.session_restored'), 'system');
     const messages = res.messages || [];
     for (const m of messages) {
       if (m.role === 'user' || m.role === 'assistant') {
@@ -426,7 +427,7 @@ async function send() {
   appendMessage(text, 'user');
   inputEl.value = '';
 
-  const pending = appendMessage('Agent denkt…', 'system');
+  const pending = appendMessage(t('agent.thinking'), 'system');
 
   try {
     const res = await jfetch(`/vaults/${encodeURIComponent(VAULT_ID)}/setup_agent/message`, {
@@ -453,11 +454,11 @@ async function send() {
     if (res.diff_preview) {
       lastDiffPreview = res.diff_preview;
       commitBtn.disabled = false;
-      toast('Bereit zum Commit. Klick auf "Commit" wenn alles passt.', 'success');
+      toast(t('agent.ready_commit'), 'success');
     }
   } catch (e) {
     pending.remove();
-    appendMessage('Fehler: ' + e.message, 'error');
+    appendMessage(t('agent.send_error', { message: e.message }), 'error');
   } finally {
     sending = false;
     sendBtn.disabled = false;
@@ -469,7 +470,7 @@ async function send() {
 // ── Preview / Commit ──────────────────────────────────────────────────────
 async function fetchPreview() {
   if (!workingBlueprint) {
-    toast('Noch kein Blueprint.', 'error');
+    toast(t('agent.no_blueprint'), 'error');
     return null;
   }
   try {
@@ -481,7 +482,7 @@ async function fetchPreview() {
     lastDiffPreview = res;
     return res;
   } catch (e) {
-    toast('Preview-Fehler: ' + e.message, 'error');
+    toast(t('agent.preview_error', { message: e.message }), 'error');
     return null;
   }
 }
@@ -491,7 +492,7 @@ function renderDiff(diff) {
   if (!diff) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = 'Keine Daten.';
+    empty.textContent = t('agent.no_data');
     diffBodyEl.append(empty);
     return;
   }
@@ -503,7 +504,7 @@ function renderDiff(diff) {
     if (!items || !items.length) {
       const e = document.createElement('div');
       e.className = 'empty';
-      e.textContent = 'Keine.';
+      e.textContent = t('agent.none');
       diffBodyEl.append(e);
       return;
     }
@@ -518,10 +519,10 @@ function renderDiff(diff) {
     diffBodyEl.append(ul);
   }
 
-  section('Wird erstellt', diff.would_create || []);
-  section('Wird übersprungen (existiert bereits)', diff.would_skip || [], 'skip');
-  section('CLAUDE.md-Sections wird gemergt', diff.would_update_claude_md || []);
-  section('Warnungen', diff.warnings || [], 'warning');
+  section(t('agent.diff_create'), diff.would_create || []);
+  section(t('agent.diff_skip'), diff.would_skip || [], 'skip');
+  section(t('agent.diff_claude_md'), diff.would_update_claude_md || []);
+  section(t('agent.diff_warnings'), diff.warnings || [], 'warning');
 }
 
 async function openDiffDialog() {
@@ -539,8 +540,8 @@ async function commitNow() {
       body: JSON.stringify({ session_id: sessionId }),
     });
     diffDialog.close();
-    toast(`Setup abgeschlossen — ${(res.created || []).length} Items erstellt.`, 'success');
-    appendMessage('Blueprint wurde committet. Du kannst dieses Fenster jetzt schließen.', 'system');
+    toast(t('agent.commit_done', { count: (res.created || []).length }), 'success');
+    appendMessage(t('agent.commit_close'), 'system');
     commitBtn.disabled = true;
     inputEl.disabled = true;
     sendBtn.disabled = true;
@@ -555,7 +556,7 @@ async function commitNow() {
     errEl.className = 'msg error';
     errEl.style.alignSelf = 'stretch';
     errEl.style.maxWidth = '100%';
-    errEl.textContent = 'Commit-Fehler: ' + e.message;
+    errEl.textContent = t('agent.commit_error', { message: e.message });
     diffBodyEl.append(errEl);
   }
 }
@@ -576,14 +577,15 @@ document.getElementById('btn-diff-cancel').addEventListener('click', () => diffD
 document.getElementById('btn-diff-confirm').addEventListener('click', commitNow);
 
 // ── Init ──────────────────────────────────────────────────────────────────
-(async () => {
-  await initBlueprintViewSwitch();
-  if (!VAULT_ID) {
-    const restored = await tryRestoreSession();
-    if (!restored) {
-      appendMessage('Fehler: vault_id fehlt in URL und keine fortsetzbare Session gefunden.', 'error');
-    }
-    return;
+await initI18n();
+localizeDom();
+await initBlueprintViewSwitch();
+
+if (!VAULT_ID) {
+  const restored = await tryRestoreSession();
+  if (!restored) {
+    appendMessage(t('agent.restore_failed_msg'), 'error');
   }
+} else {
   await startSession();
-})();
+}

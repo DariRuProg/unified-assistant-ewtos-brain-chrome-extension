@@ -1,4 +1,5 @@
 // EwtosBrain Setup Wizard | ewtos.com
+import { initI18n, t, localizeDom } from '../i18n/i18n.js';
 
 const TOTAL = 6;
 let current = 1;
@@ -73,7 +74,7 @@ function updateFooter(step) {
     footer.style.display = step === TOTAL ? 'none' : 'flex';
     btnBack.style.display = 'none';
     btnSkip.style.display = 'none';
-    btnNext.textContent = 'Vault speichern';
+    btnNext.textContent = t('wizard.btn_vault_save');
     btnNext.disabled = false;
     return;
   }
@@ -87,10 +88,10 @@ function updateFooter(step) {
   btnBack.style.display = step > 1 ? 'inline-flex' : 'none';
   btnSkip.style.display = step === 4 ? 'inline-flex' : 'none';
 
-  if (step === 1) { btnNext.textContent = "Los geht's"; btnNext.disabled = false; }
-  else if (step === 2) { btnNext.textContent = 'Weiter'; btnNext.disabled = !connOk; }
-  else if (step === 4) { btnNext.textContent = vaultMode === 'new' ? 'Weiter zu Templates' : 'Vault verbinden'; btnNext.disabled = false; }
-  else { btnNext.textContent = 'Weiter'; btnNext.disabled = false; }
+  if (step === 1) { btnNext.textContent = t('wizard.btn_next'); btnNext.disabled = false; }
+  else if (step === 2) { btnNext.textContent = t('common.next'); btnNext.disabled = !connOk; }
+  else if (step === 4) { btnNext.textContent = vaultMode === 'new' ? t('wizard.btn_vault_next') : t('wizard.btn_vault_connect'); btnNext.disabled = false; }
+  else { btnNext.textContent = t('common.next'); btnNext.disabled = false; }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ async function validateStep(step) {
 // Step 2: save server URL to chrome.storage
 async function saveServerUrl() {
   if (!connOk) {
-    setStatus('conn-dot', 'conn-text', 'error', 'Bitte zuerst die Verbindung testen');
+    setStatus('conn-dot', 'conn-text', 'error', t('wizard.conn_first'));
     return false;
   }
   const url = document.getElementById('server-url').value.trim();
@@ -198,7 +199,7 @@ async function saveLlmSettings() {
     return true;
   } catch (e) {
     status.className = 'info-box error';
-    status.textContent = 'Fehler beim Speichern: ' + e.message;
+    status.textContent = t('wizard.save_error', { message: e.message });
     status.style.display = 'block';
     return false;
   }
@@ -213,7 +214,7 @@ async function saveVault() {
 
   if (!name || !path) {
     status.className = 'info-box error';
-    status.textContent = 'Name und Pfad sind Pflichtfelder.';
+    status.textContent = t('wizard.vault_required');
     status.style.display = 'block';
     return false;
   }
@@ -232,7 +233,7 @@ async function saveVault() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(createBody),
     });
-    if (!createRes.ok) throw new Error('Vault anlegen fehlgeschlagen: HTTP ' + createRes.status);
+    if (!createRes.ok) throw new Error(t('wizard.vault_create_failed', { status: createRes.status }));
     const createData = await createRes.json();
     const vaultId = createData.id;
     savedVaultId = vaultId;
@@ -250,7 +251,7 @@ async function saveVault() {
 
     if (vaultMode === 'new') {
       status.className = 'info-box success';
-      status.textContent = 'Vault-Eintrag angelegt. Im naechsten Schritt waehlst du den Aufbau.';
+      status.textContent = t('wizard.vault_created');
       status.style.display = 'block';
     }
     return true;
@@ -266,7 +267,7 @@ async function saveVault() {
 async function loadTemplates() {
   const list = document.getElementById('template-list');
   list.replaceChildren();
-  list.innerHTML = '<div class="info-box neutral">Lade Templates…</div>';
+  list.innerHTML = `<div class="info-box neutral">${t('wizard.templates_loading')}</div>`;
 
   try {
     const res = await fetch(httpBase() + '/blueprints');
@@ -289,14 +290,14 @@ async function loadTemplates() {
     list.replaceChildren();
     const err = document.createElement('div');
     err.className = 'info-box error';
-    err.textContent = 'Fehler beim Laden der Templates: ' + e.message;
+    err.textContent = t('wizard.templates_error', { message: e.message });
     list.append(err);
     // Back-Button damit User trotzdem zurückkann
     const actions = document.createElement('div');
     actions.className = 'step-actions';
     const back = document.createElement('button');
     back.className = 'btn btn-secondary btn-sm';
-    back.textContent = 'Zurück';
+    back.textContent = t('common.back');
     back.addEventListener('click', () => navigate(-1));
     actions.append(back);
     list.append(actions);
@@ -310,7 +311,7 @@ function renderTemplates(blueprints) {
   if (!blueprints.length) {
     const empty = document.createElement('div');
     empty.className = 'info-box neutral';
-    empty.textContent = 'Keine Templates gefunden.';
+    empty.textContent = t('wizard.templates_empty');
     list.append(empty);
     return;
   }
@@ -333,7 +334,7 @@ function renderTemplates(blueprints) {
 
     const desc = document.createElement('div');
     desc.className = 'template-desc';
-    desc.textContent = bp.when_to_use || bp.description || 'Keine Beschreibung.';
+    desc.textContent = bp.when_to_use || bp.description || t('wizard.templates_nodesc');
 
     body.append(name, desc);
     card.append(check, body);
@@ -362,11 +363,11 @@ function renderTemplates(blueprints) {
     list.append(h);
   };
   if (bases.length) {
-    groupHeader('Basis — der Grundaufbau');
+    groupHeader(t('wizard.group_base'));
     for (const bp of bases) list.append(makeCard(bp));
   }
   if (addons.length) {
-    groupHeader('Erweiterungen — optional dazu');
+    groupHeader(t('wizard.group_addon'));
     for (const bp of addons) list.append(makeCard(bp));
   }
 
@@ -376,7 +377,7 @@ function renderTemplates(blueprints) {
   const backBtn = document.createElement('button');
   backBtn.className = 'btn btn-secondary btn-sm';
   backBtn.id = 'btn-templates-back';
-  backBtn.textContent = 'Zurück';
+  backBtn.textContent = t('common.back');
   backBtn.addEventListener('click', () => navigate(-1));
 
   const spacer = document.createElement('div');
@@ -385,7 +386,7 @@ function renderTemplates(blueprints) {
   const nextBtn = document.createElement('button');
   nextBtn.className = 'btn btn-primary btn-sm';
   nextBtn.id = 'btn-templates-next';
-  nextBtn.textContent = 'Weiter mit Setup-Agent';
+  nextBtn.textContent = t('wizard.btn_templates_next');
   nextBtn.disabled = selectedTemplates.size === 0;
   nextBtn.addEventListener('click', () => openSetupAgent('fresh'));
 
@@ -423,14 +424,14 @@ async function skipSetupAgent() {
   status.style.display = 'none';
   if (!savedVaultId) {
     status.className = 'info-box error';
-    status.textContent = 'Vault-ID fehlt — bitte zurück zu Schritt 4.';
+    status.textContent = t('wizard.vault_id_missing');
     status.style.display = 'block';
     return;
   }
   const chosen = [...selectedTemplates];
   if (!chosen.length) chosen.push('kontext-base');
   status.className = 'info-box neutral';
-  status.textContent = 'Wende gewählte Module an…';
+  status.textContent = t('wizard.apply_applying');
   status.style.display = 'block';
   try {
     // Jedes gewählte Blueprint non-destruktiv anwenden (löst extends selbst auf).
@@ -442,7 +443,7 @@ async function skipSetupAgent() {
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Anwenden von ${blueprint_id} fehlgeschlagen: ` + errText);
+        throw new Error(t('wizard.apply_failed', { id: blueprint_id, message: errText }));
       }
     }
     // Weiter zu Step 6 (Fertig)
@@ -455,7 +456,7 @@ async function skipSetupAgent() {
     if (path) { path.style.animation = 'none'; path.offsetHeight; path.style.animation = ''; }
   } catch (e) {
     status.className = 'info-box error';
-    status.textContent = 'Fehler: ' + e.message;
+    status.textContent = t('wizard.apply_error', { message: e.message });
     status.style.display = 'block';
   }
 }
@@ -464,26 +465,26 @@ async function skipSetupAgent() {
 document.getElementById('btn-test-conn').addEventListener('click', async () => {
   const btn = document.getElementById('btn-test-conn');
   btn.disabled = true;
-  btn.textContent = 'Verbinde...';
-  setStatus('conn-dot', 'conn-text', 'connecting', 'Verbinde...');
+  btn.textContent = t('wizard.conn_testing');
+  setStatus('conn-dot', 'conn-text', 'connecting', t('wizard.conn_testing'));
   connOk = false;
   document.getElementById('btn-next').disabled = true;
 
   try {
     const res = await fetch(httpBase() + '/health', { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      setStatus('conn-dot', 'conn-text', 'ok', 'Verbunden — Server erreichbar');
+      setStatus('conn-dot', 'conn-text', 'ok', t('wizard.conn_ok'));
       connOk = true;
       document.getElementById('btn-next').disabled = false;
     } else {
       throw new Error('HTTP ' + res.status);
     }
   } catch {
-    setStatus('conn-dot', 'conn-text', 'error', 'Verbindung fehlgeschlagen. Ist der Server gestartet?');
+    setStatus('conn-dot', 'conn-text', 'error', t('wizard.conn_failed'));
   }
 
   btn.disabled = false;
-  btn.textContent = 'Nochmal testen';
+  btn.textContent = t('wizard.conn_retry');
 });
 
 function setStatus(dotId, textId, state, msg) {
@@ -544,7 +545,7 @@ document.getElementById('btn-browse-vault').addEventListener('click', async () =
   const btn = document.getElementById('btn-browse-vault');
   const orig = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Wähle…';
+  btn.textContent = t('wizard.step4_browse');
   try {
     const res = await fetch(httpBase() + '/pick_folder');
     const data = await res.json();
@@ -614,11 +615,11 @@ document.getElementById('btn-scaffold-base').addEventListener('click', async () 
     const created = (data.created || []).length;
     const skills = (data.copied_skills || []).length;
     hint.className = 'info-box success';
-    hint.innerHTML = `<strong>Basis-Struktur angelegt.</strong> ${created} Eintraege erstellt, ${skills} Skills. CLAUDE.md, index, kontext/ und .claude/skills/ liegen jetzt im Vault. Fuer persoenliche Inhalte den Setup-Agenten starten.`;
+    hint.innerHTML = t('wizard.scaffold_ok', { created, skills });
     hint.style.display = 'block';
   } catch (e) {
     hint.className = 'info-box error';
-    hint.textContent = 'Fehler: ' + e.message;
+    hint.textContent = t('wizard.apply_error', { message: e.message });
     hint.style.display = 'block';
   } finally {
     btn.disabled = false;
@@ -639,8 +640,13 @@ document.getElementById('btn-addvault-close').addEventListener('click', () => {
   chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); });
 });
 
+// ── Init ──────────────────────────────────────────────────────────────────
+await initI18n();
+localizeDom();
+updateFooter(current);
+
 if (isAddVaultMode) {
-  document.title = 'EwtosBrain — Vault hinzufügen';
+  document.title = t('wizard.title');
   document.querySelector('.progress-header').style.display = 'none';
   document.getElementById('step-1').classList.remove('active');
   document.getElementById('step-4').classList.add('active');
