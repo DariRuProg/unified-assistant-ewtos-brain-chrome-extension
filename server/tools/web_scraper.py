@@ -8,13 +8,68 @@ prinzipbedingt nicht lesen kann (Inhalt ist erst nach dem Klick im DOM).
 
 DOM->Markdown nutzt denselben Konverter wie die Extension (extension/tools/
 scrape_dom.js), per page.evaluate injiziert — ein Format, eine Quelle.
+
+Browser-Singleton: die Playwright-Browser-Instanz wird beim ersten Aufruf
+gestartet und danach wiederverwendet — eliminiert den 3-5s Launch-Overhead
+pro Request. Bei Crash wird automatisch neu gestartet.
+
+SSRF-Schutz: Private/Loopback-IPs werden vor page.goto() abgelehnt.
 """
 from __future__ import annotations
 
+import asyncio
+import ipaddress
+import logging
 import re
+import socket
+from urllib.parse import urlparse
 
 import config
 import paths
+
+log = logging.getLogger("ewtosbrain.web_scraper")
+
+# Browser-Singleton — einmal starten, wiederbenutzen
+_pw = None
+_browser = None
+_browser_lock = asyncio.Lock()
+
+
+async def _get_browser():
+    global _pw, _browser
+    async with _browser_lock:
+        if _browser is not None and _browser.is_connected():
+            return _browser
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            raise RuntimeError("Playwright nicht installiert — pip install playwright")
+        if _pw is not None:
+            try:
+                await _pw.stop()
+            except Exception:
+                pass
+        _pw = await async_playwright().start()
+        try:
+            _browser = await _pw.chromium.launch(channel="chrome", headless=True)
+        except Exception:
+            # Fallback: System-Chromium falls Chrome nicht installiert
+            _browser = await _pw.chromium.launch(headless=True)
+        log.info("Playwright-Browser gestartet")
+        return _browser
+
+
+def _is_private_url(url: str) -> bool:
+    """True wenn die URL auf eine private/Loopback-IP zeigt (SSRF-Schutz)."""
+    try:
+        host = urlparse(url).hostname or ""
+        for info in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                return True
+    except Exception:
+        pass
+    return False
 
 _NON_FAQ = re.compile(
     r"\b(menu|nav|dropdown|search|cart|login|close|share|social|hamburger|submit|"
@@ -123,35 +178,34 @@ async def scrape_url(url: str, mode: str = "content") -> dict:
     if not url or not url.startswith(("http://", "https://")):
         return {"ok": False, "error": "Ungueltige URL (http/https erwartet)"}
 
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return {"ok": False, "error": "Playwright nicht installiert — pip install playwright"}
+    if _is_private_url(url):
+        return {"ok": False, "error": "Interne/private Adressen sind nicht erlaubt"}
 
     converter = _load_converter()
     timeout_ms = config.TOOL_TIMEOUT_SECONDS * 1000
 
     try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(channel="chrome", headless=True)
+        browser = await _get_browser()
+        page = await browser.new_page()
+        try:
             try:
-                page = await browser.new_page()
-                try:
-                    await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-                except Exception:
-                    # networkidle timeouted (Dauer-Polling-Seiten) — domcontentloaded reicht
-                    await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                await page.wait_for_timeout(1200)
+                await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+            except Exception:
+                # networkidle timeouted (Dauer-Polling-Seiten) — domcontentloaded reicht
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            await page.wait_for_timeout(1200)
 
-                # Lazy-Sektionen (FAQ unter dem Fold) ins DOM holen, bevor wir Trigger sammeln
-                await _auto_scroll(page)
-                faq_items = await _expand_and_collect_faq(page)
-                result = await page.evaluate(
-                    f"(args) => ({converter})(args.mode, args.skip)",
-                    {"mode": mode, "skip": True},
-                )
-            finally:
-                await browser.close()
+            # Lazy-Sektionen (FAQ unter dem Fold) ins DOM holen, bevor wir Trigger sammeln
+            await _auto_scroll(page)
+            faq_items = await _expand_and_collect_faq(page)
+            result = await page.evaluate(
+                f"(args) => ({converter})(args.mode, args.skip)",
+                {"mode": mode, "skip": True},
+            )
+        finally:
+            await page.close()
+    except RuntimeError as e:
+        return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Scrape fehlgeschlagen: {e}"}
 

@@ -55,7 +55,7 @@ class BrainSaveRequest(BaseModel):
     url: str
     title: str
     transcript: str
-    saeule: str
+    thema: str | None = None
     playlist_name: str
     tags: list[str] = []
     assign_playlist: bool = True
@@ -76,7 +76,7 @@ def brain_save_endpoint(req: BrainSaveRequest) -> dict[str, Any]:
             url=req.url,
             title=req.title,
             transcript=req.transcript,
-            saeule=req.saeule,
+            thema=req.thema,
             playlist_name=req.playlist_name,
             tags=req.tags,
             channel=req.channel,
@@ -91,13 +91,13 @@ def brain_save_endpoint(req: BrainSaveRequest) -> dict[str, Any]:
             try:
                 try:
                     playlists_tool.add_to_playlist(
-                        req.vault_id, req.playlist_name, req.url, req.title, saeule=req.saeule
+                        req.vault_id, req.playlist_name, req.url, req.title, thema=req.thema
                     )
                 except ValueError as ve:
                     if "nicht gefunden" in str(ve):
-                        playlists_tool.create_playlist(req.vault_id, req.playlist_name, saeule=req.saeule)
+                        playlists_tool.create_playlist(req.vault_id, req.playlist_name, thema=req.thema)
                         playlists_tool.add_to_playlist(
-                            req.vault_id, req.playlist_name, req.url, req.title, saeule=req.saeule
+                            req.vault_id, req.playlist_name, req.url, req.title, thema=req.thema
                         )
                     else:
                         raise
@@ -169,19 +169,27 @@ async def ingest_document_endpoint(
         raise HTTPException(400, f"Nicht unterstützter Dateityp: {file.content_type}")
     data = await file.read()
     try:
-        content = pdf_ingest_tool.extract_text(data, file.filename or "")
+        info = pdf_ingest_tool.extract_info(data, file.filename or "")
     except ImportError as e:
         raise HTTPException(500, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    content = info["text"]
     if not content.strip():
         raise HTTPException(422, "Kein Text extrahierbar.")
-    doc_title = title.strip() or (file.filename or "Dokument").rsplit(".", 1)[0]
+    doc_title = title.strip() or info.get("title") or (file.filename or "Dokument").rsplit(".", 1)[0]
+    desc_parts = [f"Importiert aus {file.filename}"]
+    if info.get("author"):
+        desc_parts.append(f"Autor: {info['author']}")
+    if info.get("pages"):
+        desc_parts.append(f"{info['pages']} Seite(n)")
     try:
         result = raw_promoter.save_raw_content(
             vault_id=vault_id,
             title=doc_title,
             content=content,
             target_subfolder=subfolder,
-            description=f"Importiert aus {file.filename}",
+            description=" | ".join(desc_parts),
         )
     except PermissionError as e:
         raise HTTPException(403, str(e))
@@ -204,7 +212,7 @@ class VideoRawSaveRequest(BaseModel):
     upload_date: str | None = None
     thumbnail_url: str | None = None
     description: str | None = None
-    saeule: str = "youtube"
+    thema: str | None = None
     tags: list[str] = []
 
 
@@ -216,7 +224,7 @@ def raw_video_save_endpoint(req: VideoRawSaveRequest) -> dict[str, Any]:
             url=req.url,
             title=req.title,
             transcript=req.transcript,
-            saeule=req.saeule,
+            thema=req.thema,
             playlist_name="",
             channel=req.channel,
             duration=req.duration,

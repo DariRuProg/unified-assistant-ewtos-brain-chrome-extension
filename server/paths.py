@@ -60,6 +60,12 @@ def generated_images_dir() -> Path:
     return data_dir() / "generated_images"
 
 
+def tts_cache_dir() -> Path:
+    p = data_dir() / "tts_cache"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def logs_dir() -> Path:
     p = data_dir() / "logs"
     p.mkdir(parents=True, exist_ok=True)

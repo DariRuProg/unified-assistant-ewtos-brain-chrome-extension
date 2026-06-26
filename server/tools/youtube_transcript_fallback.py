@@ -7,15 +7,20 @@ YouTubes internem timedtext-Endpoint — kein Browser, kein DOM-Rendering.
 Sprach-Praeferenz: Deutsch, dann Englisch, dann erste verfuegbare Sprache
 (auto-generated zaehlt, weil viele Karpathy-/Tech-Videos nur Auto-Captions
 haben).
+
+Fehler-Resilienz: bis zu 3 Versuche mit exponentiellem Backoff (1s/2s/4s).
 """
 from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
+
+_MAX_RETRIES = 3
 
 PREFERRED_LANGS = ["de", "de-DE", "en", "en-US", "en-GB"]
 
@@ -82,14 +87,24 @@ def fetch_transcript(url: str, with_timestamps: bool = False) -> dict[str, Any]:
         raise ValueError(f"Konnte keine Video-ID aus der URL extrahieren: {url}")
 
     api = YouTubeTranscriptApi()
-    try:
-        listing = api.list(video_id)
-    except TranscriptsDisabled:
-        raise ValueError("Captions sind fuer dieses Video deaktiviert")
-    except VideoUnavailable:
-        raise ValueError("Video nicht verfuegbar (privat/geloescht/regionsperre)")
-    except Exception as e:
-        raise ValueError(f"Konnte Caption-Liste nicht laden: {e}")
+    last_err: Exception | None = None
+    listing = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            listing = api.list(video_id)
+            break
+        except TranscriptsDisabled:
+            raise ValueError("Captions sind fuer dieses Video deaktiviert")
+        except VideoUnavailable:
+            raise ValueError("Video nicht verfuegbar (privat/geloescht/regionsperre)")
+        except Exception as e:
+            last_err = e
+            if attempt < _MAX_RETRIES - 1:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                log.info("Caption-Liste Versuch %d fehlgeschlagen, retry in %ds: %s", attempt + 1, wait, e)
+                time.sleep(wait)
+    if listing is None:
+        raise ValueError(f"Konnte Caption-Liste nicht laden: {last_err}")
 
     # Manuelle Captions bevorzugen, sonst Auto-generated
     transcript_obj = None

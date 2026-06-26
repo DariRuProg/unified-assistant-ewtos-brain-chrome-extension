@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import re
+import shutil
 import threading
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
@@ -152,10 +153,16 @@ def add_todo(text: str, due: str | None = None, vault_id: str | None = None) -> 
     text = (text or "").strip()
     if not text:
         raise ValueError("Todo-Text darf nicht leer sein")
+    data = load("todos", vault_id)
+    # Duplikat-Check: identischer Text (case-insensitive) darf nicht doppelt existieren
+    needle = text.lower()
+    for line in data["content"].splitlines():
+        m = TODO_RE.match(line)
+        if m and m.group(2).strip().lower() == needle:
+            return {"added": text, "due": due, "duplicate": True}
     line = f"- [ ] {text}"
     if due:
         line += f" @{due.strip()}"
-    data = load("todos", vault_id)
     body = data["content"].rstrip()
     new_content = (body + "\n" + line + "\n") if body else (line + "\n")
     save("todos", new_content, vault_id)
@@ -212,9 +219,28 @@ def append_scratchpad(text: str, vault_id: str | None = None) -> dict:
     return {"appended": text, "date": today}
 
 
+def _backup(path: Path) -> str | None:
+    """Sichert eine bestehende, nicht-leere Datei vor dem Überschreiben nach
+    <dir>/.ewtos-backups/<name>.<zeitstempel>.bak. Returns Backup-Pfad oder None."""
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        if path.stat().st_size == 0:
+            return None
+    except OSError:
+        return None
+    backup_dir = path.parent / ".ewtos-backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dest = backup_dir / f"{path.name}.{datetime.now().strftime('%Y%m%d-%H%M%S')}.bak"
+    shutil.copy2(path, dest)
+    return str(dest)
+
+
 def replace_scratchpad(content: str, vault_id: str | None = None) -> dict:
-    save("scratchpad", content or "", vault_id)
-    return {"replaced": True, "length": len(content or "")}
+    with _file_lock:
+        backup = _backup(_file_path("scratchpad", vault_id))
+        save("scratchpad", content or "", vault_id)
+    return {"replaced": True, "length": len(content or ""), "backup": backup}
 
 
 def export(target_path: str, content: str, source: str = "scratchpad") -> dict:
