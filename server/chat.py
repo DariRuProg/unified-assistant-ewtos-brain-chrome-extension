@@ -1342,10 +1342,10 @@ def send_source_stream(
         ) if vault else ""
 
         system_prompt = (
-            f”Du beantwortest Fragen zu folgendem {source_label}: „{title}”.\n”
-            + knowledge_instruction + tools_note + “\n\n”
-            “---\n\n” + content_text[:80000]
-            + f”\n\nAlways respond to the user in {i18n.lang_name()}.”
+            f'Du beantwortest Fragen zu folgendem {source_label}: "{title}".\n'
+            + knowledge_instruction + tools_note + "\n\n"
+            "---\n\n" + content_text[:80000]
+            + f"\n\nAlways respond to the user in {i18n.lang_name()}."
         )
         api_messages = list(history) + [{"role": "user", "content": user_message}]
 
