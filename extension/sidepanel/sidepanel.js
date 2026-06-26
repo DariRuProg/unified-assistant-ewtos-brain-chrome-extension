@@ -80,9 +80,13 @@ chrome.storage.onChanged.addListener((changes) => {
 
 
 
+console.log("[sp] sync init start");
 setStatus(false, "verbinde...");
+console.log("[sp] renderSidebar");
 renderSidebar();
+console.log("[sp] renderToolList — content children before:", document.getElementById("content")?.children.length);
 renderToolList();
+console.log("[sp] renderToolList done — content children after:", document.getElementById("content")?.children.length);
 renderQuickActions();
 checkPendingPlaylistPick();
 checkPendingBrainPick();
