@@ -7,10 +7,14 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
         # Vault
         "err.vault_not_found": "Vault not found: {id}",
+        "err.vault_not_found_plain": "Vault not found",
         "err.vault_path_missing": "Vault path missing",
         "err.vault_path_not_found": "Vault path not found: {path}",
         "err.vault_already_exists": "Vault already exists: {name}",
         "err.vault_required": "vault_id required",
+        "err.vault_name_empty": "Name must not be empty",
+        "err.vault_path_empty": "Path must not be empty",
+        "err.vault_no_claude_md": "No CLAUDE.md found in path or its parent",
         # Files
         "err.file_not_found": "File not found: {path}",
         "err.file_read_error": "File could not be read: {path}",
@@ -22,14 +26,20 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Permissions
         "err.write_permission_denied": "Write permission not enabled for this vault. Enable in options.",
         "err.raw_write_denied": "Write permission for raw/ not enabled. Enable in options.",
+        "err.files_write_denied": "write_files permission not enabled. Enable in vault settings.",
+        "err.raw_ingest_denied": "write_raw permission for this vault not enabled.",
         "err.playlists_permission_denied": "Playlists permission not enabled. Enable in options.",
         "err.files_permission_denied": "File management permission not enabled. Enable in options.",
         # Content
         "err.transcript_required": "Transcript required",
         "err.url_required": "URL required",
         "err.title_required": "Title required",
+        "err.tts_text_missing": "text is missing",
+        "err.search_query_empty": "Search query must not be empty",
         "err.no_content": "No content found",
+        "err.no_text_extractable": "No text could be extracted.",
         "err.content_too_short": "Content too short (< {min} chars)",
+        "err.filetype_unsupported": "Unsupported file type: {mime}",
         # Connectivity
         "err.connection_error": "Connection error: {message}",
         "err.api_error": "API error: {message}",
@@ -41,12 +51,22 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Bookmarks
         "err.bookmark_not_found": "Bookmark not found",
         "err.bookmark_required": "match (URL or title) is required",
+        "err.bookmark_url_empty": "URL must not be empty",
+        "err.bookmark_url_invalid": "URL must start with http:// or https://, not: {url}",
+        "err.bookmark_match_empty": "match must not be empty",
+        "err.bookmark_ambiguous": "Multiple bookmarks match '{match}': {preview} — be more specific.",
         # Blueprints
         "err.blueprint_not_found": "Blueprint not found: {id}",
+        "err.blueprint_not_found_plain": "Blueprint not found",
         "err.blueprint_invalid": "Invalid blueprint: {reason}",
         "err.blueprint_import_failed": "Blueprint import failed: {reason}",
         "err.blueprint_unsigned": "Blueprint is not signed by a trusted publisher. Import anyway?",
         "err.blueprint_commit_failed": "Blueprint commit failed: {reason}",
+        "err.blueprint_url_import_not_supported": "URL import not yet implemented — please send JSON body.",
+        "err.blueprint_body_required": "Body requires 'blueprint' object",
+        "err.blueprint_builtin_delete_denied": "Built-in blueprints cannot be deleted",
+        "err.blueprint_imported_not_found": "Imported blueprint not found",
+        "err.blueprint_no_snapshot": "No blueprint snapshot available",
         # LLM
         "err.model_not_set": "No LLM model configured",
         "err.api_key_missing": "API key not set for provider: {provider}",
@@ -73,6 +93,13 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Todos / Notes
         "err.todo_not_found": "Todo not found: {match}",
         "err.todo_ambiguous": "Multiple todos match '{match}' — be more specific",
+        "err.todo_ambiguous_matches": "Multiple matches for '{match}': {preview} — be more specific or use exact text",
+        "err.todo_text_empty": "Todo text must not be empty",
+        "err.todo_match_empty": "match_text must not be empty",
+        "err.todo_action_invalid": "action must be complete|uncomplete|delete, not: {action}",
+        "err.text_empty": "Text must not be empty",
+        "err.export_path_empty": "Path is empty",
+        "err.export_type_invalid": "Only .md or .txt allowed, not {suffix}",
         "err.notes_path_not_set": "Notes path not configured. Set in options.",
         "err.notes_path_not_found": "Notes path not found: {path}",
         # Health / Upgrade
@@ -96,10 +123,14 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "de": {
         # Vault
         "err.vault_not_found": "Vault nicht gefunden: {id}",
+        "err.vault_not_found_plain": "Vault nicht gefunden",
         "err.vault_path_missing": "Vault-Pfad fehlt",
         "err.vault_path_not_found": "Vault-Pfad nicht gefunden: {path}",
         "err.vault_already_exists": "Vault existiert bereits: {name}",
         "err.vault_required": "vault_id erforderlich",
+        "err.vault_name_empty": "Name darf nicht leer sein",
+        "err.vault_path_empty": "Pfad darf nicht leer sein",
+        "err.vault_no_claude_md": "Keine CLAUDE.md im Pfad oder dessen Parent gefunden",
         # Files
         "err.file_not_found": "Datei nicht gefunden: {path}",
         "err.file_read_error": "Datei konnte nicht gelesen werden: {path}",
@@ -111,14 +142,20 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Permissions
         "err.write_permission_denied": "Schreibberechtigung für diesen Vault nicht aktiviert. In Einstellungen aktivieren.",
         "err.raw_write_denied": "Schreibberechtigung für raw/ nicht aktiviert. In Einstellungen aktivieren.",
+        "err.files_write_denied": "write_files-Permission nicht aktiviert. In Einstellungen → Vault bearbeiten aktivieren.",
+        "err.raw_ingest_denied": "write_raw-Permission für diesen Vault nicht aktiviert.",
         "err.playlists_permission_denied": "Playlists-Berechtigung nicht aktiviert. In Einstellungen aktivieren.",
         "err.files_permission_denied": "Datei-Verwaltungsberechtigung nicht aktiviert. In Einstellungen aktivieren.",
         # Content
         "err.transcript_required": "Transcript erforderlich",
         "err.url_required": "URL erforderlich",
         "err.title_required": "Titel erforderlich",
+        "err.tts_text_missing": "text fehlt",
+        "err.search_query_empty": "Suchbegriff darf nicht leer sein",
         "err.no_content": "Kein Inhalt gefunden",
+        "err.no_text_extractable": "Kein Text extrahierbar.",
         "err.content_too_short": "Inhalt zu kurz (< {min} Zeichen)",
+        "err.filetype_unsupported": "Nicht unterstützter Dateityp: {mime}",
         # Connectivity
         "err.connection_error": "Verbindungsfehler: {message}",
         "err.api_error": "API-Fehler: {message}",
@@ -130,12 +167,22 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Bookmarks
         "err.bookmark_not_found": "Bookmark nicht gefunden",
         "err.bookmark_required": "match (URL oder Titel) ist erforderlich",
+        "err.bookmark_url_empty": "URL darf nicht leer sein",
+        "err.bookmark_url_invalid": "URL muss mit http:// oder https:// beginnen, nicht: {url}",
+        "err.bookmark_match_empty": "match darf nicht leer sein",
+        "err.bookmark_ambiguous": "Mehrere Bookmarks matchen '{match}': {preview} — bitte präziser.",
         # Blueprints
         "err.blueprint_not_found": "Blueprint nicht gefunden: {id}",
+        "err.blueprint_not_found_plain": "Blueprint nicht gefunden",
         "err.blueprint_invalid": "Ungültiger Blueprint: {reason}",
         "err.blueprint_import_failed": "Blueprint-Import fehlgeschlagen: {reason}",
         "err.blueprint_unsigned": "Blueprint ist nicht von einem vertrauenswürdigen Herausgeber signiert. Trotzdem importieren?",
         "err.blueprint_commit_failed": "Blueprint-Commit fehlgeschlagen: {reason}",
+        "err.blueprint_url_import_not_supported": "URL-Import noch nicht implementiert — bitte JSON-Body senden.",
+        "err.blueprint_body_required": "Body braucht 'blueprint'-Objekt",
+        "err.blueprint_builtin_delete_denied": "Built-in Blueprints können nicht gelöscht werden",
+        "err.blueprint_imported_not_found": "Importierter Blueprint nicht gefunden",
+        "err.blueprint_no_snapshot": "Kein Blueprint-Snapshot vorhanden",
         # LLM
         "err.model_not_set": "Kein LLM-Modell konfiguriert",
         "err.api_key_missing": "API-Key für Provider nicht gesetzt: {provider}",
@@ -162,6 +209,13 @@ _MESSAGES: dict[str, dict[str, str]] = {
         # Todos / Notes
         "err.todo_not_found": "Todo nicht gefunden: {match}",
         "err.todo_ambiguous": "Mehrere Todos treffen '{match}' — bitte genauer angeben",
+        "err.todo_ambiguous_matches": "Mehrere Treffer für '{match}': {preview} — bitte präziser oder eindeutiger Text",
+        "err.todo_text_empty": "Todo-Text darf nicht leer sein",
+        "err.todo_match_empty": "match_text darf nicht leer sein",
+        "err.todo_action_invalid": "action muss complete|uncomplete|delete sein, nicht: {action}",
+        "err.text_empty": "Text darf nicht leer sein",
+        "err.export_path_empty": "Pfad ist leer",
+        "err.export_type_invalid": "Nur .md oder .txt erlaubt, nicht {suffix}",
         "err.notes_path_not_set": "Notizen-Pfad nicht konfiguriert. In Einstellungen setzen.",
         "err.notes_path_not_found": "Notizen-Pfad nicht gefunden: {path}",
         # Health / Upgrade

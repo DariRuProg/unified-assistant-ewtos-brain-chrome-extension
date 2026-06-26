@@ -9,6 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
+from i18n import t
 import settings
 
 # Defensiver Lock gegen TOCTOU bei parallelen Write-Adds (z.B. Multi-Tab-Bulk).
@@ -152,7 +153,7 @@ def list_todos(vault_id: str | None = None) -> list[dict]:
 def add_todo(text: str, due: str | None = None, vault_id: str | None = None) -> dict:
     text = (text or "").strip()
     if not text:
-        raise ValueError("Todo-Text darf nicht leer sein")
+        raise ValueError(t("err.todo_text_empty"))
     data = load("todos", vault_id)
     # Duplikat-Check: identischer Text (case-insensitive) darf nicht doppelt existieren
     needle = text.lower()
@@ -171,10 +172,10 @@ def add_todo(text: str, due: str | None = None, vault_id: str | None = None) -> 
 
 def update_todo(match_text: str, action: str, vault_id: str | None = None) -> dict:
     if action not in {"complete", "uncomplete", "delete"}:
-        raise ValueError(f"action muss complete|uncomplete|delete sein, nicht {action}")
+        raise ValueError(t("err.todo_action_invalid", action=action))
     needle = (match_text or "").strip().lower()
     if not needle:
-        raise ValueError("match_text darf nicht leer sein")
+        raise ValueError(t("err.todo_match_empty"))
     data = load("todos", vault_id)
     lines = data["content"].splitlines()
     matches: list[tuple[int, str, str]] = []  # (idx, full_line, todo_text)
@@ -186,10 +187,10 @@ def update_todo(match_text: str, action: str, vault_id: str | None = None) -> di
         if needle in todo_text.lower():
             matches.append((idx, line, todo_text))
     if not matches:
-        raise ValueError(f"Kein Todo gefunden, das '{match_text}' enthält")
+        raise ValueError(t("err.todo_not_found", match=match_text))
     if len(matches) > 1:
-        preview = "; ".join(t for _, _, t in matches[:5])
-        raise ValueError(f"Mehrere Treffer für '{match_text}': {preview} — bitte präziser oder eindeutiger Text")
+        preview = "; ".join(todo for _, _, todo in matches[:5])
+        raise ValueError(t("err.todo_ambiguous_matches", match=match_text, preview=preview))
     idx, line, todo_text = matches[0]
     if action == "delete":
         del lines[idx]
@@ -209,7 +210,7 @@ def read_scratchpad(vault_id: str | None = None) -> dict:
 def append_scratchpad(text: str, vault_id: str | None = None) -> dict:
     text = (text or "").strip()
     if not text:
-        raise ValueError("Text darf nicht leer sein")
+        raise ValueError(t("err.text_empty"))
     today = date.today().isoformat()
     data = load("scratchpad", vault_id)
     body = data["content"].rstrip()
@@ -245,12 +246,12 @@ def replace_scratchpad(content: str, vault_id: str | None = None) -> dict:
 
 def export(target_path: str, content: str, source: str = "scratchpad") -> dict:
     if not target_path or not target_path.strip():
-        raise ValueError("Pfad ist leer")
+        raise ValueError(t("err.export_path_empty"))
     p = Path(target_path.strip()).expanduser()
     if not p.suffix:
         p = p.with_suffix(".md")
     if p.suffix.lower() not in {".md", ".txt"}:
-        raise ValueError(f"Nur .md oder .txt erlaubt, nicht {p.suffix}")
+        raise ValueError(t("err.export_type_invalid", suffix=p.suffix))
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.suffix.lower() == ".md":
         today = date.today().isoformat()

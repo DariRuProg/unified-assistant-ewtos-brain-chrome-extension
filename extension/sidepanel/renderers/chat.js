@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
 import { renderMarkdown } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
+import { t } from '../../i18n/i18n.js';
 
 // Vault-relativer Pfad der Chat-Quelle (für "im Vault-Explorer öffnen"). null = kein File-Backing (z.B. Seite).
 function sourceFilePath(src) {
@@ -17,7 +18,7 @@ function sourceFilePath(src) {
 }
 
 export async function renderChat() {
-  state.panelTitle.textContent = "Chat mit Vault";
+  state.panelTitle.textContent = t("chat.title_vault");
 
   const initialSource = state.pendingToolOptions?.sourceType && state.pendingToolOptions?.sourceRef
     ? { type: state.pendingToolOptions.sourceType, ref: state.pendingToolOptions.sourceRef, title: state.pendingToolOptions.sourceTitle || "" }
@@ -26,11 +27,11 @@ export async function renderChat() {
   const startMode = state.pendingToolOptions?.startMode || null;
 
   function updateChatTitle(mode, sourceTitle) {
-    if (mode === "transcript") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Transcript";
-    else if (mode === "video") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Video";
-    else if (mode === "page") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Seite";
-    else if (mode === "vault_file") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : "Chat mit Datei";
-    else state.panelTitle.textContent = "Chat mit Vault";
+    if (mode === "transcript") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : t("chat.title_transcript");
+    else if (mode === "video") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : t("chat.title_video");
+    else if (mode === "page") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : t("chat.title_page");
+    else if (mode === "vault_file") state.panelTitle.textContent = sourceTitle ? `Chat: ${sourceTitle}` : t("chat.title_file");
+    else state.panelTitle.textContent = t("chat.title_vault");
   }
 
   const httpBase = await getHttpBase();
@@ -39,33 +40,33 @@ export async function renderChat() {
   const header = el("div", { className: "chat-header" });
   const vaultSelect = el("select", { className: "vault-picker" });
   header.append(vaultSelect);
-  const meta = el("div", { className: "tool-status", textContent: "lade Vaults..." });
+  const meta = el("div", { className: "tool-status", textContent: t("chat.loading_vaults") });
 
   const log = el("div", { className: "chat-log" });
   const inputWrap = el("form", { className: "chat-input" });
-  const inputArea = el("textarea", { placeholder: "Frage an den Vault... (Enter = senden, Shift+Enter = Zeilenumbruch)", rows: 2 });
+  const inputArea = el("textarea", { placeholder: t("chat.placeholder"), rows: 2 });
   const sendBtn = el("button", { type: "submit", textContent: "→" });
-  const micBtn = el("button", { type: "button", textContent: "🎙", title: "Spracheingabe" });
+  const micBtn = el("button", { type: "button", textContent: "🎙", title: t("chat.mic_title") });
   micBtn.classList.add("mic-btn");
   inputWrap.append(inputArea, micBtn, sendBtn);
 
   const toolbar = el("div", { className: "chat-toolbar" });
-  const clearBtn = el("button", { type: "button", textContent: "Verlauf löschen" });
+  const clearBtn = el("button", { type: "button", textContent: t("chat.clear") });
   clearBtn.classList.add("secondary");
 
   // Search toggle
-  const searchToggleRow = el("div", { className: "checkbox-row", title: "Volltextsuche über alle .md-Dateien (inkl. raw/) — ermöglicht gezielte Stichwort-Suche" });
+  const searchToggleRow = el("div", { className: "checkbox-row", title: t("chat.search_toggle_title") });
   const searchToggle = el("input", { type: "checkbox", id: "vaultSearchToggle" });
   searchToggle.checked = true; // default until loaded from server
-  const searchToggleLabel = el("label", { htmlFor: "vaultSearchToggle", textContent: "Volltextsuche" });
+  const searchToggleLabel = el("label", { htmlFor: "vaultSearchToggle", textContent: t("chat.search_toggle") });
   searchToggleRow.append(searchToggle, searchToggleLabel);
 
   // Activity toggle — zeigt Tool-Aufrufe sichtbar im Verlauf
   let showActivity = true;
-  const activityToggleRow = el("div", { className: "checkbox-row", title: "Zeigt im Verlauf an, welche Tools die KI ausführt (Lesen, Schreiben, Web)" });
+  const activityToggleRow = el("div", { className: "checkbox-row", title: t("chat.activity_toggle_title") });
   const activityToggle = el("input", { type: "checkbox", id: "chatActivityToggle" });
   activityToggle.checked = true;
-  const activityToggleLabel = el("label", { htmlFor: "chatActivityToggle", textContent: "Tool-Aktivität" });
+  const activityToggleLabel = el("label", { htmlFor: "chatActivityToggle", textContent: t("chat.activity_toggle") });
   activityToggleRow.append(activityToggle, activityToggleLabel);
 
   // Load initial state from server
@@ -134,8 +135,8 @@ export async function renderChat() {
     return btn;
   }
   scrapeModeRow.append(
-    makeScrapeBtn("content", "Hauptinhalt", "Sauberer Haupttext ohne Menü, Footer und Link-Listen (Standard). Wird automatisch ergänzt, falls zu wenig erkannt wird."),
-    makeScrapeBtn("full", "Ganze Seite", "Tiefes Scrapen inkl. Header, Navigation und allen Links — mehr Inhalt, aber mit Rauschen."),
+    makeScrapeBtn("content", t("chat.scrape_content"), t("chat.scrape_content_title")),
+    makeScrapeBtn("full", t("chat.scrape_full"), t("chat.scrape_full_title")),
   );
 
   function setPageUrlRow(state, text) {
@@ -146,8 +147,8 @@ export async function renderChat() {
   }
 
   async function scrapeCurrentPage() {
-    setPageUrlRow("loading", "Lese Seite...");
-    setStatus("lese Seite...");
+    setPageUrlRow("loading", t("chat.loading_page"));
+    setStatus(t("chat.scrape_starting"));
     try {
       const hb = await getHttpBase();
       const scrape = async (mode) => {
@@ -176,12 +177,12 @@ export async function renderChat() {
           } catch (_) {}
         }
       }
-      if (!data.markdown) throw new Error("Kein Seiteninhalt");
+      if (!data.markdown) throw new Error(t("chat.no_page_content"));
       scrapedPage = { title: data.title || "", url: data.url || "", markdown: data.markdown };
       // Dedizierter Seiten-Chat: Titel im Header, URL im Kontext-Banner (auch nach Tab-Wechsel aktuell halten).
       if (chatMode === "page" && !activeSource) {
-        state.panelTitle.textContent = scrapedPage.title || "Chat mit Seite";
-        sourceBanner.textContent = `🌐 Seite: ${scrapedPage.url || scrapedPage.title || ""}`;
+        state.panelTitle.textContent = scrapedPage.title || t("chat.title_page");
+        sourceBanner.textContent = `🌐 ${scrapedPage.url || scrapedPage.title || ""}`;
         setPageUrlRow("hide");
       } else {
         setPageUrlRow("ok", scrapedPage.title || scrapedPage.url);
@@ -189,16 +190,16 @@ export async function renderChat() {
       setStatus("");
     } catch (err) {
       scrapedPage = null;
-      setPageUrlRow("error", "Fehler: " + (err.message || err));
-      setStatus("Seite konnte nicht gelesen werden: " + (err.message || err), "error");
+      setPageUrlRow("error", t("chat.error_prefix", { error: err.message || err }));
+      setStatus(t("chat.page_failed", { error: err.message || err }), "error");
     }
   }
 
-  const webHint = el("div", { className: "chat-web-hint", textContent: "Hinweis: Internet-Recherche im Chat ist noch nicht aktiv (geplant für später)." });
+  const webHint = el("div", { className: "chat-web-hint", textContent: t("chat.web_hint") });
 
   // Dezenter Datei-Chat-Hinweis (nur Vault-Modus) — der eigentliche Datei-Chat lebt im Explorer.
   const fileHint = el("div", { className: "chat-file-hint" });
-  const fileHintLink = el("a", { href: "#", textContent: "Einzelne Datei? → im Explorer öffnen und „Mit Datei chatten“" });
+  const fileHintLink = el(“a”, { href: “#”, textContent: t(“chat.file_hint”) });
   fileHintLink.addEventListener("click", (e) => {
     e.preventDefault();
     openTool("vault_explorer", { vaultId: currentVaultId });
@@ -219,7 +220,7 @@ export async function renderChat() {
     modeBtns[mode] = btn;
     return btn;
   }
-  modeTabsRow.append(makeModeTab("Vault", "vault"), makeModeTab("Seite", "page"), makeModeTab("Datei", "datei"));
+  modeTabsRow.append(makeModeTab(t("chat.mode_vault"), "vault"), makeModeTab(t("chat.mode_page"), "page"), makeModeTab(t("chat.mode_file"), "datei"));
   function updateModeTabs() {
     const active = chatMode === "vault" ? "vault"
       : chatMode === "page" ? "page"
@@ -255,33 +256,33 @@ export async function renderChat() {
     scrapeModeRow.style.display = "none";
     setPageUrlRow("hide");
     bannerRow.style.display = "";
-    inputArea.placeholder = "Frage zu diesem Inhalt…";
+    inputArea.placeholder = t("chat.placeholder_source");
     if (src.type === "transcript") {
-      sourceBanner.textContent = `📜 Quelle: Transcript "${src.title || src.ref?.rel_path || ""}"`;
+      sourceBanner.textContent = t("chat.source_transcript", { title: src.title || src.ref?.rel_path || "" });
     } else if (src.type === "video") {
-      sourceBanner.textContent = `🎬 Quelle: Video "${src.title || src.ref?.slug || ""}"`;
+      sourceBanner.textContent = t("chat.source_video", { title: src.title || src.ref?.slug || "" });
     } else if (src.type === "vault_file") {
-      sourceBanner.textContent = `📄 Datei (schreibfähig): ${src.title || src.ref?.rel_path || ""}`;
+      sourceBanner.textContent = t("chat.source_file", { title: src.title || src.ref?.rel_path || "" });
     } else {
-      sourceBanner.textContent = `🌐 Quelle: ${src.title || "Seiteninhalt"}`;
+      sourceBanner.textContent = `🌐 ${src.title || ""}`;
     }
     // Quelle anklickbar machen, wenn sie eine echte Vault-Datei ist → im Vault-Explorer öffnen.
     const relPath = sourceFilePath(src);
     sourceBanner.classList.toggle("clickable", !!relPath);
-    sourceBanner.title = relPath ? "Im Vault-Explorer öffnen" : "";
+    sourceBanner.title = relPath ? t("chat.open_in_explorer") : "";
     sourceBanner.onclick = relPath
       ? () => openTool("vault_explorer", { initialFile: relPath, vaultId: src.ref?.vault_id })
       : null;
     if (src.type === "vault_file") {
-      inputArea.placeholder = "Frage oder Anweisung zu dieser Datei… (z.B. 'zieh das Transkript und schreib's rein')";
+      inputArea.placeholder = t("chat.placeholder_file");
     }
     updateChatTitle(src.type, src.title);
     updateWebHintVisibility();
     meta.textContent = "";
     log.replaceChildren();
     const emptyHint = src.type === "vault_file"
-      ? "Frag oder lass die KI etwas in diese Datei schreiben (Transkript, Bild, Notizen)."
-      : "Stell deine Frage zu diesem Inhalt.";
+      ? t("chat.empty_file")
+      : t("chat.empty_source");
     log.append(el("div", { className: "chat-empty", textContent: emptyHint }));
     updateModeTabs();
   }
@@ -296,12 +297,12 @@ export async function renderChat() {
     fileHint.style.display = "none";
     bannerRow.style.display = "";
     scrapeModeRow.style.display = "";
-    sourceBanner.textContent = "🌐 Seite wird gelesen...";
-    inputArea.placeholder = "Frage zu dieser Seite… (Tools wie SEO/Scrape/Bild sind verfügbar)";
+    sourceBanner.textContent = t("chat.page_scraping");
+    inputArea.placeholder = t("chat.placeholder_page");
     updateModeTabs();
     renderActiveLog();
     await scrapeCurrentPage(); // setzt bei Erfolg Titel + URL-Banner
-    if (!scrapedPage) sourceBanner.textContent = "🌐 Seite (konnte nicht gelesen werden)";
+    if (!scrapedPage) sourceBanner.textContent = t("chat.page_load_failed_banner");
   }
 
   // Wenn über "💬 Chat" auf Datei/Video/Transcript geöffnet
@@ -331,11 +332,11 @@ export async function renderChat() {
       if (img.getAttribute("src")) return;
       const rel = img.getAttribute("data-vault-src");
       img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(vid)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
-      img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[Bild nicht gefunden: ${rel}]`)); });
+      img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[${rel}]`)); });
     });
   }
 
-  function renderLog(messages, emptyMsg = "Noch keine Nachrichten. Frag den Vault was!") {
+  function renderLog(messages, emptyMsg = t("chat.empty")) {
     log.replaceChildren();
     const visible = messages.filter((m) => typeof m.content === "string");
     if (!visible.length) {
@@ -369,9 +370,9 @@ export async function renderChat() {
       renderLog(history);
     } else if (chatMode === "page") {
       const hist = (activeSource && activeSource.type === "page") ? sourceChatHistory : pageChatHistory;
-      renderLog(hist, "Stell deine Frage zu dieser Seite.");
+      renderLog(hist, t("chat.empty_page"));
     } else {
-      renderLog(sourceChatHistory, "Stell deine Frage zu diesem Inhalt.");
+      renderLog(sourceChatHistory, t("chat.empty_source"));
     }
   }
 
@@ -380,7 +381,7 @@ export async function renderChat() {
     const wrap = el("div", { className: "chat-empty-state" });
     wrap.append(el("p", { textContent: message }));
     if (withOptionsLink) {
-      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      const btn = el("button", { type: "button", textContent: t("chat.open_settings") });
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
     }
@@ -399,7 +400,7 @@ export async function renderChat() {
   async function loadVaultChat(vaultId) {
     currentVaultId = vaultId;
     await chrome.storage.local.set({ selectedVaultId: vaultId });
-    setStatus("lade...");
+    setStatus(t("chat.lade"));
     try {
       const res = await fetch(`${httpBase}/tools/chat/${vaultId}`);
       const text = await res.text();
@@ -407,17 +408,17 @@ export async function renderChat() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       const sourceLabel = {
-        claude_md: "CLAUDE.md aktiv",
-        override: "Override aktiv",
-        default: "Default-Prompt (keine CLAUDE.md)",
+        claude_md: t("chat.prompt_claude_md"),
+        override: t("chat.prompt_override"),
+        default: t("chat.prompt_default"),
       }[data.prompt_source] || data.prompt_source || "?";
-      meta.textContent = `📚 Vault: ${data.vault?.name || vaultId} · Modell: ${data.model} · max ${data.max_user_turns} Paare · ${sourceLabel}`;
+      meta.textContent = t("chat.meta_info", { name: data.vault?.name || vaultId, model: data.model, turns: data.max_user_turns, source: sourceLabel });
       const history = await loadVaultHistory(vaultId);
       renderLog(history.length ? history : (data.messages || []));
       setStatus("");
       inputArea.focus();
     } catch (err) {
-      setStatus("Laden fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("chat.load_failed", { error: err.message || err }), "error");
     }
   }
 
@@ -450,10 +451,10 @@ export async function renderChat() {
     if (!bubble) return;
     const speakText = (bubble.textContent || "").trim();
     if (!speakText) return;
-    const b = el("button", { type: "button", className: "tts-btn", textContent: "🔊", title: "Vorlesen" });
+    const b = el("button", { type: "button", className: "tts-btn", textContent: "🔊", title: t("chat.tts_speak") });
 
-    function setIdle() { b.textContent = "🔊"; b.title = "Vorlesen"; b.disabled = false; }
-    function setSpeaking() { b.textContent = "⏹"; b.title = "Stoppen"; b.disabled = false; }
+    function setIdle() { b.textContent = "🔊"; b.title = t("chat.tts_speak"); b.disabled = false; }
+    function setSpeaking() { b.textContent = "⏹"; b.title = t("chat.tts_stop"); b.disabled = false; }
 
     b.addEventListener("click", async () => {
       if (b.textContent === "⏹") { _stopAllTts(); setIdle(); return; }
@@ -478,7 +479,7 @@ export async function renderChat() {
           }
           // Server-TTS fehlgeschlagen → Web Speech Fallback
         }
-        if (!window.speechSynthesis) throw new Error("Web Speech nicht verfügbar");
+        if (!window.speechSynthesis) throw new Error(t("chat.mic_unavailable"));
         window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(speakText.slice(0, 5000));
         utt.lang = "de-DE";
@@ -492,7 +493,7 @@ export async function renderChat() {
           }
         }, 300);
       } catch (err) {
-        setStatus("Vorlesen fehlgeschlagen: " + (err.message || err), "error");
+        setStatus(t("chat.tts_error", { error: err.message || err }), "error");
         setIdle();
       }
     });
@@ -502,15 +503,15 @@ export async function renderChat() {
   async function send(message) {
     if (busy) return;
     if (chatMode === "vault" && !currentVaultId) {
-      setStatus("Bitte zuerst einen Vault auswählen", "error");
+      setStatus(t("chat.no_vault_selected"), "error");
       return;
     }
     if (chatMode === "page" && !activeSource && !scrapedPage?.markdown) {
-      setStatus("Seite wird noch geladen — kurz warten", "error");
+      setStatus(t("chat.page_loading"), "error");
       return;
     }
     if ((chatMode === "transcript" || chatMode === "video" || chatMode === "vault_file") && !activeSource) {
-      setStatus("Keine Quelle ausgewählt", "error");
+      setStatus(t("chat.no_source"), "error");
       return;
     }
     busy = true;
@@ -544,7 +545,7 @@ export async function renderChat() {
       return entry;
     }
 
-    setStatus("denkt...");
+    setStatus(t("chat.thinking"));
     try {
       let res;
       if (chatMode === "page") {
@@ -634,7 +635,7 @@ export async function renderChat() {
             if (icon) icon.textContent = data.ok ? "✓" : "✗";
             currentActivity = null;
           }
-          if (!data.ok) setStatus(`${data.tool} fehlgeschlagen`, "error");
+          if (!data.ok) setStatus(t("chat.tool_failed", { tool: data.tool }), "error");
         } else if (event === "done") {
           assistantBubble.classList.remove("streaming");
           if (assistantText.trim()) {
@@ -642,7 +643,7 @@ export async function renderChat() {
             wireVaultImages(assistantBubble);
             addTtsButton(assistantBubble);
           } else {
-            assistantBubble.textContent = "(keine Textantwort)";
+            assistantBubble.textContent = t("chat.no_response");
           }
           if (chatMode === "page" && data.messages) {
             if (activeSource && activeSource.type === "page") sourceChatHistory = data.messages;
@@ -650,13 +651,13 @@ export async function renderChat() {
           }
           if ((chatMode === "transcript" || chatMode === "video" || chatMode === "vault_file") && data.messages) sourceChatHistory = data.messages;
           const u = data.usage || {};
-          const cached = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
-          const baseText = `fertig (${u.input_tokens || 0} in / ${u.output_tokens || 0} out${cached})`;
+          const cached = u.cache_read_input_tokens ? t("chat.done_status_cached", { tokens: u.cache_read_input_tokens }) : "";
+          const baseText = t("chat.done_status", { input: u.input_tokens || 0, output: u.output_tokens || 0, cached });
           status.replaceChildren();
           status.className = "tool-status success";
           status.append(document.createTextNode(baseText));
           if (data.consulted?.length && chatMode === "vault" && currentVaultId) {
-            status.append(document.createTextNode(" · gelesen: "));
+            status.append(document.createTextNode(t("chat.consulted")));
             data.consulted.forEach((relPath, i) => {
               if (i > 0) status.append(document.createTextNode(", "));
               const a = el("a", { href: "#", textContent: relPath, className: "chat-citation" });
@@ -667,13 +668,13 @@ export async function renderChat() {
               status.append(a);
             });
           } else if (data.consulted?.length) {
-            status.append(document.createTextNode(` · gelesen: ${data.consulted.join(", ")}`));
+            status.append(document.createTextNode(t("chat.consulted") + data.consulted.join(", ")));
           }
         } else if (event === "error") {
           assistantBubble.classList.remove("streaming");
-          assistantBubble.textContent = "Fehler: " + (data.message || "unbekannt");
+          assistantBubble.textContent = t("chat.error_prefix", { error: data.message || "?" });
           assistantBubble.classList.add("error");
-          setStatus("Fehler: " + (data.message || "unbekannt"), "error");
+          setStatus(t("chat.error_prefix", { error: data.message || "?" }), "error");
         }
       }
 
@@ -700,8 +701,8 @@ export async function renderChat() {
     } catch (err) {
       assistantBubble.classList.remove("streaming");
       assistantBubble.classList.add("error");
-      assistantBubble.textContent = "Fehler: " + (err.message || err);
-      setStatus("Fehler: " + (err.message || err), "error");
+      assistantBubble.textContent = t("chat.error_prefix", { error: err.message || err });
+      setStatus(t("chat.error_prefix", { error: err.message || err }), "error");
     } finally {
       busy = false;
       sendBtn.disabled = false;
@@ -725,12 +726,12 @@ export async function renderChat() {
       baseText = inputArea.value;
       recording = false;
       micBtn.classList.remove("recording");
-      micBtn.title = "Spracheingabe";
+      micBtn.title = t("chat.mic_title");
     } else if (msg.type === "transcript_error") {
       recording = false;
       micBtn.classList.remove("recording");
-      micBtn.title = "Spracheingabe";
-      if (msg.error !== "aborted") setStatus("Mikrofon-Fehler: " + msg.error, "error");
+      micBtn.title = t("chat.mic_title");
+      if (msg.error !== "aborted") setStatus(t("chat.mic_error", { error: msg.error }), "error");
     }
   });
 
@@ -746,12 +747,12 @@ export async function renderChat() {
       }
       recording = false;
       micBtn.classList.remove("recording");
-      micBtn.title = "Spracheingabe";
+      micBtn.title = t("chat.mic_title");
       return;
     }
 
     if (!tab?.id || !tab.url?.startsWith("http")) {
-      setStatus("Spracheingabe braucht eine http(s)-Seite im aktiven Tab", "error");
+      setStatus(t("chat.mic_no_http"), "error");
       return;
     }
 
@@ -786,14 +787,14 @@ export async function renderChat() {
         },
       });
       if (results?.[0]?.result?.error === "not_supported") {
-        setStatus("SpeechRecognition nicht verfügbar", "error");
+        setStatus(t("chat.mic_unavailable"), "error");
         return;
       }
       recording = true;
       micBtn.classList.add("recording");
-      micBtn.title = "Aufnahme stoppen";
+      micBtn.title = t("chat.mic_stop");
     } catch (err) {
-      setStatus("Spracheingabe-Fehler: " + err.message, "error");
+      setStatus(t("chat.mic_start_error", { error: err.message }), "error");
     }
   });
 
@@ -822,24 +823,24 @@ export async function renderChat() {
     // Nur den Verlauf des aktiven Modus leeren — die anderen Chats bleiben unberührt.
     if (chatMode === "vault") {
       if (!currentVaultId) return;
-      if (!confirm("Vault-Verlauf löschen?")) return;
+      if (!confirm(t("chat.confirm_clear_vault"))) return;
       try {
         const res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/clear`, { method: "POST" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (err) {
-        setStatus("Fehler: " + (err.message || err), "error");
+        setStatus(t("chat.error_prefix", { error: err.message || err }), "error");
         return;
       }
     } else if (chatMode === "page") {
-      if (!confirm("Seiten-Chat löschen?")) return;
+      if (!confirm(t("chat.confirm_clear_page"))) return;
       if (activeSource && activeSource.type === "page") sourceChatHistory = [];
       else pageChatHistory = [];
     } else {
-      if (!confirm("Diesen Chat löschen?")) return;
+      if (!confirm(t("chat.confirm_clear_source"))) return;
       sourceChatHistory = [];
     }
     await renderActiveLog();
-    setStatus("Verlauf geleert", "success");
+    setStatus(t("chat.cleared"), "success");
   });
 
   // Initial load: get vault list, populate dropdown, restore last selection
@@ -854,7 +855,7 @@ export async function renderChat() {
     const data = await res.json();
     const vaults = data.vaults || [];
     if (!vaults.length) {
-      showEmptyState("Noch kein Vault verbunden. Lege in den Einstellungen einen an, dann kannst du chatten.");
+      showEmptyState(t("chat.no_vault_empty"));
       return;
     }
     vaultSelect.replaceChildren();
@@ -866,6 +867,6 @@ export async function renderChat() {
     vaultSelect.value = startId;
     await loadVaultChat(startId);
   } catch (err) {
-    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+    setStatus(t("chat.vault_load_error", { error: err.message || err }), "error");
   }
 }

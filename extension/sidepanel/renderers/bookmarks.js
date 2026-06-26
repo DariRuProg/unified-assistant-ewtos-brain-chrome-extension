@@ -3,31 +3,32 @@ import { el, makeYouTubeThumb } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
 import { captureHighlightedTabs, copyHighlightedTabUrls } from './playlists.js';
+import { t } from '../../i18n/i18n.js';
 
 let bookmarksState = { all: [], search: "", activeTag: null };
 
 export async function renderBookmarksTool() {
-  state.panelTitle.textContent = "Bookmarks";
+  state.panelTitle.textContent = t("bookmarks.title");
   state.panelBody.replaceChildren();
   const pendingAction = state.pendingToolOptions?.action;
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
   const toolbar = el("div", { className: "playlist-toolbar" });
-  const addBtn = el("button", { type: "button", textContent: "+ Bookmark hinzufügen" });
+  const addBtn = el("button", { type: "button", textContent: t("bookmarks.add") });
   const captureTabsBtn = el("button", {
     type: "button",
-    textContent: "📑 Markierte Tabs",
-    title: "Alle im aktuellen Fenster mit Strg+Klick markierten Tabs als Bookmarks erfassen",
+    textContent: t("bookmarks.capture_tabs"),
+    title: t("bookmarks.capture_tabs_title"),
   });
   const copyUrlsBtn = el("button", {
     type: "button",
-    textContent: "📋 URLs kopieren",
-    title: "URLs der markierten Tabs in die Zwischenablage kopieren (z.B. für NotebookLM) — ohne als Bookmark zu speichern",
+    textContent: t("bookmarks.copy_urls"),
+    title: t("bookmarks.copy_urls_title"),
   });
   toolbar.append(addBtn, captureTabsBtn, copyUrlsBtn);
   const status = el("div", { className: "tool-status" });
   const searchWrap = el("div", { className: "bookmark-search" });
-  const searchInput = el("input", { type: "search", placeholder: "Suche Titel, URL, #tag…", value: bookmarksState.search });
+  const searchInput = el("input", { type: "search", placeholder: t("bookmarks.search_placeholder"), value: bookmarksState.search });
   searchWrap.append(searchInput);
   const tagCloud = el("div", { className: "tag-cloud" });
   const listWrap = el("div", { className: "bookmark-list" });
@@ -36,7 +37,7 @@ export async function renderBookmarksTool() {
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
   const vault = await getActiveVault(httpBase);
-  vaultHint.textContent = vault ? `Notes-Inbox: ${vault.name}` : "Kein Vault aktiv — Notes laufen global";
+  vaultHint.textContent = vault ? t("notes.vault_hint", { name: vault.name }) : t("notes.no_vault_active");
   addBtn.addEventListener("click", () => showAddBookmarkDialog(httpBase, vaultId, () => renderBookmarksTool()));
   captureTabsBtn.addEventListener("click", () => captureHighlightedTabs(httpBase, vaultId, captureTabsBtn, () => renderBookmarksTool()));
   copyUrlsBtn.addEventListener("click", () => copyHighlightedTabUrls(copyUrlsBtn));
@@ -45,11 +46,11 @@ export async function renderBookmarksTool() {
   else if (pendingAction === "capture_tabs") captureTabsBtn.click();
   else if (pendingAction === "copy_urls") copyUrlsBtn.click();
 
-  status.textContent = "lade...";
+  status.textContent = t("common.loading");
   try {
     const res = await fetch(withVaultId(`${httpBase}/tools/bookmarks`, vaultId));
     if (!res.ok) {
-      status.textContent = `Fehler ${res.status}`;
+      status.textContent = t("bookmarks.error_status", { status: res.status });
       status.className = "tool-status error";
       return;
     }
@@ -90,12 +91,12 @@ export async function renderBookmarksTool() {
     });
 
     if (!items.length) {
-      listWrap.append(el("div", { className: "empty", textContent: "Keine Bookmarks. Per Rechtsklick auf Webseiten oder mit '+ Bookmark hinzufügen'." }));
+      listWrap.append(el("div", { className: "empty", textContent: t("bookmarks.empty") }));
       return;
     }
     applyFilters();
   } catch (err) {
-    status.textContent = `Fehler: ${err.message || err}`;
+    status.textContent = t("common.error_msg", { message: err.message || err });
     status.className = "tool-status error";
   }
 }
@@ -118,7 +119,7 @@ function renderTagCloud(target, items, onTagClick) {
     target.append(pill);
   }
   if (bookmarksState.activeTag) {
-    const clear = el("button", { type: "button", textContent: "× Filter aufheben", className: "tag-pill clear" });
+    const clear = el("button", { type: "button", textContent: t("bookmarks.clear_filter"), className: "tag-pill clear" });
     clear.addEventListener("click", () => onTagClick(bookmarksState.activeTag));
     target.append(clear);
   }
@@ -127,19 +128,20 @@ function renderTagCloud(target, items, onTagClick) {
 function renderBookmarksList(httpBase, vaultId, target, items) {
   target.replaceChildren();
   if (!items.length) {
-    target.append(el("div", { className: "empty", textContent: "(keine Bookmarks matchen den Filter)" }));
+    target.append(el("div", { className: "empty", textContent: t("bookmarks.no_match") }));
     return;
   }
   // Group by first thema
+  const untaggedLabel = t("bookmarks.untagged");
   const groups = {};
   for (const b of items) {
-    const key = (b.themen && b.themen[0]) || "(Ohne Tag)";
+    const key = (b.themen && b.themen[0]) || untaggedLabel;
     if (!groups[key]) groups[key] = [];
     groups[key].push(b);
   }
   const sortedKeys = Object.keys(groups).sort((a, b) => {
-    if (a === "(Ohne Tag)") return 1;
-    if (b === "(Ohne Tag)") return -1;
+    if (a === untaggedLabel) return 1;
+    if (b === untaggedLabel) return -1;
     return a.localeCompare(b);
   });
   for (const key of sortedKeys) {
@@ -168,19 +170,19 @@ function renderBookmarkCard(httpBase, vaultId, b) {
   if (b.note) body.append(el("div", { className: "bookmark-note", textContent: b.note }));
   const meta = el("div", { className: "bookmark-meta" });
   const left = el("span");
-  if (b.source) left.append(el("span", { textContent: `quelle: ${b.source}` }));
+  if (b.source) left.append(el("span", { textContent: t("bookmarks.source_label", { source: b.source }) }));
   if (b.themen && b.themen.length) {
     if (b.source) left.append(el("span", { textContent: " · " }));
     left.append(el("span", { textContent: b.themen.map((t) => `#${t}`).join(" ") }));
   }
   meta.append(left);
   const actions = el("span", { className: "bookmark-actions" });
-  const editBtn = el("button", { type: "button", textContent: "✎", className: "small", title: "Bearbeiten" });
+  const editBtn = el("button", { type: "button", textContent: "✎", className: "small", title: t("bookmarks.edit_title") });
   editBtn.addEventListener("click", () => showEditBookmarkDialog(httpBase, vaultId, b, () => renderBookmarksTool()));
   actions.append(editBtn);
-  const delBtn = el("button", { type: "button", textContent: "Löschen", className: "small" });
+  const delBtn = el("button", { type: "button", textContent: t("bookmarks.delete"), className: "small" });
   delBtn.addEventListener("click", async () => {
-    if (!confirm(`'${b.title}' löschen?`)) return;
+    if (!confirm(t("bookmarks.delete_confirm", { title: b.title }))) return;
     const matchValue = b.url || b.title;
     const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks/delete`, vaultId), {
       method: "POST",
@@ -188,7 +190,7 @@ function renderBookmarkCard(httpBase, vaultId, b) {
       body: JSON.stringify({ match: matchValue, date: b.date || null }),
     });
     if (r.ok) renderBookmarksTool();
-    else { const e = await r.json().catch(() => ({})); alert(`Fehler ${r.status}: ${e.detail || ""}`); }
+    else { const e = await r.json().catch(() => ({})); alert(t("bookmarks.error_delete", { status: r.status, detail: e.detail || "" })); }
   });
   actions.append(delBtn);
   meta.append(actions);
@@ -200,19 +202,19 @@ function renderBookmarkCard(httpBase, vaultId, b) {
 function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
-  dialog.append(el("h3", { textContent: "Bookmark bearbeiten" }));
+  dialog.append(el("h3", { textContent: t("bookmarks.dialog_edit_headline") }));
 
-  const titleInput = el("input", { type: "text", placeholder: "Titel", value: bookmark.title || "" });
-  const noteInput = el("input", { type: "text", placeholder: "Notiz (optional)", value: bookmark.note || "" });
+  const titleInput = el("input", { type: "text", placeholder: t("bookmarks.title_placeholder"), value: bookmark.title || "" });
+  const noteInput = el("input", { type: "text", placeholder: t("bookmarks.note_placeholder"), value: bookmark.note || "" });
   const themenInput = el("input", {
     type: "text",
-    placeholder: "Themen (Komma-getrennt)",
+    placeholder: t("bookmarks.topics_placeholder"),
     value: (bookmark.themen || []).join(", "),
   });
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "playlist-picker-actions" });
-  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
-  const ok = el("button", { type: "button", textContent: "Speichern", className: "primary" });
+  const cancel = el("button", { type: "button", textContent: t("common.cancel") });
+  const ok = el("button", { type: "button", textContent: t("bookmarks.save"), className: "primary" });
   actions.append(cancel, ok);
   dialog.append(
     el("div", { className: "remove-dialog-info", textContent: bookmark.url }),
@@ -227,7 +229,7 @@ function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
       .split(",")
       .map((t) => t.trim().replace(/^#/, "").toLowerCase())
       .filter((t) => /^[a-z][\w\-/]*$/.test(t));
-    ok.disabled = true; status.textContent = "speichere...";
+    ok.disabled = true; status.textContent = t("common.saving");
     try {
       const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks/edit`, vaultId), {
         method: "POST",
@@ -242,7 +244,7 @@ function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        status.textContent = `Fehler ${r.status}: ${err.detail || ""}`;
+        status.textContent = t("bookmarks.error_delete", { status: r.status, detail: err.detail || "" });
         status.className = "tool-status error";
         ok.disabled = false;
         return;
@@ -250,7 +252,7 @@ function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
       overlay.remove();
       onSaved && onSaved();
     } catch (err) {
-      status.textContent = `Fehler: ${err.message || err}`;
+      status.textContent = t("common.error_msg", { message: err.message || err });
       status.className = "tool-status error";
       ok.disabled = false;
     }
@@ -261,16 +263,16 @@ function showEditBookmarkDialog(httpBase, vaultId, bookmark, onSaved) {
 function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
-  dialog.append(el("h3", { textContent: "Bookmark hinzufügen" }));
+  dialog.append(el("h3", { textContent: t("bookmarks.dialog_add_headline") }));
 
-  const urlInput = el("input", { type: "url", placeholder: "https://..." });
-  const titleInput = el("input", { type: "text", placeholder: "Titel (optional, sonst URL)" });
-  const noteInput = el("input", { type: "text", placeholder: "Notiz (optional)" });
-  const themenInput = el("input", { type: "text", placeholder: "Themen (Komma-getrennt: ki, recherche, tech)" });
+  const urlInput = el("input", { type: "url", placeholder: t("bookmarks.url_placeholder") });
+  const titleInput = el("input", { type: "text", placeholder: t("bookmarks.title_optional") });
+  const noteInput = el("input", { type: "text", placeholder: t("bookmarks.note_placeholder") });
+  const themenInput = el("input", { type: "text", placeholder: t("bookmarks.topics_add_placeholder") });
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "playlist-picker-actions" });
-  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
-  const ok = el("button", { type: "button", textContent: "Hinzufügen", className: "primary" });
+  const cancel = el("button", { type: "button", textContent: t("common.cancel") });
+  const ok = el("button", { type: "button", textContent: t("bookmarks.add_btn"), className: "primary" });
   actions.append(cancel, ok);
   dialog.append(urlInput, titleInput, noteInput, themenInput, status, actions);
   overlay.append(dialog);
@@ -279,12 +281,12 @@ function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
   cancel.addEventListener("click", () => overlay.remove());
   ok.addEventListener("click", async () => {
     const url = urlInput.value.trim();
-    if (!url) { status.textContent = "URL ist Pflicht"; status.className = "tool-status error"; return; }
+    if (!url) { status.textContent = t("bookmarks.url_required"); status.className = "tool-status error"; return; }
     const themen = themenInput.value
       .split(",")
       .map((t) => t.trim().replace(/^#/, "").toLowerCase())
       .filter((t) => /^[a-z][\w\-/]*$/.test(t));
-    ok.disabled = true; status.textContent = "speichere...";
+    ok.disabled = true; status.textContent = t("common.saving");
     try {
       const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks`, vaultId), {
         method: "POST",
@@ -299,7 +301,7 @@ function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        status.textContent = `Fehler ${r.status}: ${err.detail || ""}`;
+        status.textContent = t("bookmarks.error_delete", { status: r.status, detail: err.detail || "" });
         status.className = "tool-status error";
         ok.disabled = false;
         return;
@@ -307,7 +309,7 @@ function showAddBookmarkDialog(httpBase, vaultId, onAdded) {
       overlay.remove();
       onAdded && onAdded();
     } catch (err) {
-      status.textContent = `Fehler: ${err.message || err}`;
+      status.textContent = t("common.error_msg", { message: err.message || err });
       status.className = "tool-status error";
       ok.disabled = false;
     }

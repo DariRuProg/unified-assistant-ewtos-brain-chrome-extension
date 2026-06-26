@@ -7,6 +7,7 @@ import { checkPendingPlaylistPick } from './renderers/playlists.js';
 import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, navSidebar, toggleFavbarBtn, toolSearch } from './modules/dom-refs.js';
 import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb } from './modules/nav.js';
 import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
+import { initI18n, localizeDom, t } from './i18n/i18n.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -17,6 +18,8 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 (async () => {
+  await initI18n();
+  localizeDom();
   const { theme = "neutral", darkMode = false } =
     await chrome.storage.local.get(["theme", "darkMode"]);
   applyTheme(theme, darkMode);
@@ -223,7 +226,7 @@ document.getElementById("dark-toggle").addEventListener("click", async () => {
 function setStatus(connected, customText) {
   statusDot.classList.toggle("online", connected);
   statusDot.classList.toggle("offline", !connected);
-  statusDot.title = customText ?? (connected ? "verbunden" : "offline");
+  statusDot.title = customText ?? (connected ? t("sidepanel.status_connected") : t("sidepanel.status_offline"));
   const banner = document.getElementById("offline-banner");
   if (banner) banner.classList.toggle("hidden", connected);
 }

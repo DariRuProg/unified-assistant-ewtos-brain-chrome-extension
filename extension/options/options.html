@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>EwtosBrain — Einstellungen</title>
+  <title data-i18n="options.title">EwtosBrain — Settings</title>
   <link rel="stylesheet" href="../themes.css" />
   <style>
     * { box-sizing: border-box; }
@@ -215,7 +215,7 @@
   </style>
 </head>
 <body>
-  <h1>EwtosBrain — Einstellungen</h1>
+  <h1 data-i18n="options.h1">EwtosBrain — Settings</h1>
 
   <h2>Sprache / Language</h2>
   <div class="field">
@@ -229,7 +229,7 @@
     </select>
   </div>
 
-  <h2>Verbindung</h2>
+  <h2 data-i18n="options.section_connection">Connection</h2>
 
   <div class="field">
     <label for="serverUrl">Server WebSocket URL</label>
@@ -237,7 +237,7 @@
     <input id="serverUrl" type="text" placeholder="ws://localhost:9988/ws" />
   </div>
 
-  <h2>Note-Taker</h2>
+  <h2 data-i18n="options.section_notes">Note-Taker</h2>
 
   <div class="field">
     <label for="notesPath">Notizen-Pfad (Scratchpad)</label>
@@ -245,7 +245,7 @@
     <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
   </div>
 
-  <h2>External Services</h2>
+  <h2 data-i18n="options.section_external">External Services</h2>
   <div class="hint" style="margin-bottom: 12px;">
     API-Keys für externe Dienste. Werden serverseitig in <code>server/.env</code> oder <code>settings.json</code> gespeichert (Env hat Vorrang).
   </div>
@@ -296,7 +296,7 @@
     </select>
   </div>
 
-  <h2>Chat — LLM-Provider</h2>
+  <h2 data-i18n="options.section_chat">Chat — LLM Provider</h2>
 
   <div class="field">
     <label for="llmProvider">Provider</label>
@@ -400,7 +400,7 @@
     <input id="elevenlabsVoiceId" type="text" placeholder="21m00Tcm4TlvDq8ikWAM" autocomplete="off" />
   </div>
 
-  <h2>video-brain &amp; Lizenz</h2>
+  <h2 data-i18n="options.section_videobrain">video-brain &amp; License</h2>
   <div class="hint" style="margin-bottom: 12px;">
     Spiegelt fertig analysierte Videos in deine eigene Supabase, damit die video-brain Mobile-App sie lesen kann.
     Jeder Kunde bringt sein eigenes Supabase-Projekt mit — deine Videodaten bleiben bei dir.
@@ -461,7 +461,7 @@
   <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
   <span id="saved" class="saved" hidden></span>
 
-  <h2>Guten-Morgen-Briefing</h2>
+  <h2 data-i18n="options.section_briefing">Good Morning Briefing</h2>
   <div class="hint" style="margin-bottom: 12px;">Konfiguriere welche Inhalte dein tägliches Briefing enthält.</div>
 
   <div id="briefing-profiles-list"></div>
@@ -487,7 +487,7 @@
 
   <button type="button" id="briefing-add-btn" class="secondary" style="margin-top: 12px;">+ Neues Profil</button>
 
-  <h2>Erscheinungsbild</h2>
+  <h2 data-i18n="options.section_appearance">Appearance</h2>
 
   <div class="field">
     <label>Farb-Theme</label>
@@ -540,7 +540,7 @@
     <div class="hint">Größe der Schrift in der Tool-Liste des Sidepanels.</div>
   </div>
 
-  <h2>Explorer</h2>
+  <h2 data-i18n="options.section_explorer">Explorer</h2>
 
   <div class="field">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -558,7 +558,7 @@
     <div class="hint">Blendet Lösch-Buttons im Vault-Explorer ein (Dateien + leere Ordner). Wirkt nur, wenn beim jeweiligen Vault die Berechtigung <code>write_files</code> aktiv ist.</div>
   </div>
 
-  <h2>Verbundene Vaults</h2>
+  <h2 data-i18n="options.section_vaults">Connected Vaults</h2>
   <div class="hint" style="margin-bottom: 12px;">
     Jeder Vault ist ein Ordner mit <code>.md</code>-Dateien (Karpathy-Style). Pro Vault eigener System-Prompt + eigener Chat-Verlauf. Im Side-Panel wechselst du zwischen den Vaults.
   </div>
@@ -567,7 +567,7 @@
 
   <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault hinzufügen</button>
 
-  <h2>Blueprints</h2>
+  <h2 data-i18n="options.section_blueprints">Blueprints</h2>
   <div class="hint" style="margin-bottom: 12px;">
     Vault-Vorlagen. Built-in liefert EwtosBrain mit; importierte Blueprints kommen von dir oder Premium-Quellen.
   </div>
@@ -586,5 +586,10 @@
 
   <script src="../lib/qrcode.min.js"></script>
   <script src="options.js"></script>
+  <script type="module">
+    import { initI18n, localizeDom } from '../i18n/i18n.js';
+    await initI18n();
+    localizeDom();
+  </script>
 </body>
 </html>

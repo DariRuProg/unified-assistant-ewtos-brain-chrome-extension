@@ -4,86 +4,87 @@ import { state } from '../state.js';
 import { content, quickActions, navSidebarMain, viewCrumb } from './dom-refs.js';
 import { openTool } from './tool-runner.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
+import { t } from '../i18n/i18n.js';
 
 export const GROUPS = [
   {
     id: "chat",
-    label: "Chat",
+    label: t("nav.chat"),
     icon: "💬",
-    sub: "Mit Vault oder aktiver Seite reden",
+    sub: t("nav.chat_sub"),
     tools: [
-      { id: "chat", label: "Chat mit Vault", hint: "Fragen an den Vault (Karpathy-Methode)", icon: "📚" },
-      { id: "chat_web", label: "Chat mit Seite", hint: "Mit dem Inhalt des aktiven Tabs chatten", icon: "🌐", openOptions: { startMode: "page" } },
+      { id: "chat", label: t("nav.chat_vault"), hint: t("nav.chat_vault_hint"), icon: "📚" },
+      { id: "chat_web", label: t("nav.chat_page"), hint: t("nav.chat_page_hint"), icon: "🌐", openOptions: { startMode: "page" } },
     ],
   },
   {
     id: "notes",
-    label: "Notizen",
+    label: t("nav.notes"),
     icon: "📝",
-    sub: "Dein App-eigener Schreibtisch",
+    sub: t("nav.notes_sub"),
     tools: [
-      { id: "scratchpad", label: "Note-Taker", hint: "globaler Scratchpad", icon: "📝" },
-      { id: "todos",      label: "Todos",      hint: "klickbare Liste mit Due-Dates", icon: "✅" },
-      { id: "bookmarks",  label: "Bookmarks",  hint: "URL-Inbox aus Browser-Capture", icon: "🔖",
+      { id: "scratchpad", label: t("nav.scratchpad"), hint: t("nav.scratchpad_hint"), icon: "📝" },
+      { id: "todos",      label: t("nav.todos"),      hint: t("nav.todos_hint"), icon: "✅" },
+      { id: "bookmarks",  label: t("nav.bookmarks"),  hint: t("nav.bookmarks_hint"), icon: "🔖",
         actions: [
-          { label: "Neuen Bookmark", icon: "+", action: "add" },
-          { label: "Markierte Tabs erfassen", icon: "⇲", action: "capture_tabs" },
-          { label: "URLs der Tabs kopieren", icon: "⧉", action: "copy_urls" },
+          { label: t("nav.add_bookmark"), icon: "+", action: "add" },
+          { label: t("nav.capture_tabs"), icon: "⇲", action: "capture_tabs" },
+          { label: t("nav.copy_urls"), icon: "⧉", action: "copy_urls" },
         ],
       },
     ],
   },
   {
     id: "vault",
-    label: "Vault",
+    label: t("nav.vault"),
     icon: "📚",
-    sub: "Das Wissens-Dateisystem",
+    sub: t("nav.vault_sub"),
     tools: [
-      { id: "vault_explorer",  label: "Explorer",         hint: "Vault durchblättern, Dateien lesen, mit ihnen chatten", icon: "📚" },
-      { id: "ingest_document", label: "Dokument-Ingest",  hint: "PDF, TXT oder Markdown in raw/ ablegen", icon: "📥" },
-      { id: "vault_health",    label: "Vault-Gesundheit", hint: "Audit: Orphans, Links, Frontmatter, CLAUDE.md", icon: "🩺" },
+      { id: "vault_explorer",  label: t("nav.vault_explorer"),  hint: t("nav.vault_explorer_hint"), icon: "📚" },
+      { id: "ingest_document", label: t("nav.ingest_document"), hint: t("nav.ingest_document_hint"), icon: "📥" },
+      { id: "vault_health",    label: t("nav.vault_health"),    hint: t("nav.vault_health_hint"), icon: "🩺" },
     ],
   },
   {
     id: "video",
-    label: "Video",
+    label: t("nav.video"),
     icon: "🎬",
-    sub: "YouTube & gesammelte Playlists",
+    sub: t("nav.video_sub"),
     tools: [
-      { id: "youtube_transcript", label: "YouTube-Transcript", hint: "Transkript aus aktivem Tab", icon: "🎬" },
-      { id: "playlists",          label: "Playlists",          hint: "Video-Sammlungen (Thema im Frontmatter)", icon: "🎵" },
+      { id: "youtube_transcript", label: t("nav.youtube_transcript"), hint: t("nav.youtube_transcript_hint"), icon: "🎬" },
+      { id: "playlists",          label: t("nav.playlists"),          hint: t("nav.playlists_hint"), icon: "🎵" },
     ],
   },
   {
     id: "web",
-    label: "Web",
+    label: t("nav.web"),
     icon: "🌐",
-    sub: "Tools für die aktuelle Webseite",
+    sub: t("nav.web_sub"),
     tools: [
-      { id: "page_scrape", label: "Page-Scrape", hint: "Aktiver Tab → bereinigtes Markdown", icon: "📄",
+      { id: "page_scrape", label: t("nav.page_scrape"), hint: t("nav.page_scrape_hint"), icon: "📄",
         actions: [
-          { label: "Nur Inhalt scrapen", icon: "▸", action: "scrape_content" },
-          { label: "Komplette Seite scrapen", icon: "▸", action: "scrape_full" },
+          { label: t("nav.scrape_content_only"), icon: "▸", action: "scrape_content" },
+          { label: t("nav.scrape_full_page"), icon: "▸", action: "scrape_full" },
         ],
       },
-      { id: "seo_check",     label: "SEO-Check",     hint: "Title, Meta, Headings, OG-Tags", icon: "🔍" },
-      { id: "url_extractor", label: "URL-Extraktor", hint: "Alle Links der aktuellen Seite", icon: "🔗" },
+      { id: "seo_check",     label: t("nav.seo_check"),     hint: t("nav.seo_check_hint"), icon: "🔍" },
+      { id: "url_extractor", label: t("nav.url_extractor"), hint: t("nav.url_extractor_hint"), icon: "🔗" },
     ],
   },
   {
     id: "bilder",
-    label: "Bilder",
+    label: t("nav.images"),
     icon: "🎨",
-    sub: "Analyse, Generierung, Farben, Screenshots",
+    sub: t("nav.images_sub"),
     tools: [
-      { id: "image_analyse",   label: "Image-Analyse", hint: "Bilder + Alt-Text-Check", icon: "🖼️" },
-      { id: "image_generator", label: "Image-Gen",     hint: "Bild erzeugen + editieren (Gemini Nano)", icon: "🪄" },
-      { id: "color_picker",    label: "Color-Picker",  hint: "CSS-Variablen + Farbpalette", icon: "🎨" },
-      { id: "screenshot", label: "Screenshot", hint: "Sichtbar, Bereich wählen oder Ganze Seite", icon: "📸",
+      { id: "image_analyse",   label: t("nav.image_analyse"),   hint: t("nav.image_analyse_hint"), icon: "🖼️" },
+      { id: "image_generator", label: t("nav.image_gen"),       hint: t("nav.image_gen_hint"), icon: "🪄" },
+      { id: "color_picker",    label: t("nav.color_picker"),    hint: t("nav.color_picker_hint"), icon: "🎨" },
+      { id: "screenshot", label: t("nav.screenshot"), hint: t("nav.screenshot_hint"), icon: "📸",
         actions: [
-          { label: "Sichtbar", icon: "▸", action: "shot_visible" },
-          { label: "Bereich wählen", icon: "▸", action: "shot_area" },
-          { label: "Ganze Seite", icon: "▸", action: "shot_full" },
+          { label: t("nav.shot_visible"), icon: "▸", action: "shot_visible" },
+          { label: t("nav.shot_area"), icon: "▸", action: "shot_area" },
+          { label: t("nav.shot_full"), icon: "▸", action: "shot_full" },
         ],
       },
     ],
@@ -91,8 +92,8 @@ export const GROUPS = [
 ];
 
 export const QUICK_SPECIAL = {
-  _briefing:   { label: "Briefing",    icon: "☀", run: () => showBriefingPanel() },
-  _save_page:  { label: "Ins Vault",   icon: "📥", run: () => showQuickSavePage() },
+  _briefing:   { label: t("nav.briefing"),    icon: "☀", run: () => showBriefingPanel() },
+  _save_page:  { label: t("nav.save_to_vault"), icon: "📥", run: () => showQuickSavePage() },
 };
 
 export const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
@@ -162,8 +163,8 @@ async function saveQuickSlots() {
 function openSlotContextMenu(x, y, idx) {
   document.querySelectorAll(".slot-context-menu").forEach((m) => m.remove());
   const menu = el("div", { className: "slot-context-menu" });
-  const change = el("button", { type: "button", textContent: "Bearbeiten…" });
-  const remove = el("button", { type: "button", textContent: "Entfernen" });
+  const change = el("button", { type: "button", textContent: t("nav.edit_slot") });
+  const remove = el("button", { type: "button", textContent: t("nav.remove_slot") });
   change.addEventListener("click", () => { menu.remove(); openQuickEditor(); });
   remove.addEventListener("click", async () => {
     menu.remove();
@@ -194,7 +195,7 @@ export function openQuickEditor() {
   document.querySelectorAll(".quick-editor").forEach((e) => e.remove());
   const editor = el("div", { className: "quick-editor" });
   const head = el("div", { className: "quick-editor-head" });
-  const title = el("span", { className: "title", textContent: "Favoriten-Buttons bearbeiten" });
+  const title = el("span", { className: "title", textContent: t("nav.favorites_editor_title") });
   const closeBtn = el("button", { type: "button", className: "close", textContent: "✕" });
   closeBtn.addEventListener("click", () => editor.remove());
   head.append(title, closeBtn);
@@ -205,7 +206,7 @@ export function openQuickEditor() {
   function renderSlotsRow() {
     slotsRow.replaceChildren();
     if (state.quickSlots.length === 0) {
-      slotsRow.append(el("span", { className: "qe-empty", textContent: "Noch keine Favoriten — unten ein Tool wählen." }));
+      slotsRow.append(el("span", { className: "qe-empty", textContent: t("nav.favorites_empty") }));
       return;
     }
     state.quickSlots.forEach((slotId, idx) => {
@@ -247,7 +248,7 @@ export function openQuickEditor() {
   renderPicker();
 
   const hint = el("div", { className: "qe-hint",
-    textContent: "Tool anklicken = hinzufügen · Favorit oben anklicken = entfernen",
+    textContent: t("nav.favorites_hint"),
   });
 
   editor.append(head, slotsRow, hint, picker);
@@ -269,7 +270,7 @@ export function updateCrumb() {
 
 export function renderSidebar() {
   navSidebarMain.replaceChildren();
-  const items = [{ id: "all", label: "Alles", icon: "▦" }, ...GROUPS];
+  const items = [{ id: "all", label: t("nav.all"), icon: "▦" }, ...GROUPS];
   for (const it of items) {
     const b = el("button", {
       type: "button",
@@ -343,7 +344,7 @@ export function renderToolList() {
       }
     }
     if (matches.length === 0) {
-      results.append(el("li", { className: "search-empty", textContent: `Keine Treffer für „${state.searchQuery.trim()}"` }));
+      results.append(el("li", { className: "search-empty", textContent: t("nav.no_results", { query: state.searchQuery.trim() }) }));
     } else {
       for (const t of matches) results.append(buildToolRow(t));
     }

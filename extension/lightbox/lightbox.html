@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>EwtosBrain — Bild</title>
+  <title>EwtosBrain — Image</title>
   <link rel="stylesheet" href="lightbox.css" />
 </head>
 <body>
@@ -11,18 +11,23 @@
   </div>
 
   <div id="overlay" class="open">
-    <button id="toggle" title="Prompt ein-/ausblenden" type="button">▾</button>
+    <button id="toggle" title="" data-i18n-title="lightbox.toggle_prompt" type="button">▾</button>
     <div id="overlay-body">
       <div id="meta"></div>
       <div id="prompt"></div>
       <div id="actions">
-        <button id="dl" type="button">⬇ Download</button>
-        <button id="edit" type="button">✎ Im Sidepanel weiterbearbeiten</button>
-        <button id="close" type="button">× Schließen</button>
+        <button id="dl" type="button" data-i18n="lightbox.download">⬇ Download</button>
+        <button id="edit" type="button" data-i18n="lightbox.edit_in_sidepanel">✎ Continue editing in Sidepanel</button>
+        <button id="close" type="button" data-i18n="lightbox.close">× Close</button>
       </div>
     </div>
   </div>
 
   <script src="lightbox.js"></script>
+  <script type="module">
+    import { initI18n, localizeDom } from '../i18n/i18n.js';
+    await initI18n();
+    localizeDom();
+  </script>
 </body>
 </html>

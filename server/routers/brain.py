@@ -11,6 +11,7 @@ from tools import playlists as playlists_tool
 from tools import auto_tagger
 from tools import raw_promoter
 from tools import pdf_ingest as pdf_ingest_tool
+from i18n import t
 import settings
 
 router = APIRouter()
@@ -163,10 +164,10 @@ async def ingest_document_endpoint(
     title: str = Form(""),
 ) -> dict[str, Any]:
     if not settings.vault_permission(vault_id, "write_raw"):
-        raise HTTPException(403, "write_raw-Permission für diesen Vault nicht aktiviert.")
+        raise HTTPException(403, t("err.raw_ingest_denied"))
     allowed = ("application/pdf", "text/plain", "text/markdown")
     if file.content_type and not any(file.content_type.startswith(m) for m in allowed):
-        raise HTTPException(400, f"Nicht unterstützter Dateityp: {file.content_type}")
+        raise HTTPException(400, t("err.filetype_unsupported", mime=file.content_type))
     data = await file.read()
     try:
         info = pdf_ingest_tool.extract_info(data, file.filename or "")
@@ -176,7 +177,7 @@ async def ingest_document_endpoint(
         raise HTTPException(422, str(e))
     content = info["text"]
     if not content.strip():
-        raise HTTPException(422, "Kein Text extrahierbar.")
+        raise HTTPException(422, t("err.no_text_extractable"))
     doc_title = title.strip() or info.get("title") or (file.filename or "Dokument").rsplit(".", 1)[0]
     desc_parts = [f"Importiert aus {file.filename}"]
     if info.get("author"):

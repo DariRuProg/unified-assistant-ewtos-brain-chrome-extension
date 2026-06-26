@@ -11,6 +11,7 @@ from tools import tts_elevenlabs as tts_tool
 from tools import wiki_reader
 from tools import blueprint as blueprint_tool
 from tools import vault_audit as vault_audit_tool
+from i18n import t
 import settings
 
 
@@ -23,7 +24,7 @@ def vault_file_read(vault_id: str, rel_path: str) -> dict[str, Any]:
     rel_path ist relativ zum Vault-Root."""
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         content = wiki_reader.read_file(v["path"], rel_path)
         return {"vault_id": vault_id, "rel_path": rel_path, "content": content}
@@ -39,7 +40,7 @@ def vault_asset_serve(vault_id: str, rel_path: str) -> Response:
     Inline-Rendern lokaler Bilder im Explorer. Pfad-Traversal-geschuetzt."""
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         data, mime = wiki_reader.read_asset(v["path"], rel_path)
         return Response(content=data, media_type=mime,
@@ -60,7 +61,7 @@ def tts_synthesize(req: TtsRequest) -> Response:
     """Wandelt Text per ElevenLabs (BYOK) in Sprache. Liefert MP3. 403 ohne Key."""
     text = (req.text or "").strip()
     if not text:
-        raise HTTPException(400, "text fehlt")
+        raise HTTPException(400, t("err.tts_text_missing"))
     try:
         audio = tts_tool.synth(text, req.voice_id)
     except PermissionError as e:
@@ -77,7 +78,7 @@ def vault_list_folder(vault_id: str, rel_path: str = "", show_hidden: bool = Fal
     show_hidden=true zeigt versteckte/ignorierte Eintraege (.obsidian, .claude, Dotfiles)."""
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         listing = wiki_reader.list_folder(v["path"], rel_path, show_hidden=show_hidden)
         return {"vault_id": vault_id, **listing, "show_hidden": show_hidden}
@@ -137,9 +138,9 @@ def vault_audit_repair(vault_id: str, req: VaultRepairRequest) -> dict[str, Any]
 def vault_search(vault_id: str, q: str, max_results: int = 30) -> dict[str, Any]:
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     if not q or not q.strip():
-        raise HTTPException(400, "Suchbegriff darf nicht leer sein")
+        raise HTTPException(400, t("err.search_query_empty"))
     results = wiki_reader.search_files(v["path"], q.strip(), max_results)
     return {"vault_id": vault_id, "q": q, "results": results}
 
@@ -147,10 +148,10 @@ def vault_search(vault_id: str, q: str, max_results: int = 30) -> dict[str, Any]
 @router.put("/tools/vault_file/{vault_id}")
 def vault_file_write(vault_id: str, rel_path: str, body: VaultWriteRequest) -> dict[str, Any]:
     if not settings.vault_permission(vault_id, "write_files"):
-        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+        raise HTTPException(403, t("err.files_write_denied"))
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         wiki_reader.write_file(v["path"], rel_path, body.content)
         return {"ok": True}
@@ -163,10 +164,10 @@ def vault_file_write(vault_id: str, rel_path: str, body: VaultWriteRequest) -> d
 @router.post("/tools/vault_file_new/{vault_id}")
 def vault_file_create(vault_id: str, rel_path: str, body: VaultWriteRequest) -> dict[str, Any]:
     if not settings.vault_permission(vault_id, "write_files"):
-        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+        raise HTTPException(403, t("err.files_write_denied"))
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         wiki_reader.create_file(v["path"], rel_path, body.content)
         return {"ok": True}
@@ -180,10 +181,10 @@ def vault_file_create(vault_id: str, rel_path: str, body: VaultWriteRequest) -> 
 def vault_file_delete(vault_id: str, rel_path: str) -> dict[str, Any]:
     """Loescht eine Datei oder einen leeren Ordner. Erfordert write_files-Permission."""
     if not settings.vault_permission(vault_id, "write_files"):
-        raise HTTPException(403, "write_files-Permission nicht aktiviert. Einstellungen → Vault bearbeiten.")
+        raise HTTPException(403, t("err.files_write_denied"))
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, f"Vault {vault_id} nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         kind = wiki_reader.delete_path(v["path"], rel_path)
         return {"ok": True, "deleted": rel_path, "kind": kind}

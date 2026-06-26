@@ -3,6 +3,7 @@ import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
 import { renderMarkdown } from '../markdown.js';
+import { t } from '../../i18n/i18n.js';
 
 const TODO_LINE_RE = /^(\s*)- \[( |x|X)\] (.*)$/;
 const DUE_RE = /@(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/;
@@ -11,22 +12,22 @@ export async function renderNotesFile(kind, opts) {
   state.panelTitle.textContent = opts.title;
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
-  const meta = el("div", { className: "tool-status", textContent: "lade..." });
+  const meta = el("div", { className: "tool-status", textContent: t("common.loading") });
   const textarea = el("textarea", { placeholder: opts.placeholder });
   textarea.classList.add("scratchpad");
   const rendered = el("div", { className: "notes-rendered hidden" });
   const status = el("div", { className: "tool-status" });
 
-  const viewToggle = el("button", { type: "button", textContent: "Vorschau" });
+  const viewToggle = el("button", { type: "button", textContent: t("notes.preview") });
   viewToggle.classList.add("secondary");
-  const exportBtn = el("button", { textContent: "Speichern unter..." });
+  const exportBtn = el("button", { textContent: t("notes.save_as") });
   const fallbackRow = el("div", { className: "export-row hidden" });
   const fallbackInput = el("input", {
     type: "text",
-    placeholder: "absoluter Pfad, z.B. E:\\...\\datei.md",
+    placeholder: t("notes.path_placeholder"),
   });
-  const fallbackSave = el("button", { textContent: "Speichern" });
-  const fallbackCancel = el("button", { textContent: "Abbrechen" });
+  const fallbackSave = el("button", { textContent: t("notes.save") });
+  const fallbackCancel = el("button", { textContent: t("notes.cancel") });
   fallbackCancel.classList.add("secondary");
   const fallbackBtns = el("div");
   fallbackBtns.append(fallbackSave, fallbackCancel);
@@ -35,25 +36,25 @@ export async function renderNotesFile(kind, opts) {
   // Promote-to-raw ("Ins Brain") — nur für Scratchpad
   let promoteSection = null;
   if (kind === "scratchpad") {
-    const promoteBtn = el("button", { textContent: "Ins Brain", className: "secondary" });
+    const promoteBtn = el("button", { textContent: t("notes.promote"), className: "secondary" });
     promoteBtn.style.marginTop = "6px";
 
     const promoteForm = el("div");
     promoteForm.style.cssText = "display:none;margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle);";
 
-    const promoteTitle = el("input", { type: "text", placeholder: "Titel (Pflichtfeld)" });
+    const promoteTitle = el("input", { type: "text", placeholder: t("notes.promote_title_placeholder") });
     const promoteSub = el("select");
     ["eigene-notizen", "artikel", "chat-archive"].forEach(s => promoteSub.append(new Option(s, s)));
-    const promoteDesc = el("textarea", { placeholder: "Beschreibung (optional)" });
+    const promoteDesc = el("textarea", { placeholder: t("notes.promote_desc_placeholder") });
     promoteDesc.style.cssText = "min-height:52px;resize:vertical;margin-top:6px;font-size:12px;";
     const promoteHint = el("div", { className: "tool-status" });
-    const promoteSubBtn = el("button", { textContent: "Promote" });
-    const promoteCancelBtn = el("button", { textContent: "Abbrechen", className: "secondary" });
+    const promoteSubBtn = el("button", { textContent: t("notes.promote_btn") });
+    const promoteCancelBtn = el("button", { textContent: t("notes.cancel"), className: "secondary" });
     promoteCancelBtn.style.marginLeft = "6px";
 
-    const promoteSubLabel = el("label", { textContent: "Ziel-Ordner:" });
+    const promoteSubLabel = el("label", { textContent: t("notes.promote_folder_label") });
     promoteSubLabel.style.cssText = "margin-top:6px;display:block;";
-    const promoteInfoHint = el("div", { className: "tool-status", textContent: "Sucht Datumsblock oder Textmatch im Scratchpad" });
+    const promoteInfoHint = el("div", { className: "tool-status", textContent: t("notes.promote_hint") });
     promoteInfoHint.style.fontSize = "11px";
     const promoteActRow = el("div");
     promoteActRow.style.marginTop = "8px";
@@ -77,14 +78,14 @@ export async function renderNotesFile(kind, opts) {
     });
     promoteSubBtn.addEventListener("click", async () => {
       const title = promoteTitle.value.trim();
-      if (!title) { promoteHint.textContent = "Titel erforderlich"; promoteHint.className = "tool-status error"; return; }
+      if (!title) { promoteHint.textContent = t("notes.title_required"); promoteHint.className = "tool-status error"; return; }
       promoteSubBtn.disabled = true;
-      promoteHint.textContent = "promoting...";
+      promoteHint.textContent = t("notes.promoting");
       promoteHint.className = "tool-status";
       try {
         const httpBase2 = await getHttpBase();
         const vaultId = await getActiveVaultId(httpBase2);
-        if (!vaultId) throw new Error("Kein Vault konfiguriert");
+        if (!vaultId) throw new Error(t("notes.no_vault"));
         const res = await fetch(`${httpBase2}/tools/promote`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -126,9 +127,9 @@ export async function renderNotesFile(kind, opts) {
   const vaultId = await getActiveVaultId(httpBase);
   const vault = await getActiveVault(httpBase);
   if (vault) {
-    vaultHint.textContent = `Notes-Inbox: ${vault.name}`;
+    vaultHint.textContent = t("notes.vault_hint", { name: vault.name });
   } else {
-    vaultHint.textContent = "Kein Vault aktiv — Notes laufen global";
+    vaultHint.textContent = t("notes.no_vault_active");
   }
   let saveTimer = null;
   let lastSaved = "";
@@ -144,18 +145,18 @@ export async function renderNotesFile(kind, opts) {
       refreshRendered();
       textarea.classList.add("hidden");
       rendered.classList.remove("hidden");
-      viewToggle.textContent = "Quellcode";
+      viewToggle.textContent = t("notes.source");
       viewMode = "rendered";
     } else {
       rendered.classList.add("hidden");
       textarea.classList.remove("hidden");
-      viewToggle.textContent = "Vorschau";
+      viewToggle.textContent = t("notes.preview");
       viewMode = "edit";
     }
   });
 
   function setMeta() {
-    meta.textContent = started ? `aktiv seit ${started}` : "";
+    meta.textContent = started ? t("notes.active_since", { started }) : "";
   }
 
   function setStatus(text, level = "") {
@@ -177,7 +178,7 @@ export async function renderNotesFile(kind, opts) {
   async function save() {
     const content = textarea.value;
     if (content === lastSaved) return;
-    setStatus("speichere...");
+    setStatus(t("common.saving"));
     try {
       const res = await fetch(withVaultId(`${httpBase}/tools/notes/${kind}`, vaultId), {
         method: "POST",
@@ -190,9 +191,9 @@ export async function renderNotesFile(kind, opts) {
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       lastSaved = content;
       if (data?.started && !started) { started = data.started; setMeta(); }
-      setStatus("gespeichert", "success");
+      setStatus(t("common.saved"), "success");
     } catch (err) {
-      setStatus("Fehler: " + (err.message || err), "error");
+      setStatus(t("common.error_msg", { message: err.message || err }), "error");
     }
   }
 
@@ -225,7 +226,7 @@ export async function renderNotesFile(kind, opts) {
 
   textarea.addEventListener("input", () => {
     clearTimeout(saveTimer);
-    setStatus("ungespeichert...");
+    setStatus(t("notes.unsaved"));
     saveTimer = setTimeout(save, 1200);
   });
 
@@ -244,10 +245,10 @@ export async function renderNotesFile(kind, opts) {
     }
     try {
       const name = await exportViaPicker();
-      setStatus("exportiert: " + name, "success");
+      setStatus(t("notes.exported", { name }), "success");
     } catch (err) {
-      if (err?.name === "AbortError") { setStatus("Export abgebrochen"); return; }
-      setStatus("Export-Fehler: " + (err.message || err), "error");
+      if (err?.name === "AbortError") { setStatus(t("notes.export_cancelled")); return; }
+      setStatus(t("notes.export_error", { error: err.message || err }), "error");
     }
   });
 
@@ -258,15 +259,15 @@ export async function renderNotesFile(kind, opts) {
 
   fallbackSave.addEventListener("click", async () => {
     const target = fallbackInput.value.trim();
-    if (!target) { setStatus("Pfad fehlt", "error"); return; }
+    if (!target) { setStatus(t("notes.path_missing"), "error"); return; }
     fallbackSave.disabled = true;
     try {
       const name = await exportViaServer(target);
-      setStatus("exportiert: " + name, "success");
+      setStatus(t("notes.exported", { name }), "success");
       fallbackRow.classList.add("hidden");
       fallbackInput.value = "";
     } catch (err) {
-      setStatus("Export-Fehler: " + (err.message || err), "error");
+      setStatus(t("notes.export_error", { error: err.message || err }), "error");
     } finally {
       fallbackSave.disabled = false;
     }
@@ -282,9 +283,9 @@ export async function renderNotesFile(kind, opts) {
     textarea.value = data.content || "";
     lastSaved = textarea.value;
     setMeta();
-    setStatus(textarea.value ? "geladen" : "leer — los geht's", "");
+    setStatus(textarea.value ? t("notes.loading") : t("notes.empty_start"), "");
   } catch (err) {
-    setStatus("Laden fehlgeschlagen: " + (err.message || err), "error");
+    setStatus(t("chat.load_failed", { error: err.message || err }), "error");
   }
 }
 
@@ -322,19 +323,19 @@ function formatDue(due) {
   const min = Math.round(Math.abs(diffMs) / 60000);
   const h = Math.round(Math.abs(diffMs) / 3600000);
   const d = Math.round(Math.abs(diffMs) / 86400000);
-  const t = due.time ? ` ${due.time}` : "";
+  const timeSuffix = due.time ? ` ${due.time}` : "";
 
   if (diffMs < 0) {
-    if (min < 60) return `überfällig ${min}min`;
-    if (h < 24) return `überfällig ${h}h`;
-    return `überfällig ${d}d`;
+    if (min < 60) return t("notes.overdue", { n: min, unit: "min" });
+    if (h < 24) return t("notes.overdue", { n: h, unit: "h" });
+    return t("notes.overdue", { n: d, unit: "d" });
   }
-  if (min < 60) return `in ${min}min`;
-  if (h < 24) return due.time ? `heute ${due.time}` : "heute";
-  if (d === 1) return due.time ? `morgen ${due.time}` : "morgen";
-  if (d < 7) return `in ${d}d${t}`;
+  if (min < 60) return t("notes.in_time", { n: min, unit: "min" });
+  if (h < 24) return due.time ? t("notes.today_time", { time: due.time }) : t("notes.today");
+  if (d === 1) return due.time ? t("notes.tomorrow_time", { time: due.time }) : t("notes.tomorrow");
+  if (d < 7) return t("notes.in_days", { d, time: timeSuffix });
   const dd = new Date(due.date);
-  return dd.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + t;
+  return dd.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" }) + timeSuffix;
 }
 
 function dueLevel(due) {
@@ -367,14 +368,14 @@ export async function renderTodos() {
   state.panelTitle.textContent = "Todos";
 
   const vaultHint = el("div", { className: "notes-vault-hint" });
-  const meta = el("div", { className: "tool-status", textContent: "lade..." });
+  const meta = el("div", { className: "tool-status", textContent: t("common.loading") });
   const list = el("div", { className: "todo-list" });
 
   const addForm = el("form", { className: "todo-add" });
   const addInput = el("input", {
     type: "text",
-    placeholder: "neues Todo... optional @2026-05-04 14:00",
-    title: "Format für Termin: @YYYY-MM-DD oder @YYYY-MM-DD HH:MM",
+    placeholder: t("notes.todos_placeholder"),
+    title: t("notes.todos_placeholder_title"),
   });
   const addBtn = el("button", { type: "submit", textContent: "+" });
   addForm.append(addInput, addBtn);
@@ -385,15 +386,15 @@ export async function renderTodos() {
   const status = el("div", { className: "tool-status" });
 
   const toolbar = el("div", { className: "todo-toolbar" });
-  const sourceToggle = el("button", { type: "button", textContent: "Quellcode" });
+  const sourceToggle = el("button", { type: "button", textContent: t("notes.source") });
   sourceToggle.classList.add("secondary");
-  const exportBtn = el("button", { type: "button", textContent: "Speichern unter..." });
+  const exportBtn = el("button", { type: "button", textContent: t("notes.save_as") });
   toolbar.append(sourceToggle, exportBtn);
 
   const fallbackRow = el("div", { className: "export-row hidden" });
-  const fallbackInput = el("input", { type: "text", placeholder: "absoluter Pfad, z.B. E:\\...\\datei.md" });
-  const fallbackSave = el("button", { type: "button", textContent: "Speichern" });
-  const fallbackCancel = el("button", { type: "button", textContent: "Abbrechen" });
+  const fallbackInput = el("input", { type: "text", placeholder: t("notes.path_placeholder") });
+  const fallbackSave = el("button", { type: "button", textContent: t("notes.save") });
+  const fallbackCancel = el("button", { type: "button", textContent: t("notes.cancel") });
   fallbackCancel.classList.add("secondary");
   const fallbackBtns = el("div");
   fallbackBtns.append(fallbackSave, fallbackCancel);
@@ -404,14 +405,14 @@ export async function renderTodos() {
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
   const vault = await getActiveVault(httpBase);
-  vaultHint.textContent = vault ? `Notes-Inbox: ${vault.name}` : "Kein Vault aktiv — Notes laufen global";
+  vaultHint.textContent = vault ? t("notes.vault_hint", { name: vault.name }) : t("notes.no_vault_active");
   let content = "";
   let saveTimer = null;
   let started = null;
   let sourceMode = false;
 
   function setMeta() {
-    meta.textContent = started ? `aktiv seit ${started}` : "";
+    meta.textContent = started ? t("notes.active_since", { started }) : "";
   }
 
   function setStatus(text, level = "") {
@@ -423,7 +424,7 @@ export async function renderTodos() {
     list.replaceChildren();
     const items = parseTodoLines(content).filter((x) => x.isTodo);
     if (!items.length) {
-      list.append(el("div", { className: "todo-empty", textContent: "Noch keine Todos. Mit '+ Todo' oben hinzufügen oder im Chat 'Erinnere mich an …' sagen." }));
+      list.append(el("div", { className: "todo-empty", textContent: t("notes.todos_empty") }));
       return;
     }
     for (const item of items) {
@@ -445,7 +446,7 @@ export async function renderTodos() {
           title: item.due.date + (item.due.time ? " " + item.due.time : ""),
         });
       }
-      const del = el("button", { type: "button", className: "todo-del", textContent: "×", title: "Löschen" });
+      const del = el("button", { type: "button", className: "todo-del", textContent: t("notes.delete_todo"), title: t("notes.delete_todo_title") });
       del.addEventListener("click", () => {
         content = deleteLine(content, item.i);
         scheduleSave();
@@ -460,13 +461,13 @@ export async function renderTodos() {
 
   function scheduleSave(delay = 500) {
     clearTimeout(saveTimer);
-    setStatus("ungespeichert...");
+    setStatus(t("notes.unsaved"));
     saveTimer = setTimeout(save, delay);
   }
 
   async function save() {
     if (sourceMode) content = sourceArea.value;
-    setStatus("speichere...");
+    setStatus(t("common.saving"));
     try {
       const res = await fetch(withVaultId(`${httpBase}/tools/notes/todos`, vaultId), {
         method: "POST",
@@ -478,9 +479,9 @@ export async function renderTodos() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       if (data?.started && !started) { started = data.started; setMeta(); }
-      setStatus("gespeichert", "success");
+      setStatus(t("common.saved"), "success");
     } catch (err) {
-      setStatus("Fehler: " + (err.message || err), "error");
+      setStatus(t("common.error_msg", { message: err.message || err }), "error");
     }
   }
 
@@ -502,7 +503,7 @@ export async function renderTodos() {
       sourceArea.classList.add("hidden");
       list.classList.remove("hidden");
       addForm.classList.remove("hidden");
-      sourceToggle.textContent = "Quellcode";
+      sourceToggle.textContent = t("notes.source");
       render();
       scheduleSave(0);
     } else {
@@ -511,7 +512,7 @@ export async function renderTodos() {
       sourceArea.classList.remove("hidden");
       list.classList.add("hidden");
       addForm.classList.add("hidden");
-      sourceToggle.textContent = "Liste";
+      sourceToggle.textContent = t("common.list");
     }
   });
 
@@ -544,10 +545,10 @@ export async function renderTodos() {
       const writable = await handle.createWritable();
       await writable.write(buildExportBody(handle.name));
       await writable.close();
-      setStatus("exportiert: " + handle.name, "success");
+      setStatus(t("notes.exported", { name: handle.name }), "success");
     } catch (err) {
-      if (err?.name === "AbortError") { setStatus("Export abgebrochen"); return; }
-      setStatus("Export-Fehler: " + (err.message || err), "error");
+      if (err?.name === "AbortError") { setStatus(t("notes.export_cancelled")); return; }
+      setStatus(t("notes.export_error", { error: err.message || err }), "error");
     }
   });
 
@@ -558,7 +559,7 @@ export async function renderTodos() {
 
   fallbackSave.addEventListener("click", async () => {
     const target = fallbackInput.value.trim();
-    if (!target) { setStatus("Pfad fehlt", "error"); return; }
+    if (!target) { setStatus(t("notes.path_missing"), "error"); return; }
     fallbackSave.disabled = true;
     try {
       const res = await fetch(withVaultId(`${httpBase}/tools/notes/todos/export`, vaultId), {
@@ -570,11 +571,12 @@ export async function renderTodos() {
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-      setStatus("exportiert: " + (data.path?.split(/[\\/]/).pop() || target), "success");
+      const name = data.path?.split(/[\\/]/).pop() || target;
+      setStatus(t("notes.exported", { name }), "success");
       fallbackRow.classList.add("hidden");
       fallbackInput.value = "";
     } catch (err) {
-      setStatus("Export-Fehler: " + (err.message || err), "error");
+      setStatus(t("notes.export_error", { error: err.message || err }), "error");
     } finally {
       fallbackSave.disabled = false;
     }
@@ -590,8 +592,8 @@ export async function renderTodos() {
     content = data.content || "";
     setMeta();
     render();
-    setStatus(content ? "geladen" : "leer — leg los", "");
+    setStatus(content ? t("notes.loading") : t("notes.empty_fresh"), "");
   } catch (err) {
-    setStatus("Laden fehlgeschlagen: " + (err.message || err), "error");
+    setStatus(t("chat.load_failed", { error: err.message || err }), "error");
   }
 }

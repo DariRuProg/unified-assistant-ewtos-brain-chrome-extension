@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>EwtosBrain</title>
@@ -8,13 +8,13 @@
 </head>
 <body>
   <header>
-    <input id="tool-search" class="tool-search" type="search" placeholder="Tools suchen…" autocomplete="off" aria-label="Tools suchen" />
+    <input id="tool-search" class="tool-search" type="search" placeholder="" autocomplete="off" aria-label="" data-i18n-placeholder="sidepanel.search_placeholder" data-i18n-aria-label="sidepanel.search_aria" />
     <div class="header-right">
       <div class="status">
-        <span id="status-dot" class="dot offline" title="verbinde..."></span>
+        <span id="status-dot" class="dot offline" title="" data-i18n-title="sidepanel.status_connecting"></span>
       </div>
-      <button id="dark-toggle" class="dark-toggle" type="button" title="Dark/Light Mode">&#9728;</button>
-      <button id="burger-btn" class="burger" type="button" title="Navigation" aria-haspopup="true" aria-expanded="false" aria-controls="nav-sidebar">&#9776;</button>
+      <button id="dark-toggle" class="dark-toggle" type="button" title="" data-i18n-title="sidepanel.dark_light">&#9728;</button>
+      <button id="burger-btn" class="burger" type="button" title="" data-i18n-title="sidepanel.nav_toggle" aria-haspopup="true" aria-expanded="false" aria-controls="nav-sidebar">&#9776;</button>
     </div>
   </header>
 
@@ -23,11 +23,8 @@
       <div id="quick-actions" class="quick-actions hidden"></div>
 
       <div id="offline-banner" class="offline-banner hidden">
-        <span id="offline-banner-text">
-          <strong>Server nicht erreichbar.</strong>
-          Starte die EwtosBrain-Server-App (Tray-Icon) — im Dev per <code>start-server.bat</code>.
-        </span>
-        <button id="retry-connect" type="button">Erneut verbinden</button>
+        <span id="offline-banner-text" data-i18n-html="sidepanel.offline_body"></span>
+        <button id="retry-connect" type="button" data-i18n="sidepanel.retry_connect"></button>
       </div>
 
       <main id="content"></main>
@@ -36,11 +33,11 @@
     <aside id="nav-sidebar" class="nav-sidebar" aria-hidden="true">
       <div id="nav-sidebar-main"></div>
       <div class="nav-sidebar-foot">
-        <button id="toggle-favbar" class="nav-item" type="button" title="Schnell-Buttons ein/aus">&#11088;</button>
-        <button id="edit-quick-slots" class="nav-item" type="button" title="Schnell-Buttons anpassen">&#9998;</button>
+        <button id="toggle-favbar" class="nav-item" type="button" title="" data-i18n-title="sidepanel.favbar_toggle">&#11088;</button>
+        <button id="edit-quick-slots" class="nav-item" type="button" title="" data-i18n-title="sidepanel.favbar_edit">&#9998;</button>
         <div class="nav-divider"></div>
-        <button id="open-options" class="nav-item" type="button" title="Einstellungen">&#9881;</button>
-        <button id="reconnect" class="nav-item" type="button" title="Neu verbinden">&#8635;</button>
+        <button id="open-options" class="nav-item" type="button" title="" data-i18n-title="sidepanel.open_settings">&#9881;</button>
+        <button id="reconnect" class="nav-item" type="button" title="" data-i18n-title="sidepanel.reconnect">&#8635;</button>
       </div>
     </aside>
   </div>

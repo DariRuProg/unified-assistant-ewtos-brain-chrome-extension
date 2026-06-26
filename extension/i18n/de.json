@@ -29,6 +29,8 @@
   "sidepanel.search_placeholder": "Tools suchen…",
   "sidepanel.search_aria": "Tools suchen",
   "sidepanel.status_connecting": "verbinde...",
+  "sidepanel.status_connected": "verbunden",
+  "sidepanel.status_offline": "offline",
   "sidepanel.dark_light": "Dark/Light Mode",
   "sidepanel.nav_toggle": "Navigation",
   "sidepanel.favbar_toggle": "Schnell-Buttons ein/aus",
@@ -166,6 +168,13 @@
   "chat.open_settings": "Einstellungen öffnen",
   "chat.scrape_starting": "lese Seite...",
   "chat.lade": "lade...",
+  "chat.no_page_content": "Kein Seiteninhalt",
+  "chat.open_in_explorer": "Im Vault-Explorer öffnen",
+  "chat.page_scraping": "🌐 Seite wird gelesen...",
+  "chat.page_load_failed_banner": "🌐 Seite (konnte nicht gelesen werden)",
+  "chat.empty_page": "Stell deine Frage zu dieser Seite.",
+  "chat.tts_error": "Vorlesen fehlgeschlagen: {error}",
+  "chat.meta_info": "📚 Vault: {name} · Modell: {model} · max {turns} Paare · {source}",
 
   "notes.preview": "Vorschau",
   "notes.source": "Quellcode",
@@ -602,5 +611,10 @@
   "wizard.step6_addvault_back": "Zurück zu Einstellungen",
   "wizard.btn_back": "Zurück",
   "wizard.btn_skip": "Überspringen",
-  "wizard.btn_next": "Los geht's"
+  "wizard.btn_next": "Los geht's",
+
+  "lightbox.toggle_prompt": "Prompt ein-/ausblenden",
+  "lightbox.download": "⬇ Download",
+  "lightbox.edit_in_sidepanel": "✎ Im Sidepanel weiterbearbeiten",
+  "lightbox.close": "× Schließen"
 }

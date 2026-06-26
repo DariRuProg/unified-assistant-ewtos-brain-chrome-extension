@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from tools import wiki_reader
 from tools import blueprint as blueprint_tool
 import chat
+from i18n import t
 import settings
 
 log = logging.getLogger("ewtosbrain")
@@ -56,9 +57,9 @@ def vaults_list() -> dict[str, Any]:
 @router.post("/vaults")
 def vaults_create(req: VaultCreate) -> dict[str, Any]:
     if not req.name.strip():
-        raise HTTPException(400, "Name darf nicht leer sein")
+        raise HTTPException(400, t("err.vault_name_empty"))
     if not req.path.strip():
-        raise HTTPException(400, "Pfad darf nicht leer sein")
+        raise HTTPException(400, t("err.vault_path_empty"))
     return settings.add_vault(
         req.name, req.path, req.system_prompt or "",
         use_local_notes=req.use_local_notes,
@@ -72,7 +73,7 @@ def vaults_preview_claude_md(req: GeneratePromptRequest) -> dict[str, Any]:
     canned generator instruction so the user can copy & use externally."""
     content = chat.preview_claude_md(req.path)
     if not content:
-        raise HTTPException(404, "Keine CLAUDE.md im Pfad oder dessen Parent gefunden")
+        raise HTTPException(404, t("err.vault_no_claude_md"))
     return {
         "claude_md": content,
         "generator_instruction": chat.generator_instruction(content),
@@ -97,7 +98,7 @@ def vaults_generate_prompt(req: GeneratePromptRequest) -> dict[str, Any]:
 def vaults_raw_folders(vault_id: str) -> dict[str, Any]:
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     raw_root = Path(v["path"]) / "raw"
     folders: list[str] = []
     if raw_root.is_dir():
@@ -114,7 +115,7 @@ def vaults_raw_folders(vault_id: str) -> dict[str, Any]:
 def vaults_get(vault_id: str) -> dict[str, Any]:
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     return _enrich_vault(v)
 
 
@@ -122,14 +123,14 @@ def vaults_get(vault_id: str) -> dict[str, Any]:
 def vaults_update(vault_id: str, req: VaultUpdate) -> dict[str, Any]:
     updated = settings.update_vault(vault_id, **req.model_dump(exclude_none=True))
     if not updated:
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     return updated
 
 
 @router.delete("/vaults/{vault_id}")
 def vaults_delete(vault_id: str) -> dict[str, Any]:
     if not settings.remove_vault(vault_id):
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     chat_file = chat.CHAT_DIR / f"chat-{vault_id}.json"
     if chat_file.exists():
         chat_file.unlink()
@@ -154,7 +155,7 @@ def vaults_scaffold(vault_id: str) -> dict[str, Any]:
     """
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         bp = blueprint_tool.load_builtin(blueprint_tool.DEFAULT_BLUEPRINT_ID)
         result = blueprint_tool.commit(vault_id, bp)
@@ -175,7 +176,7 @@ def vaults_apply_blueprint(vault_id: str, req: ApplyBlueprintRequest) -> dict[st
     skip_if_exists schuetzt vorhandene Dateien; Indexe/MOCs werden mitgepflegt."""
     v = settings.get_vault(vault_id)
     if not v:
-        raise HTTPException(404, "Vault nicht gefunden")
+        raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     try:
         bp = blueprint_tool.load_builtin(req.blueprint_id)
         result = blueprint_tool.commit(vault_id, bp)

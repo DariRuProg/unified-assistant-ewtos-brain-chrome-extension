@@ -10,6 +10,7 @@ import re
 from datetime import date
 from urllib.parse import urlparse
 
+from i18n import t
 from tools import notes_file
 
 
@@ -113,9 +114,9 @@ def add_bookmark(
 ) -> dict:
     url = (url or "").strip()
     if not url:
-        raise ValueError("URL darf nicht leer sein")
+        raise ValueError(t("err.bookmark_url_empty"))
     if not (url.startswith("http://") or url.startswith("https://")):
-        raise ValueError(f"URL muss mit http:// oder https:// beginnen, nicht: {url[:40]}")
+        raise ValueError(t("err.bookmark_url_invalid", url=url[:40]))
     title = (title or url).strip()
     today = date.today().isoformat()
     # Auto-Tagging: wenn keine Themen explizit gesetzt, aus Domain ableiten
@@ -150,7 +151,7 @@ def update_bookmark(
     """
     needle = (match or "").strip().lower()
     if not needle:
-        raise ValueError("match darf nicht leer sein")
+        raise ValueError(t("err.bookmark_match_empty"))
     date_filter = (date or "").strip() or None
     data = notes_file.load("bookmarks", vault_id)
     lines = data["content"].splitlines()
@@ -159,20 +160,20 @@ def update_bookmark(
         m = BOOKMARK_RE.match(line)
         if not m:
             continue
-        d, t, u, _, _, _ = m.groups()
-        if needle not in t.lower() and needle not in u.lower():
+        d, title_m, u, _, _, _ = m.groups()
+        if needle not in title_m.lower() and needle not in u.lower():
             continue
         if date_filter and d != date_filter:
             continue
         matches.append(idx)
     if not matches:
-        raise ValueError(f"Kein Bookmark gefunden, das '{match}' enthält")
+        raise ValueError(t("err.bookmark_not_found"))
     if len(matches) > 1 and not date_filter:
-        raise ValueError(f"Mehrere Bookmarks matchen '{match}' — bitte präziser oder mit date filtern.")
+        raise ValueError(t("err.bookmark_ambiguous", match=match, preview=""))
     idx = matches[0]
     m = BOOKMARK_RE.match(lines[idx])
-    d, t, u, n, src, tags_block = m.groups()
-    new_title = title.strip() if title is not None else t.strip()
+    d, orig_title, u, n, src, tags_block = m.groups()
+    new_title = title.strip() if title is not None else orig_title.strip()
     new_note = note.strip() if note is not None else (n.strip() if n else None)
     new_themen = themen if themen is not None else _parse_themen(tags_block)
     new_source = src.strip() if src else "manual"
@@ -202,7 +203,7 @@ def delete_bookmark(match: str, date: str | None = None, vault_id: str | None = 
     """
     needle = (match or "").strip().lower()
     if not needle:
-        raise ValueError("match darf nicht leer sein")
+        raise ValueError(t("err.bookmark_match_empty"))
     date_filter = (date or "").strip() or None
     data = notes_file.load("bookmarks", vault_id)
     lines = data["content"].splitlines()
@@ -218,10 +219,10 @@ def delete_bookmark(match: str, date: str | None = None, vault_id: str | None = 
             continue
         matches.append((idx, line, title.strip()))
     if not matches:
-        raise ValueError(f"Kein Bookmark gefunden, das '{match}' enthält")
+        raise ValueError(t("err.bookmark_not_found"))
     if len(matches) > 1 and not date_filter:
-        preview = "; ".join(t for _, _, t in matches[:5])
-        raise ValueError(f"Mehrere Bookmarks matchen '{match}': {preview} — bitte präziser.")
+        preview = "; ".join(bm_title for _, _, bm_title in matches[:5])
+        raise ValueError(t("err.bookmark_ambiguous", match=match, preview=preview))
     # mit date-filter: erstes match löschen (UI-Klick = eindeutiger Intent)
     idx, _, title = matches[0]
     del lines[idx]

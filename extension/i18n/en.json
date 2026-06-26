@@ -29,6 +29,8 @@
   "sidepanel.search_placeholder": "Search tools…",
   "sidepanel.search_aria": "Search tools",
   "sidepanel.status_connecting": "connecting...",
+  "sidepanel.status_connected": "connected",
+  "sidepanel.status_offline": "offline",
   "sidepanel.dark_light": "Dark/Light Mode",
   "sidepanel.nav_toggle": "Navigation",
   "sidepanel.favbar_toggle": "Quick buttons on/off",
@@ -166,6 +168,13 @@
   "chat.open_settings": "Open settings",
   "chat.scrape_starting": "Reading page...",
   "chat.lade": "loading...",
+  "chat.no_page_content": "No page content",
+  "chat.open_in_explorer": "Open in Vault Explorer",
+  "chat.page_scraping": "🌐 Reading page...",
+  "chat.page_load_failed_banner": "🌐 Page (could not be read)",
+  "chat.empty_page": "Ask your question about this page.",
+  "chat.tts_error": "Read aloud failed: {error}",
+  "chat.meta_info": "📚 Vault: {name} · Model: {model} · max {turns} pairs · {source}",
 
   "notes.preview": "Preview",
   "notes.source": "Source",
@@ -602,5 +611,10 @@
   "wizard.step6_addvault_back": "Back to Settings",
   "wizard.btn_back": "Back",
   "wizard.btn_skip": "Skip",
-  "wizard.btn_next": "Let's go"
+  "wizard.btn_next": "Let's go",
+
+  "lightbox.toggle_prompt": "Show/hide prompt",
+  "lightbox.download": "⬇ Download",
+  "lightbox.edit_in_sidepanel": "✎ Continue editing in Sidepanel",
+  "lightbox.close": "× Close"
 }
