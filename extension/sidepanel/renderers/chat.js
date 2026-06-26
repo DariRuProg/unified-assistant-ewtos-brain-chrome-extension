@@ -199,7 +199,7 @@ export async function renderChat() {
 
   // Dezenter Datei-Chat-Hinweis (nur Vault-Modus) — der eigentliche Datei-Chat lebt im Explorer.
   const fileHint = el("div", { className: "chat-file-hint" });
-  const fileHintLink = el(“a”, { href: “#”, textContent: t(“chat.file_hint”) });
+  const fileHintLink = el("a", { href: "#", textContent: t("chat.file_hint") });
   fileHintLink.addEventListener("click", (e) => {
     e.preventDefault();
     openTool("vault_explorer", { vaultId: currentVaultId });
