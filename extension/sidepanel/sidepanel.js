@@ -18,24 +18,30 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 (async () => {
-  await initI18n();
-  localizeDom();
-  const { theme = "neutral", darkMode = false } =
-    await chrome.storage.local.get(["theme", "darkMode"]);
-  applyTheme(theme, darkMode);
-  updateDarkToggleIcon(darkMode);
-  const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
-  if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
-  state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
-  const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
-  if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
-  if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
-  syncFavbarToggle();
-  renderSidebar();
-  renderQuickActions();
-  applyQuickRowVisibility();
-  updateCrumb();
-  if (!state.activeTool) renderToolList();
+  try {
+    await initI18n();
+    localizeDom();
+    const { theme = "neutral", darkMode = false } =
+      await chrome.storage.local.get(["theme", "darkMode"]);
+    applyTheme(theme, darkMode);
+    updateDarkToggleIcon(darkMode);
+    const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
+    if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
+    state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
+    const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
+    if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
+    if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
+    syncFavbarToggle();
+    renderSidebar();
+    renderQuickActions();
+    applyQuickRowVisibility();
+    updateCrumb();
+    if (!state.activeTool) renderToolList();
+  } catch (err) {
+    const c = document.getElementById("content");
+    if (c) c.innerHTML = `<pre style="color:red;padding:8px;font-size:11px">INIT ERROR:\n${err?.stack || err}</pre>`;
+    console.error("sidepanel init error:", err);
+  }
 })();
 
 chrome.storage.onChanged.addListener((changes) => {

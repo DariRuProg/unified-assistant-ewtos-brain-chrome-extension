@@ -42,6 +42,17 @@
     </aside>
   </div>
 
+  <script>
+    // Debug: show uncaught module errors visually
+    window.addEventListener("error", (e) => {
+      const c = document.getElementById("content");
+      if (c) c.innerHTML = `<pre style="color:red;padding:8px;font-size:11px">MODULE ERROR:\n${e.message}\n${e.filename}:${e.lineno}</pre>`;
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      const c = document.getElementById("content");
+      if (c) c.innerHTML = `<pre style="color:red;padding:8px;font-size:11px">UNHANDLED REJECTION:\n${e.reason?.stack || e.reason}</pre>`;
+    });
+  </script>
   <script src="sidepanel.js" type="module"></script>
 </body>
 </html>
