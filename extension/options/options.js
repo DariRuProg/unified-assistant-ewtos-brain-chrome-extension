@@ -1,6 +1,31 @@
 // ewtos.com
 const CLIENT_FIELDS = ["serverUrl"];
 
+// ── Language selector ─────────────────────────────────────────────────────────
+
+(function () {
+  const el = document.getElementById("uiLanguage");
+  if (!el) return;
+  chrome.storage.local.get("uiLanguage", ({ uiLanguage }) => {
+    el.value = uiLanguage || "en";
+  });
+  el.addEventListener("change", async () => {
+    const lang = el.value;
+    await chrome.storage.local.set({ uiLanguage: lang });
+    try {
+      const { serverUrl } = await chrome.storage.local.get("serverUrl");
+      const base = (serverUrl || "ws://localhost:9988/ws")
+        .replace(/^ws:/, "http:").replace(/^wss:/, "https:").replace(/\/ws$/, "");
+      await fetch(`${base}/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ui_language: lang }),
+      });
+    } catch {}
+    location.reload();
+  });
+})();
+
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 function applyThemeToPage(theme, darkMode) {

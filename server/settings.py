@@ -54,6 +54,7 @@ EDITABLE_KEYS = {
     "video_brain_supabase_user_id",
     "video_brain_license_key",
     "youtube_proxy_url",
+    "ui_language",
 }
 SECRET_KEYS = {
     "anthropic_api_key",

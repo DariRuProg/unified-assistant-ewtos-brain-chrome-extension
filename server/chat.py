@@ -18,6 +18,7 @@ from pathlib import Path
 import httpx
 
 import config
+import i18n
 import paths
 import settings
 from llm_client import effective_llm_config, get_backend
@@ -553,14 +554,15 @@ def _build_system_prompt(vault: dict) -> tuple[str, str]:
       - 'claude_md'  — vault has CLAUDE.md, base prompt + CLAUDE.md is used
       - 'default'    — no override, no CLAUDE.md → just base prompt + hint
     """
+    lang_directive = f"\n\nAlways respond to the user in {i18n.lang_name()}."
     date_line = f"Aktuelles Datum und Uhrzeit: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
     override = (vault.get("system_prompt") or "").strip()
     if override:
-        return date_line + override, "override"
+        return date_line + override + lang_directive, "override"
     claude_md = wiki_reader.find_claude_md(vault["path"])
     if claude_md:
-        return date_line + f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault-Konventionen (aus CLAUDE.md)\n\n{claude_md}", "claude_md"
-    return date_line + BASE_SYSTEM_PROMPT + DEFAULT_TAIL, "default"
+        return date_line + f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault-Konventionen (aus CLAUDE.md)\n\n{claude_md}" + lang_directive, "claude_md"
+    return date_line + BASE_SYSTEM_PROMPT + DEFAULT_TAIL + lang_directive, "default"
 
 
 def _block_to_input(block) -> dict:
@@ -1340,9 +1342,10 @@ def send_source_stream(
         ) if vault else ""
 
         system_prompt = (
-            f"Du beantwortest Fragen zu folgendem {source_label}: „{title}“.\n"
-            + knowledge_instruction + tools_note + "\n\n"
-            "---\n\n" + content_text[:80000]
+            f”Du beantwortest Fragen zu folgendem {source_label}: „{title}”.\n”
+            + knowledge_instruction + tools_note + “\n\n”
+            “---\n\n” + content_text[:80000]
+            + f”\n\nAlways respond to the user in {i18n.lang_name()}.”
         )
         api_messages = list(history) + [{"role": "user", "content": user_message}]
 
