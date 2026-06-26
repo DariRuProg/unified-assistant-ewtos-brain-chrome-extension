@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { content, quickActions, navSidebarMain, viewCrumb } from './dom-refs.js';
 import { openTool } from './tool-runner.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
-import { t } from '../i18n/i18n.js';
+import { t } from '../../i18n/i18n.js';
 
 export const GROUPS = [
   {

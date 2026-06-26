@@ -18,30 +18,24 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 (async () => {
-  try {
-    await initI18n();
-    localizeDom();
-    const { theme = "neutral", darkMode = false } =
-      await chrome.storage.local.get(["theme", "darkMode"]);
-    applyTheme(theme, darkMode);
-    updateDarkToggleIcon(darkMode);
-    const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
-    if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
-    state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
-    const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
-    if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
-    if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
-    syncFavbarToggle();
-    renderSidebar();
-    renderQuickActions();
-    applyQuickRowVisibility();
-    updateCrumb();
-    if (!state.activeTool) renderToolList();
-  } catch (err) {
-    const c = document.getElementById("content");
-    if (c) c.innerHTML = `<pre style="color:red;padding:8px;font-size:11px">INIT ERROR:\n${err?.stack || err}</pre>`;
-    console.error("sidepanel init error:", err);
-  }
+  await initI18n();
+  localizeDom();
+  const { theme = "neutral", darkMode = false } =
+    await chrome.storage.local.get(["theme", "darkMode"]);
+  applyTheme(theme, darkMode);
+  updateDarkToggleIcon(darkMode);
+  const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
+  if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
+  state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
+  const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
+  if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
+  if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
+  syncFavbarToggle();
+  renderSidebar();
+  renderQuickActions();
+  applyQuickRowVisibility();
+  updateCrumb();
+  if (!state.activeTool) renderToolList();
 })();
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -80,13 +74,9 @@ chrome.storage.onChanged.addListener((changes) => {
 
 
 
-console.log("[sp] sync init start");
 setStatus(false, "verbinde...");
-console.log("[sp] renderSidebar");
 renderSidebar();
-console.log("[sp] renderToolList — content children before:", document.getElementById("content")?.children.length);
 renderToolList();
-console.log("[sp] renderToolList done — content children after:", document.getElementById("content")?.children.length);
 renderQuickActions();
 checkPendingPlaylistPick();
 checkPendingBrainPick();
