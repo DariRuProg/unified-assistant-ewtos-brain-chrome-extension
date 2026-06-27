@@ -13,7 +13,18 @@ const vaultId = params.get("vault_id") || "";
 const relPath = params.get("rel_path") || "";
 const chatModeParam = params.get("chat_mode") || "file"; // "vault" wenn vom FAB geöffnet
 
-const SCRATCHPAD_PATH = "notes/scratchpad.md";
+let resolvedScratchpadPath = "inbox/scratchpad.md"; // Fallback; wird per Server aufgelöst
+
+async function getScratchpadPath() {
+  try {
+    const r = await fetch(`${httpBase}/tools/notes/scratchpad?vault_id=${encodeURIComponent(vaultId)}`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.rel_path) resolvedScratchpadPath = d.rel_path;
+    }
+  } catch (_) {}
+  return resolvedScratchpadPath;
+}
 
 let httpBase = "";
 let vault = null;
@@ -27,7 +38,7 @@ let explorerAllowDelete = false;
 let deleted = false;
 let sensitiveFolders = [];
 let chatMode = chatModeParam;
-let currentLoadedPath = chatMode === "vault" ? SCRATCHPAD_PATH : relPath;
+let currentLoadedPath = chatMode === "vault" ? resolvedScratchpadPath : relPath;
 
 const viewEl = document.getElementById("ws-view");
 const editorEl = document.getElementById("ws-editor");
@@ -535,30 +546,21 @@ async function boot() {
   // Initial-Zustand wenn via FAB mit chat_mode=vault geöffnet
   if (chatModeParam === "vault") {
     chatTitleEl.textContent = "Chat mit Vault";
-    if (modeToggleBtn) modeToggleBtn.style.display = "none"; // kein Toggle — kein "original file"
-    // Echten Scratchpad-Pfad vom Server holen (inbox/ oder notes/ je nach Vault-Schema)
-    try {
-      const r = await fetch(`${httpBase}/tools/notes/scratchpad?vault_id=${encodeURIComponent(vaultId)}`);
-      if (r.ok) {
-        const data = await r.json();
-        if (data.rel_path) {
-          currentLoadedPath = data.rel_path;
-        }
-      }
-    } catch (_) {}
+    if (modeToggleBtn) modeToggleBtn.style.display = "none";
+    currentLoadedPath = await getScratchpadPath();
     filePathEl.textContent = currentLoadedPath;
     document.title = `${currentLoadedPath} — EwtosBrain`;
   }
 
-  modeToggleBtn?.addEventListener("click", () => {
+  modeToggleBtn?.addEventListener("click", async () => {
     chatMode = chatMode === "file" ? "vault" : "file";
     const isVault = chatMode === "vault";
     chatTitleEl.textContent = isVault ? "Chat mit Vault" : "Chat zur Datei";
     modeToggleBtn.textContent = isVault ? "↔ Datei" : "↔ Vault";
     chatLogEl.replaceChildren();
     chatStatusEl.textContent = "";
-    if (editing) renderView(); // Editierung abbrechen beim Mode-Wechsel
-    const targetPath = isVault ? SCRATCHPAD_PATH : relPath;
+    if (editing) renderView();
+    const targetPath = isVault ? await getScratchpadPath() : relPath;
     filePathEl.textContent = targetPath;
     document.title = `${targetPath} — EwtosBrain`;
     loadChatHistory().catch(() => {});
