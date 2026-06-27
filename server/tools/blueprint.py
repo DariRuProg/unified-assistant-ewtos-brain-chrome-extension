@@ -27,6 +27,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 import paths
 import settings
+from i18n import t as _i18n_t
 from tools import base_generator, claude_md_merger
 
 # Pfade
@@ -83,17 +84,30 @@ def _list_builtin_ids() -> list[str]:
     )
 
 
+def _tr(key: str, fallback: str) -> str:
+    """i18n.t() liefert bei fehlendem Key den Key selbst — dann den Schema-Wert nutzen."""
+    val = _i18n_t(key)
+    return fallback if val == key else val
+
+
 def _meta(bp: dict, bid: str, source: str, trusted: bool) -> dict:
     extends = bp.get("extends", []) or []
     category = bp.get("category") or ("base" if not extends else "addon")
+    name = bp.get("blueprint_name", bid)
+    description = bp.get("description", "")
+    when_to_use = bp.get("when_to_use", "")
+    if source == "builtin":
+        name = _tr(f"bp.{bid}.name", name)
+        description = _tr(f"bp.{bid}.desc", description)
+        when_to_use = _tr(f"bp.{bid}.when", when_to_use)
     return {
         "id": bp.get("blueprint_id", bid),
-        "name": bp.get("blueprint_name", bid),
+        "name": name,
         "version": bp.get("blueprint_version", ""),
         "source": source,
         "trusted": trusted,
-        "description": bp.get("description", ""),
-        "when_to_use": bp.get("when_to_use", ""),
+        "description": description,
+        "when_to_use": when_to_use,
         "category": category,
         "tags": bp.get("tags", []),
         "extends": extends,

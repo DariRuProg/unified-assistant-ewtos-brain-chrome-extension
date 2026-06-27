@@ -255,10 +255,6 @@ class PromoteRequest(BaseModel):
     filename_slug: str | None = None
 
 
-class VaultWriteRequest(BaseModel):
-    content: str
-
-
 @router.post("/tools/promote")
 def promote_endpoint(req: PromoteRequest) -> dict[str, Any]:
     try:

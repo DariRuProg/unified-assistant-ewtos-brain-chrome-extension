@@ -17,6 +17,11 @@ import settings
 
 router = APIRouter()
 
+
+class VaultWriteRequest(BaseModel):
+    content: str
+
+
 @router.get("/tools/vault_file/{vault_id}")
 def vault_file_read(vault_id: str, rel_path: str) -> dict[str, Any]:
     """Read-only Zugriff auf eine .md-Datei im Vault. Wird vom Sidepanel

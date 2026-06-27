@@ -256,10 +256,10 @@
 
 
   <section class="settings-section" data-tab="general">
-  <h2>Sprache / Language</h2>
+  <h2 data-i18n="options.section_language">Sprache / Language</h2>
   <div class="field">
-    <label for="uiLanguage">UI-Sprache / Language</label>
-    <div class="hint">Sprache für alle Labels, Buttons und Meldungen. Die KI antwortet in der gleichen Sprache.</div>
+    <label for="uiLanguage" data-i18n="options.language_label">UI-Sprache / Language</label>
+    <div class="hint" data-i18n="options.language_hint">Sprache für alle Labels, Buttons und Meldungen. Die KI antwortet in der gleichen Sprache.</div>
     <select id="uiLanguage">
       <option value="en">English</option>
       <option value="de">Deutsch</option>
@@ -273,8 +273,8 @@
   <h2 data-i18n="options.section_connection">Connection</h2>
 
   <div class="field">
-    <label for="serverUrl">Server WebSocket URL</label>
-    <div class="hint">Standard: <code>ws://localhost:9988/ws</code></div>
+    <label for="serverUrl" data-i18n="options.server_url_label">Server WebSocket URL</label>
+    <div class="hint" data-i18n-html="options.server_url_hint">Standard: <code>ws://localhost:9988/ws</code></div>
     <input id="serverUrl" type="text" placeholder="ws://localhost:9988/ws" />
   </div>
 
@@ -283,61 +283,60 @@
   <h2 data-i18n="options.section_notes">Note-Taker</h2>
 
   <div class="field">
-    <label for="notesPath">Notizen-Pfad (Scratchpad)</label>
-    <div class="hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung.</div>
-    <input id="notesPath" type="text" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
+    <label for="notesPath" data-i18n="options.notes_path_label">Notizen-Pfad (Scratchpad)</label>
+    <div class="hint" data-i18n="options.notes_path_hint">Wo der globale Scratchpad lebt. Server-seitige Einstellung.</div>
+    <input id="notesPath" type="text" data-i18n-placeholder="options.notes_path_placeholder" placeholder="z.B. E:\Coding_Kurse\Obsidian\...\notes" />
   </div>
 
   </section>
   <section class="settings-section" data-tab="ai">
   <h2 data-i18n="options.section_external">External Services</h2>
-  <div class="hint" style="margin-bottom: 12px;">
+  <div class="hint" style="margin-bottom: 12px;" data-i18n-html="options.external_hint">
     API-Keys für externe Dienste. Werden serverseitig in <code>server/.env</code> oder <code>settings.json</code> gespeichert (Env hat Vorrang).
   </div>
 
   <div class="field external-service-card">
-    <label for="geminiApiKey">Google Gemini API-Key</label>
+    <label for="geminiApiKey" data-i18n="options.gemini_key_label">Google Gemini API-Key</label>
     <div class="hint">
-      Wird vom Image-Generator (Nano Banana) und später vom Briefing-Tool genutzt. Key holen unter
-      <code>aistudio.google.com/apikey</code>. <span id="geminiApiKeyStatus" style="font-weight: 600;"></span>
+      <span data-i18n-html="options.gemini_key_hint">Wird vom Image-Generator (Nano Banana) und später vom Briefing-Tool genutzt. Key holen unter <code>aistudio.google.com/apikey</code>.</span>
+      <span id="geminiApiKeyStatus" style="font-weight: 600;"></span>
     </div>
     <input id="geminiApiKey" type="password" placeholder="AIza..." autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label for="youtubeApiKey">YouTube Data API v3 Key</label>
+    <label for="youtubeApiKey" data-i18n="options.youtube_key_label">YouTube Data API v3 Key</label>
     <div class="hint">
-      Für Briefing-Quellen <code>youtube_trending</code>, <code>competitor_videos</code>, <code>playlist_trending</code>.
-      Default-Quota 10k Units/Tag (~80 Briefings). Key holen unter <code>console.cloud.google.com</code>.
+      <span data-i18n-html="options.youtube_key_hint">Für Briefing-Quellen <code>youtube_trending</code>, <code>competitor_videos</code>, <code>playlist_trending</code>. Default-Quota 10k Units/Tag (~80 Briefings). Key holen unter <code>console.cloud.google.com</code>.</span>
       <span id="youtubeApiKeyStatus" style="font-weight: 600;"></span>
     </div>
     <input id="youtubeApiKey" type="password" placeholder="AIza..." autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label for="setupAgentProvider">Setup-Agent — eigenes Modell (optional)</label>
-    <div class="hint">
+    <label for="setupAgentProvider" data-i18n="options.setup_agent_label">Setup-Agent — eigenes Modell (optional)</label>
+    <div class="hint" data-i18n="options.setup_agent_hint">
       Wenn leer, wird der gleiche Provider wie für Vault-Chat verwendet. Nur ändern wenn du den Setup-Agenten
       mit einem stärkeren/günstigeren Modell laufen lassen willst.
     </div>
     <select id="setupAgentProvider" style="margin-bottom: 6px;">
-      <option value="">(gleich wie Vault-Chat)</option>
-      <option value="anthropic">Anthropic (Claude)</option>
-      <option value="openai">OpenAI (GPT)</option>
-      <option value="ollama">Ollama (lokal)</option>
-      <option value="mistral">Mistral</option>
-      <option value="openrouter">OpenRouter (beliebiges Modell)</option>
+      <option value="" data-i18n="options.setup_agent_same">(gleich wie Vault-Chat)</option>
+      <option value="anthropic" data-i18n="options.provider_anthropic">Anthropic (Claude)</option>
+      <option value="openai" data-i18n="options.provider_openai">OpenAI (GPT)</option>
+      <option value="ollama" data-i18n="options.provider_ollama">Ollama (lokal)</option>
+      <option value="mistral" data-i18n="options.provider_mistral">Mistral</option>
+      <option value="openrouter" data-i18n="options.provider_openrouter">OpenRouter (beliebiges Modell)</option>
     </select>
-    <input id="setupAgentModel" type="text" placeholder="z.B. claude-opus-4-7 oder anthropic/claude-sonnet-4.6" autocomplete="off" />
+    <input id="setupAgentModel" type="text" data-i18n-placeholder="options.setup_agent_model_placeholder" placeholder="z.B. claude-opus-4-7 oder anthropic/claude-sonnet-4.6" autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label for="imageGenModel">Image-Generator Default-Modell</label>
-    <div class="hint">Welches Gemini-Modell der Image-Generator beim Start vorschlägt. In der Tool-UI weiter umschaltbar.</div>
+    <label for="imageGenModel" data-i18n="options.image_gen_model_label">Image-Generator Default-Modell</label>
+    <div class="hint" data-i18n="options.image_gen_model_hint">Welches Gemini-Modell der Image-Generator beim Start vorschlägt. In der Tool-UI weiter umschaltbar.</div>
     <select id="imageGenModel">
-      <option value="gemini-2.5-flash-image">Nano Banana (2.5 Flash) — schnell, ~0.039$/Bild</option>
-      <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (3.1 Flash) — bessere Qualität</option>
-      <option value="gemini-3-pro-image-preview">Nano Banana Pro (3 Pro) — 4K</option>
+      <option value="gemini-2.5-flash-image" data-i18n="options.image_gen_opt_flash">Nano Banana (2.5 Flash) — schnell, ~0.039$/Bild</option>
+      <option value="gemini-3.1-flash-image-preview" data-i18n="options.image_gen_opt_flash2">Nano Banana 2 (3.1 Flash) — bessere Qualität</option>
+      <option value="gemini-3-pro-image-preview" data-i18n="options.image_gen_opt_pro">Nano Banana Pro (3 Pro) — 4K</option>
     </select>
   </div>
 
@@ -346,19 +345,19 @@
   <h2 data-i18n="options.section_chat">Chat — LLM Provider</h2>
 
   <div class="field">
-    <label for="llmProvider">Provider</label>
-    <div class="hint">Wer beantwortet Chat-Fragen + schreibt Summaries. Anthropic ist Default.</div>
+    <label for="llmProvider" data-i18n="options.provider_label">Provider</label>
+    <div class="hint" data-i18n="options.provider_hint">Wer beantwortet Chat-Fragen + schreibt Summaries. Anthropic ist Default.</div>
     <select id="llmProvider">
-      <option value="anthropic">Anthropic (Claude)</option>
-      <option value="openai">OpenAI (GPT) — Backend Stufe 4</option>
-      <option value="ollama">Ollama (lokal, DSGVO) — Backend Stufe 5</option>
-      <option value="mistral">Mistral — Backend Stufe 6</option>
-      <option value="openrouter">OpenRouter (beliebiges Modell)</option>
+      <option value="anthropic" data-i18n="options.provider_anthropic">Anthropic (Claude)</option>
+      <option value="openai" data-i18n="options.provider_openai">OpenAI (GPT)</option>
+      <option value="ollama" data-i18n="options.provider_ollama">Ollama (lokal, DSGVO)</option>
+      <option value="mistral" data-i18n="options.provider_mistral">Mistral</option>
+      <option value="openrouter" data-i18n="options.provider_openrouter">OpenRouter (beliebiges Modell)</option>
     </select>
   </div>
 
   <div class="field">
-    <label for="llmModel">Modell</label>
+    <label for="llmModel" data-i18n="options.model_label">Modell</label>
     <div class="hint" id="llmModelHint">Modelle: claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5</div>
     <input id="llmModel" type="text" placeholder="claude-opus-4-7" autocomplete="off" list="llmModelList" />
     <datalist id="llmModelList">
@@ -369,111 +368,111 @@
   </div>
 
   <div class="field provider-field" data-provider="anthropic">
-    <label for="anthropicApiKey">Anthropic API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert (nicht in der Extension). <span id="anthropicApiKeyStatus" style="font-weight: 600;"></span></div>
+    <label for="anthropicApiKey" data-i18n="options.anthropic_key_label">Anthropic API-Key</label>
+    <div class="hint"><span data-i18n="options.anthropic_key_hint">Wird serverseitig gespeichert (nicht in der Extension).</span> <span id="anthropicApiKeyStatus" style="font-weight: 600;"></span></div>
     <input id="anthropicApiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
   </div>
 
   <div class="field provider-field hidden" data-provider="openai">
-    <label for="openaiApiKey">OpenAI API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert. <span id="openaiApiKeyStatus" style="font-weight: 600;"></span></div>
+    <label for="openaiApiKey" data-i18n="options.openai_key_label">OpenAI API-Key</label>
+    <div class="hint"><span data-i18n="options.openai_key_hint">Wird serverseitig gespeichert.</span> <span id="openaiApiKeyStatus" style="font-weight: 600;"></span></div>
     <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" />
   </div>
 
   <div class="field provider-field hidden" data-provider="ollama">
-    <label for="ollamaBaseUrl">Ollama Base-URL</label>
-    <div class="hint">Standard lokal: <code>http://localhost:11434</code>. Ollama muss separat installiert + gestartet sein (<code>ollama serve</code>).</div>
+    <label for="ollamaBaseUrl" data-i18n="options.ollama_url_label">Ollama Base-URL</label>
+    <div class="hint" data-i18n-html="options.ollama_url_hint">Standard lokal: <code>http://localhost:11434</code>. Ollama muss separat installiert + gestartet sein (<code>ollama serve</code>).</div>
     <input id="ollamaBaseUrl" type="text" placeholder="http://localhost:11434" autocomplete="off" />
   </div>
 
   <div class="field provider-field hidden" data-provider="mistral">
-    <label for="mistralApiKey">Mistral API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert. <span id="mistralApiKeyStatus" style="font-weight: 600;"></span></div>
+    <label for="mistralApiKey" data-i18n="options.mistral_key_label">Mistral API-Key</label>
+    <div class="hint"><span data-i18n="options.mistral_key_hint">Wird serverseitig gespeichert.</span> <span id="mistralApiKeyStatus" style="font-weight: 600;"></span></div>
     <input id="mistralApiKey" type="password" placeholder="..." autocomplete="off" />
   </div>
 
   <div class="field provider-field hidden" data-provider="openrouter">
-    <label for="openrouterApiKey">OpenRouter API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert. Modell oben frei wählbar (Slug, z.B. <code>anthropic/claude-sonnet-4.6</code>, <code>openai/gpt-4o</code>, <code>google/gemini-2.0-flash</code>). <span id="openrouterApiKeyStatus" style="font-weight: 600;"></span></div>
+    <label for="openrouterApiKey" data-i18n="options.openrouter_key_label">OpenRouter API-Key</label>
+    <div class="hint"><span data-i18n-html="options.openrouter_key_hint">Wird serverseitig gespeichert. Modell oben frei wählbar (Slug, z.B. <code>anthropic/claude-sonnet-4.6</code>, <code>openai/gpt-4o</code>).</span> <span id="openrouterApiKeyStatus" style="font-weight: 600;"></span></div>
     <input id="openrouterApiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
   </div>
 
   <div class="field provider-field hidden" data-provider="openrouter">
-    <label for="openrouterBaseUrl">OpenRouter Base-URL (optional)</label>
-    <div class="hint">Standard: <code>https://openrouter.ai/api/v1</code>. Nur ändern bei Proxy/Self-Host.</div>
+    <label for="openrouterBaseUrl" data-i18n="options.openrouter_url_label">OpenRouter Base-URL (optional)</label>
+    <div class="hint" data-i18n-html="options.openrouter_url_hint">Standard: <code>https://openrouter.ai/api/v1</code>. Nur ändern bei Proxy/Self-Host.</div>
     <input id="openrouterBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1" autocomplete="off" />
   </div>
 
   <div class="field">
-    <label for="maxUserTurns">Max Verlauf (Nachrichten-Paare)</label>
-    <div class="hint">Wieviele User-Assistant-Paare im Verlauf bleiben. Default: 20.</div>
+    <label for="maxUserTurns" data-i18n="options.max_turns_label">Max Verlauf (Nachrichten-Paare)</label>
+    <div class="hint" data-i18n="options.max_turns_hint">Wieviele User-Assistant-Paare im Verlauf bleiben. Default: 20.</div>
     <input id="maxUserTurns" type="number" min="1" max="100" placeholder="20" />
   </div>
 
   <div class="field">
-    <label for="chatHeavyOpsMode">Aktionen im Chat</label>
-    <div class="hint">Steuert, wie der Sidepanel-Chat teure Aktionen (Ingest/Kuratierung, Zusammenfassungen) behandelt. Mechanisches (Transkript ziehen, Datei schreiben) läuft immer.</div>
+    <label for="chatHeavyOpsMode" data-i18n="options.heavy_ops_label">Aktionen im Chat</label>
+    <div class="hint" data-i18n="options.heavy_ops_hint">Steuert, wie der Sidepanel-Chat teure Aktionen (Ingest/Kuratierung, Zusammenfassungen) behandelt. Mechanisches (Transkript ziehen, Datei schreiben) läuft immer.</div>
     <select id="chatHeavyOpsMode">
-      <option value="full">Vollmodus — alles im Chat ausführen (läuft über deinen LLM-Key)</option>
-      <option value="hint">Hinweis-Modus — vor teurer Kuratierung Kosten-Hinweis + Claude-Code-Empfehlung</option>
+      <option value="full" data-i18n="options.heavy_ops_full">Vollmodus — alles im Chat ausführen (läuft über deinen LLM-Key)</option>
+      <option value="hint" data-i18n="options.heavy_ops_hint_mode">Hinweis-Modus — vor teurer Kuratierung Kosten-Hinweis + Claude-Code-Empfehlung</option>
     </select>
   </div>
 
   <div class="field">
     <label for="chatShowSources" class="checkbox-row" style="display:flex;align-items:center;gap:8px;">
       <input id="chatShowSources" type="checkbox" />
-      <span>Quellen-Referenzen im Chat anzeigen</span>
+      <span data-i18n="options.show_sources_label">Quellen-Referenzen im Chat anzeigen</span>
     </label>
-    <div class="hint">Zeigt gelesene Vault-Dateien als klickbare Quellen-Links unter Chat-Antworten an.</div>
+    <div class="hint" data-i18n="options.show_sources_hint">Zeigt gelesene Vault-Dateien als klickbare Quellen-Links unter Chat-Antworten an.</div>
   </div>
 
   <div class="field">
     <label for="chatTtsEnabled" class="checkbox-row" style="display:flex;align-items:center;gap:8px;">
       <input id="chatTtsEnabled" type="checkbox" />
-      <span>Antworten vorlesen (🔊-Button an Chat-Antworten, via ElevenLabs)</span>
+      <span data-i18n="options.tts_label">Antworten vorlesen (🔊-Button an Chat-Antworten, via ElevenLabs)</span>
     </label>
-    <div class="hint">Aktiviert einen Vorlese-Button an den Chat-Antworten. Nutzt ElevenLabs (eigener Key, BYOK).</div>
+    <div class="hint" data-i18n="options.tts_hint">Aktiviert einen Vorlese-Button an den Chat-Antworten. Nutzt ElevenLabs (eigener Key, BYOK).</div>
   </div>
 
   <div class="field">
-    <label for="elevenlabsApiKey">ElevenLabs API-Key</label>
-    <div class="hint">Wird serverseitig gespeichert. Key: <code>elevenlabs.io/app/settings/api-keys</code>. <span id="elevenlabsApiKeyStatus" style="font-weight: 600;"></span></div>
+    <label for="elevenlabsApiKey" data-i18n="options.elevenlabs_key_label">ElevenLabs API-Key</label>
+    <div class="hint"><span data-i18n-html="options.elevenlabs_key_hint">Wird serverseitig gespeichert. Key: <code>elevenlabs.io/app/settings/api-keys</code>.</span> <span id="elevenlabsApiKeyStatus" style="font-weight: 600;"></span></div>
     <input id="elevenlabsApiKey" type="password" placeholder="..." autocomplete="off" />
   </div>
 
   <div class="field">
-    <label for="elevenlabsVoiceId">ElevenLabs Voice-ID (optional)</label>
-    <div class="hint">Standard: Rachel (<code>21m00Tcm4TlvDq8ikWAM</code>). Eigene Voice-ID aus dem ElevenLabs-Dashboard.</div>
+    <label for="elevenlabsVoiceId" data-i18n="options.elevenlabs_voice_label">ElevenLabs Voice-ID (optional)</label>
+    <div class="hint" data-i18n-html="options.elevenlabs_voice_hint">Standard: Rachel (<code>21m00Tcm4TlvDq8ikWAM</code>). Eigene Voice-ID aus dem ElevenLabs-Dashboard.</div>
     <input id="elevenlabsVoiceId" type="text" placeholder="21m00Tcm4TlvDq8ikWAM" autocomplete="off" />
   </div>
 
   </section>
   <section class="settings-section" data-tab="tools">
   <h2 data-i18n="options.section_videobrain">video-brain &amp; License</h2>
-  <div class="hint" style="margin-bottom: 12px;">
+  <div class="hint" style="margin-bottom: 12px;" data-i18n="options.videobrain_hint">
     Spiegelt fertig analysierte Videos in deine eigene Supabase, damit die video-brain Mobile-App sie lesen kann.
     Jeder Kunde bringt sein eigenes Supabase-Projekt mit — deine Videodaten bleiben bei dir.
   </div>
 
   <div class="field external-service-card">
-    <label for="videoBrainSupabaseUrl">Supabase Projekt-URL</label>
-    <div class="hint">
+    <label for="videoBrainSupabaseUrl" data-i18n="options.supabase_url_label">Supabase Projekt-URL</label>
+    <div class="hint" data-i18n-html="options.supabase_url_hint">
       Z.B. <code>https://abcdefgh.supabase.co</code> — zu finden unter Project Settings → API.
     </div>
     <input id="videoBrainSupabaseUrl" type="url" placeholder="https://....supabase.co" autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label for="videoBrainSupabaseAnonKey">Supabase anon key <span id="videoBrainSupabaseAnonKeyStatus" style="font-weight: 600;"></span></label>
-    <div class="hint">
+    <label for="videoBrainSupabaseAnonKey"><span data-i18n="options.supabase_anon_label">Supabase anon key</span> <span id="videoBrainSupabaseAnonKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint" data-i18n="options.supabase_anon_hint">
       Öffentlicher Leseschlüssel — wird von der video-brain PWA genutzt. Project Settings → API → anon public.
     </div>
     <input id="videoBrainSupabaseAnonKey" type="password" placeholder="eyJ..." autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label for="videoBrainSupabaseServiceKey">Supabase service_role key <span id="videoBrainSupabaseServiceKeyStatus" style="font-weight: 600;"></span></label>
-    <div class="hint">
+    <label for="videoBrainSupabaseServiceKey"><span data-i18n="options.supabase_service_label">Supabase service_role key</span> <span id="videoBrainSupabaseServiceKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint" data-i18n="options.supabase_service_hint">
       Schreibschlüssel für den Sync (bypassed RLS). Wird serverseitig gespeichert, nie an die PWA weitergegeben.
       Project Settings → API → service_role secret.
     </div>
@@ -481,8 +480,8 @@
   </div>
 
   <div class="field external-service-card">
-    <label for="videoBrainSupabaseUserId">Auth User-UUID</label>
-    <div class="hint">
+    <label for="videoBrainSupabaseUserId" data-i18n="options.supabase_user_label">Auth User-UUID</label>
+    <div class="hint" data-i18n-html="options.supabase_user_hint">
       Die UUID des Supabase-Auth-Users der video-brain PWA nutzt (Authentication → Users).
       ewtos-brain setzt <code>user_id</code> auf diesen Wert, damit die PWA die Daten per RLS sehen kann.
     </div>
@@ -490,61 +489,61 @@
   </div>
 
   <div class="field external-service-card">
-    <label for="videoBrainLicenseKey">Lizenz-Key <span id="videoBrainLicenseApiKeyStatus" style="font-weight: 600;"></span></label>
-    <div class="hint">
+    <label for="videoBrainLicenseKey"><span data-i18n="options.license_label">Lizenz-Key</span> <span id="videoBrainLicenseApiKeyStatus" style="font-weight: 600;"></span></label>
+    <div class="hint" data-i18n="options.license_hint">
       Von ewtos.com ausgestellter Lizenz-Key für video-brain. Wird vor jedem Sync gegen die zentrale Lizenzdatenbank geprüft.
     </div>
     <input id="videoBrainLicenseKey" type="password" placeholder="vb_..." autocomplete="off" />
   </div>
 
   <div class="field external-service-card">
-    <label>video-brain PWA verbinden</label>
-    <div class="hint">QR-Code mit der video-brain App scannen — alle Einstellungen werden automatisch übernommen. Zuerst oben speichern.</div>
-    <button id="generateVideoBrainQrBtn" type="button">QR-Code generieren</button>
+    <label data-i18n="options.qr_btn_label">video-brain PWA verbinden</label>
+    <div class="hint" data-i18n="options.qr_btn_hint">QR-Code mit der video-brain App scannen — alle Einstellungen werden automatisch übernommen. Zuerst oben speichern.</div>
+    <button id="generateVideoBrainQrBtn" type="button" data-i18n="options.qr_generate">QR-Code generieren</button>
     <div id="videoBrainQrContainer" style="margin-top:12px; display:none; text-align:center;">
       <div id="videoBrainQrCanvas"></div>
       <div class="hint" style="margin-top:6px; word-break:break-all;" id="videoBrainQrHint"></div>
     </div>
   </div>
 
-  <button id="save" type="button">Verbindung &amp; Chat-Settings speichern</button>
+  <button id="save" type="button" data-i18n="options.save_btn">Verbindung &amp; Chat-Settings speichern</button>
   <span id="saved" class="saved" hidden></span>
 
   </section>
   <section class="settings-section" data-tab="tools">
   <h2 data-i18n="options.section_briefing">Good Morning Briefing</h2>
-  <div class="hint" style="margin-bottom: 12px;">Konfiguriere welche Inhalte dein tägliches Briefing enthält.</div>
+  <div class="hint" style="margin-bottom: 12px;" data-i18n="options.briefing_hint">Konfiguriere welche Inhalte dein tägliches Briefing enthält.</div>
 
   <div id="briefing-profiles-list"></div>
 
   <div id="briefing-new-form" style="display:none; border: 1px dashed var(--border-input); border-radius: 6px; padding: 14px; margin-top: 12px; background: var(--bg);">
     <div class="field">
-      <label for="briefing-new-name">Profil-Name</label>
-      <input type="text" id="briefing-new-name" placeholder="z.B. Morgen-Briefing">
+      <label for="briefing-new-name" data-i18n="options.briefing_profile_name">Profil-Name</label>
+      <input type="text" id="briefing-new-name" data-i18n-placeholder="options.briefing_name_placeholder" placeholder="z.B. Morgen-Briefing">
     </div>
     <div class="field">
-      <label>Bausteine <span class="hint" style="display:inline; font-weight:normal;">(Reihenfolge = Anzeige-Reihenfolge im Briefing)</span></label>
+      <label><span data-i18n="options.briefing_blocks_label">Bausteine</span> <span class="hint" style="display:inline; font-weight:normal;" data-i18n="options.briefing_order_hint">(Reihenfolge = Anzeige-Reihenfolge im Briefing)</span></label>
       <div id="briefing-blocks-list" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;"></div>
       <div id="briefing-add-row" style="display:flex; gap:6px; margin-top:8px;">
         <select id="briefing-source-picker" style="flex:1;"></select>
-        <button type="button" id="briefing-add-source" class="secondary">+ hinzufügen</button>
+        <button type="button" id="briefing-add-source" class="secondary" data-i18n="options.briefing_add_source">+ hinzufügen</button>
       </div>
     </div>
     <div class="vault-actions">
-      <button type="button" id="briefing-save-new">Profil speichern</button>
-      <button type="button" id="briefing-cancel-new" class="secondary">Abbrechen</button>
+      <button type="button" id="briefing-save-new" data-i18n="options.briefing_save">Profil speichern</button>
+      <button type="button" id="briefing-cancel-new" class="secondary" data-i18n="options.briefing_cancel">Abbrechen</button>
     </div>
   </div>
 
-  <button type="button" id="briefing-add-btn" class="secondary" style="margin-top: 12px;">+ Neues Profil</button>
+  <button type="button" id="briefing-add-btn" class="secondary" style="margin-top: 12px;" data-i18n="options.briefing_add_btn">+ Neues Profil</button>
 
   </section>
   <section class="settings-section" data-tab="general">
   <h2 data-i18n="options.section_appearance">Appearance</h2>
 
   <div class="field">
-    <label>Farb-Theme</label>
-    <div class="hint">Dark Mode per ☀/☽-Knopf im Sidepanel-Header umschalten.</div>
+    <label data-i18n="options.theme_label">Farb-Theme</label>
+    <div class="hint" data-i18n="options.theme_hint">Dark Mode per ☀/☽-Knopf im Sidepanel-Header umschalten.</div>
     <div class="theme-previews">
       <button type="button" class="theme-swatch swatch-neutral" data-theme="neutral">
         <span class="dot dot-neutral"></span> Neutral
@@ -568,29 +567,29 @@
   <div class="field">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
       <input id="showQuickRow" type="checkbox" />
-      <span>Favoriten-Leiste im Sidepanel anzeigen</span>
+      <span data-i18n="options.favbar_label">Favoriten-Leiste im Sidepanel anzeigen</span>
     </label>
-    <div class="hint">Zeigt oben in der "Alles"-Ansicht eine Leiste mit deinen Quick-Slots. Standardmäßig aus — auch über das ⭐-Icon in der Seitenleiste umschaltbar.</div>
+    <div class="hint" data-i18n="options.favbar_hint">Zeigt oben in der "Alles"-Ansicht eine Leiste mit deinen Quick-Slots. Standardmäßig aus — auch über das ⭐-Icon in der Seitenleiste umschaltbar.</div>
   </div>
 
   <div class="field">
-    <label for="uiIconScale">Icon-Größe (Tool-Liste)</label>
+    <label for="uiIconScale" data-i18n="options.icon_scale_label">Icon-Größe (Tool-Liste)</label>
     <select id="uiIconScale">
-      <option value="1">Klein</option>
-      <option value="1.15">Mittel</option>
-      <option value="1.35">Groß</option>
+      <option value="1" data-i18n="options.size_small">Klein</option>
+      <option value="1.15" data-i18n="options.size_medium">Mittel</option>
+      <option value="1.35" data-i18n="options.size_large">Groß</option>
     </select>
-    <div class="hint">Größe der Icons in der Tool-Liste des Sidepanels.</div>
+    <div class="hint" data-i18n="options.icon_scale_hint">Größe der Icons in der Tool-Liste des Sidepanels.</div>
   </div>
 
   <div class="field">
-    <label for="uiFontScale">Schriftgröße (Tool-Liste)</label>
+    <label for="uiFontScale" data-i18n="options.font_scale_label">Schriftgröße (Tool-Liste)</label>
     <select id="uiFontScale">
-      <option value="0.9">Klein</option>
-      <option value="1">Mittel</option>
-      <option value="1.15">Groß</option>
+      <option value="0.9" data-i18n="options.size_small">Klein</option>
+      <option value="1" data-i18n="options.size_medium">Mittel</option>
+      <option value="1.15" data-i18n="options.size_large">Groß</option>
     </select>
-    <div class="hint">Größe der Schrift in der Tool-Liste des Sidepanels.</div>
+    <div class="hint" data-i18n="options.font_scale_hint">Größe der Schrift in der Tool-Liste des Sidepanels.</div>
   </div>
 
   </section>
@@ -600,45 +599,45 @@
   <div class="field">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
       <input id="explorerShowHidden" type="checkbox" />
-      <span>Versteckte Dateien und Ordner anzeigen</span>
+      <span data-i18n="options.show_hidden_label">Versteckte Dateien und Ordner anzeigen</span>
     </label>
-    <div class="hint">Zeigt im Vault-Explorer auch Einträge mit Punkt am Anfang (z.B. <code>.obsidian</code>, <code>.claude</code>). Standardmäßig aus. Greift beim nächsten Öffnen des Explorers.</div>
+    <div class="hint" data-i18n-html="options.show_hidden_hint">Zeigt im Vault-Explorer auch Einträge mit Punkt am Anfang (z.B. <code>.obsidian</code>, <code>.claude</code>). Standardmäßig aus. Greift beim nächsten Öffnen des Explorers.</div>
   </div>
 
   <div class="field">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
       <input id="explorerAllowDelete" type="checkbox" />
-      <span>Löschen im Explorer erlauben</span>
+      <span data-i18n="options.allow_delete_label">Löschen im Explorer erlauben</span>
     </label>
-    <div class="hint">Blendet Lösch-Buttons im Vault-Explorer ein (Dateien + leere Ordner). Wirkt nur, wenn beim jeweiligen Vault die Berechtigung <code>write_files</code> aktiv ist.</div>
+    <div class="hint" data-i18n-html="options.allow_delete_hint">Blendet Lösch-Buttons im Vault-Explorer ein (Dateien + leere Ordner). Wirkt nur, wenn beim jeweiligen Vault die Berechtigung <code>write_files</code> aktiv ist.</div>
   </div>
 
   </section>
   <section class="settings-section" data-tab="vault">
   <h2 data-i18n="options.section_vaults">Connected Vaults</h2>
-  <div class="hint" style="margin-bottom: 12px;">
+  <div class="hint" style="margin-bottom: 12px;" data-i18n-html="options.vaults_hint">
     Jeder Vault ist ein Ordner mit <code>.md</code>-Dateien (Karpathy-Style). Pro Vault eigener System-Prompt + eigener Chat-Verlauf. Im Side-Panel wechselst du zwischen den Vaults.
   </div>
 
   <div id="vaults-container"></div>
 
-  <button id="add-vault-toggle" type="button" class="secondary">+ Neuen Vault hinzufügen</button>
+  <button id="add-vault-toggle" type="button" class="secondary" data-i18n="options.add_vault">+ Neuen Vault hinzufügen</button>
 
   </section>
   <section class="settings-section" data-tab="vault">
   <h2 data-i18n="options.section_blueprints">Blueprints</h2>
-  <div class="hint" style="margin-bottom: 12px;">
+  <div class="hint" style="margin-bottom: 12px;" data-i18n="options.blueprints_hint">
     Vault-Vorlagen. Built-in liefert EwtosBrain mit; importierte Blueprints kommen von dir oder Premium-Quellen.
   </div>
 
   <div id="blueprint-list"></div>
 
   <div style="border: 1px dashed var(--border-input); border-radius: 6px; padding: 14px; margin-top: 12px; background: var(--bg);">
-    <label for="blueprint-import-file" style="display: block; margin-bottom: 6px;">Blueprint importieren</label>
-    <div class="hint" style="margin-bottom: 8px;">JSON-Datei mit Blueprint-Struktur. Unsignierte Blueprints werden vor dem Import angefragt.</div>
+    <label for="blueprint-import-file" style="display: block; margin-bottom: 6px;" data-i18n="options.blueprint_import_label">Blueprint importieren</label>
+    <div class="hint" style="margin-bottom: 8px;" data-i18n="options.blueprint_import_hint">JSON-Datei mit Blueprint-Struktur. Unsignierte Blueprints werden vor dem Import angefragt.</div>
     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
       <input type="file" id="blueprint-import-file" accept="application/json" style="flex: 1; min-width: 200px;">
-      <button type="button" id="btn-blueprint-import">Importieren</button>
+      <button type="button" id="btn-blueprint-import" data-i18n="options.blueprint_import_btn">Importieren</button>
     </div>
     <div id="blueprint-import-status" class="vault-status" style="margin-top: 8px;"></div>
   </div>

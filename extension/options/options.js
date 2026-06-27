@@ -691,14 +691,14 @@ function renderBriefingBlocks() {
     const row = el("div", { className: "briefing-block" });
 
     const head = el("div", { className: "briefing-block-head" });
-    const up = el("button", { type: "button", className: "briefing-block-btn", textContent: "↑", title: "nach oben" });
+    const up = el("button", { type: "button", className: "briefing-block-btn", textContent: "↑", title: t("options.briefing_move_up") });
     up.disabled = idx === 0;
     up.addEventListener("click", () => { [briefingBlocks[idx - 1], briefingBlocks[idx]] = [briefingBlocks[idx], briefingBlocks[idx - 1]]; renderBriefingBlocks(); });
-    const down = el("button", { type: "button", className: "briefing-block-btn", textContent: "↓", title: "nach unten" });
+    const down = el("button", { type: "button", className: "briefing-block-btn", textContent: "↓", title: t("options.briefing_move_down") });
     down.disabled = idx === briefingBlocks.length - 1;
     down.addEventListener("click", () => { [briefingBlocks[idx + 1], briefingBlocks[idx]] = [briefingBlocks[idx], briefingBlocks[idx + 1]]; renderBriefingBlocks(); });
     const label = el("strong", { textContent: spec.label, style: "flex:1;" });
-    const rm = el("button", { type: "button", className: "briefing-block-btn danger", textContent: "×", title: "entfernen" });
+    const rm = el("button", { type: "button", className: "briefing-block-btn danger", textContent: "×", title: t("options.briefing_remove") });
     rm.addEventListener("click", () => { briefingBlocks.splice(idx, 1); renderBriefingBlocks(); refreshSourcePicker(); });
     head.append(up, down, label, rm);
     row.append(head);

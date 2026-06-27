@@ -89,11 +89,13 @@ export function renderMarkdown(text) {
       return "<hr>";
     }
 
-    // Table: first line has |, second line is the separator (|---|)
-    if (lines.length >= 2 && lines[0].includes("|") && /^\|[\s\-:|]+\|/.test(lines[1])) {
+    // Table: erste Zeile hat |, zweite Zeile ist der Separator (|---|).
+    // Zeilen koennen eingerueckt sein (z.B. innerhalb von Listen) -> vorm Erkennen/Parsen trimmen.
+    const tLines = lines.map((l) => l.trim());
+    if (tLines.length >= 2 && tLines[0].includes("|") && /^\|[\s\-:|]+\|/.test(tLines[1])) {
       const parseRow = (l) => l.split("|").slice(1, -1).map((c) => c.trim());
-      const headers = parseRow(lines[0]).map((c) => `<th>${inlineMd(c)}</th>`).join("");
-      const rows = lines.slice(2)
+      const headers = parseRow(tLines[0]).map((c) => `<th>${inlineMd(c)}</th>`).join("");
+      const rows = tLines.slice(2)
         .filter((l) => l.includes("|"))
         .map((l) => parseRow(l).map((c) => `<td>${inlineMd(c)}</td>`).join(""))
         .map((cells) => `<tr>${cells}</tr>`)
