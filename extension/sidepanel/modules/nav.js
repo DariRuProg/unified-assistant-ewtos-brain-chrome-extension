@@ -9,13 +9,32 @@ import { t } from '../../i18n/i18n.js';
 export function getGroups() {
   return [
   {
-    id: "chat",
-    label: t("nav.chat"),
-    icon: "💬",
-    sub: t("nav.chat_sub"),
+    id: "vault",
+    label: t("nav.vault"),
+    icon: "📚",
+    sub: t("nav.vault_sub"),
     tools: [
-      { id: "chat", label: t("nav.chat_vault"), hint: t("nav.chat_vault_hint"), icon: "📚" },
-      { id: "chat_web", label: t("nav.chat_page"), hint: t("nav.chat_page_hint"), icon: "🌐", openOptions: { startMode: "page" } },
+      { id: "chat",            label: t("nav.chat_vault"),      hint: t("nav.chat_vault_hint"), icon: "💬" },
+      { id: "vault_explorer",  label: t("nav.vault_explorer"),  hint: t("nav.vault_explorer_hint"), icon: "📚" },
+      { id: "ingest_document", label: t("nav.ingest_document"), hint: t("nav.ingest_document_hint"), icon: "📥" },
+      { id: "vault_health",    label: t("nav.vault_health"),    hint: t("nav.vault_health_hint"), icon: "🩺" },
+    ],
+  },
+  {
+    id: "web",
+    label: t("nav.web"),
+    icon: "🌐",
+    sub: t("nav.web_sub"),
+    tools: [
+      { id: "chat_web",      label: t("nav.chat_page"),      hint: t("nav.chat_page_hint"), icon: "💬", openOptions: { startMode: "page" } },
+      { id: "page_scrape",   label: t("nav.page_scrape"),    hint: t("nav.page_scrape_hint"), icon: "📄",
+        actions: [
+          { label: t("nav.scrape_content_only"), icon: "▸", action: "scrape_content" },
+          { label: t("nav.scrape_full_page"), icon: "▸", action: "scrape_full" },
+        ],
+      },
+      { id: "seo_check",     label: t("nav.seo_check"),     hint: t("nav.seo_check_hint"), icon: "🔍" },
+      { id: "url_extractor", label: t("nav.url_extractor"), hint: t("nav.url_extractor_hint"), icon: "🔗" },
     ],
   },
   {
@@ -36,17 +55,6 @@ export function getGroups() {
     ],
   },
   {
-    id: "vault",
-    label: t("nav.vault"),
-    icon: "📚",
-    sub: t("nav.vault_sub"),
-    tools: [
-      { id: "vault_explorer",  label: t("nav.vault_explorer"),  hint: t("nav.vault_explorer_hint"), icon: "📚" },
-      { id: "ingest_document", label: t("nav.ingest_document"), hint: t("nav.ingest_document_hint"), icon: "📥" },
-      { id: "vault_health",    label: t("nav.vault_health"),    hint: t("nav.vault_health_hint"), icon: "🩺" },
-    ],
-  },
-  {
     id: "video",
     label: t("nav.video"),
     icon: "🎬",
@@ -54,22 +62,6 @@ export function getGroups() {
     tools: [
       { id: "youtube_transcript", label: t("nav.youtube_transcript"), hint: t("nav.youtube_transcript_hint"), icon: "🎬" },
       { id: "playlists",          label: t("nav.playlists"),          hint: t("nav.playlists_hint"), icon: "🎵" },
-    ],
-  },
-  {
-    id: "web",
-    label: t("nav.web"),
-    icon: "🌐",
-    sub: t("nav.web_sub"),
-    tools: [
-      { id: "page_scrape", label: t("nav.page_scrape"), hint: t("nav.page_scrape_hint"), icon: "📄",
-        actions: [
-          { label: t("nav.scrape_content_only"), icon: "▸", action: "scrape_content" },
-          { label: t("nav.scrape_full_page"), icon: "▸", action: "scrape_full" },
-        ],
-      },
-      { id: "seo_check",     label: t("nav.seo_check"),     hint: t("nav.seo_check_hint"), icon: "🔍" },
-      { id: "url_extractor", label: t("nav.url_extractor"), hint: t("nav.url_extractor_hint"), icon: "🔗" },
     ],
   },
   {
@@ -90,6 +82,8 @@ export function getGroups() {
       },
     ],
   },
+  // navOnly: erscheint als Icon in der Sidebar, öffnet das Tool direkt statt zu filtern.
+  { id: "chat", label: t("nav.chat"), icon: "💬", navOnly: true, tools: [] },
   ];
 }
 
@@ -284,16 +278,28 @@ export function renderSidebar() {
       textContent: it.icon,
       className: "nav-item" + (it.id === state.activeTab ? " active" : ""),
     });
-    b.addEventListener("click", () => {
-      state.activeTab = it.id;
-      state.activeTool = null;
-      renderSidebar();
-      renderToolList();
-      applyQuickRowVisibility();
-      updateCrumb();
-    });
+    if (it.navOnly) {
+      b.addEventListener("click", () => { openTool("chat"); });
+    } else {
+      b.addEventListener("click", () => {
+        state.activeTab = it.id;
+        state.activeTool = null;
+        renderSidebar();
+        renderToolList();
+        applyQuickRowVisibility();
+        updateCrumb();
+      });
+    }
     navSidebarMain.append(b);
   }
+}
+
+function buildToolTile(t) {
+  const li = el("li", { className: "tool-tile" });
+  li.append(el("span", { className: "tr-ico", textContent: t.icon || "•" }));
+  li.append(el("span", { className: "tr-label", textContent: t.label }));
+  li.addEventListener("click", () => openTool(t.id, t.openOptions || null));
+  return li;
 }
 
 function buildToolRow(t) {
@@ -336,49 +342,67 @@ function buildToolRow(t) {
   return li;
 }
 
+export function setToolViewMode(mode) {
+  state.toolViewMode = mode;
+  chrome.storage.local.set({ toolViewMode: mode });
+  renderToolList();
+}
+
 export function renderToolList() {
   content.replaceChildren();
 
+  const mode = state.toolViewMode;
+  const isTile = mode === "tile";
+  const isFlat = mode === "tile-flat";
+  const buildRow = (isTile || isFlat) ? buildToolTile : buildToolRow;
+  const listClass = "tools" + ((isTile || isFlat) ? " tools--tiles" : "");
+
   const q = (state.searchQuery || "").trim().toLowerCase();
   if (q) {
-    const results = el("ul", { className: "tools" });
+    const results = el("ul", { className: listClass });
     const matches = [];
     for (const g of getGroups()) {
-      for (const t of g.tools) {
-        const hay = `${t.label} ${t.hint || ""} ${g.label}`.toLowerCase();
-        if (hay.includes(q)) matches.push(t);
+      if (g.navOnly) continue;
+      for (const tool of g.tools) {
+        const hay = `${tool.label} ${tool.hint || ""} ${g.label}`.toLowerCase();
+        if (hay.includes(q)) matches.push(tool);
       }
     }
     if (matches.length === 0) {
       results.append(el("li", { className: "search-empty", textContent: t("nav.no_results", { query: state.searchQuery.trim() }) }));
     } else {
-      for (const t of matches) results.append(buildToolRow(t));
+      for (const tool of matches) results.append(buildRow(tool));
     }
     content.append(results);
     return;
   }
 
-  const list = el("ul", { className: "tools" });
+  const list = el("ul", { className: listClass });
 
   if (state.activeTab === "all") {
     for (const g of getGroups()) {
-      const sec = el("li", { className: "tool-sec" });
-      sec.append(el("span", { className: "ts-ico", textContent: g.icon }));
-      sec.append(el("span", { className: "ts-label", textContent: g.label }));
-      list.append(sec);
-      for (const t of g.tools) list.append(buildToolRow(t));
+      if (g.navOnly) continue;
+      if (!isFlat) {
+        const sec = el("li", { className: "tool-sec" });
+        sec.append(el("span", { className: "ts-ico", textContent: g.icon }));
+        sec.append(el("span", { className: "ts-label", textContent: g.label }));
+        list.append(sec);
+      }
+      for (const tool of g.tools) list.append(buildRow(tool));
     }
   } else {
     const group = getGroups().find((g) => g.id === state.activeTab);
-    if (!group) return;
-    const head = el("li", { className: "group-head" });
-    const title = el("span", { className: "gh-title" });
-    title.append(el("span", { className: "gh-ico", textContent: group.icon }));
-    title.append(el("span", { className: "gh-label", textContent: group.label }));
-    head.append(title);
-    if (group.sub) head.append(el("span", { className: "gh-sub", textContent: group.sub }));
-    list.append(head);
-    for (const t of group.tools) list.append(buildToolRow(t));
+    if (!group || group.navOnly) return;
+    if (!isFlat) {
+      const head = el("li", { className: "group-head" });
+      const title = el("span", { className: "gh-title" });
+      title.append(el("span", { className: "gh-ico", textContent: group.icon }));
+      title.append(el("span", { className: "gh-label", textContent: group.label }));
+      head.append(title);
+      if (group.sub) head.append(el("span", { className: "gh-sub", textContent: group.sub }));
+      list.append(head);
+    }
+    for (const tool of group.tools) list.append(buildRow(tool));
   }
   content.append(list);
 }

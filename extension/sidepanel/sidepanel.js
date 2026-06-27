@@ -4,8 +4,8 @@ import { applyTheme, updateDarkToggleIcon } from './modules/theme.js';
 import { state } from './state.js';
 import { checkPendingBrainPick, checkActiveTabForYoutube } from './renderers/briefing.js';
 import { checkPendingPlaylistPick } from './renderers/playlists.js';
-import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, navSidebar, toggleFavbarBtn, toolSearch } from './modules/dom-refs.js';
-import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb } from './modules/nav.js';
+import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, navSidebar, toggleFavbarBtn, toolSearch, viewToggleBtn, pageChatBtn } from './modules/dom-refs.js';
+import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb, setToolViewMode } from './modules/nav.js';
 import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
 import { initI18n, localizeDom, t } from '../i18n/i18n.js';
 
@@ -27,6 +27,9 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
   const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
   if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
   state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
+  const { toolViewMode = "list" } = await chrome.storage.local.get("toolViewMode");
+  state.toolViewMode = toolViewMode;
+  if (viewToggleBtn) syncViewToggle();
   const { uiIconScale, uiFontScale } = await chrome.storage.local.get(["uiIconScale", "uiFontScale"]);
   if (uiIconScale != null) document.documentElement.style.setProperty("--ui-icon-scale", uiIconScale);
   if (uiFontScale != null) document.documentElement.style.setProperty("--ui-font-scale", uiFontScale);
@@ -86,6 +89,7 @@ checkPendingPlaylistPick();
 checkPendingBrainPick();
 checkStartTool();
 checkActiveTabForYoutube();
+syncPageChatBtn();
 
 // Globaler Click-Handler für Obsidian-Wikilinks aus renderMarkdown.
 // Öffnet die Ziel-Datei im Vault-Explorer (gleicher Vault wie aktuell ausgewählt).
@@ -170,6 +174,32 @@ toggleFavbarBtn.addEventListener("click", () => {
   renderQuickActions();
   applyQuickRowVisibility();
 });
+const VIEW_MODES = ["list", "tile", "tile-flat"];
+const VIEW_NEXT_KEY = { list: "sidepanel.view_tiles", tile: "sidepanel.view_flat", "tile-flat": "sidepanel.view_list" };
+
+function syncViewToggle() {
+  if (!viewToggleBtn) return;
+  viewToggleBtn.classList.toggle("active", state.toolViewMode !== "list");
+  viewToggleBtn.title = t(VIEW_NEXT_KEY[state.toolViewMode] || "sidepanel.view_tiles");
+}
+
+async function syncPageChatBtn() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const chattable = !!tab?.url && /^https?:\/\//.test(tab.url);
+    pageChatBtn?.classList.toggle("hidden", !chattable);
+  } catch { pageChatBtn?.classList.add("hidden"); }
+}
+pageChatBtn?.addEventListener("click", () => openTool("chat", { startMode: "page" }));
+chrome.tabs.onActivated.addListener(() => syncPageChatBtn());
+chrome.tabs.onUpdated.addListener((_, info) => { if (info.status === "complete") syncPageChatBtn(); });
+
+viewToggleBtn?.addEventListener("click", () => {
+  const next = VIEW_MODES[(VIEW_MODES.indexOf(state.toolViewMode) + 1) % VIEW_MODES.length];
+  setToolViewMode(next);
+  syncViewToggle();
+});
+
 document.getElementById("edit-quick-slots").addEventListener("click", () => {
   openQuickEditor(null);
 });

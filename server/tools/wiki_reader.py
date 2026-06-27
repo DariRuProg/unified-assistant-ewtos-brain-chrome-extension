@@ -51,6 +51,8 @@ def list_folder(vault_path: str, rel_path: str = "", show_hidden: bool = False) 
     root = resolve_dir(vault_path).resolve()
     folders: list[str] = []
     files: list[str] = []
+    images: list[str] = []
+    IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
     for entry in target.iterdir():
         if not show_hidden and (entry.name.startswith(".") or entry.name in IGNORED_NAMES):
             continue
@@ -60,9 +62,12 @@ def list_folder(vault_path: str, rel_path: str = "", show_hidden: bool = False) 
             continue
         if entry.is_dir():
             folders.append(rel)
-        elif entry.is_file() and entry.suffix.lower() == ".md":
-            files.append(rel)
-    return {"path": rel_path or "", "folders": sorted(folders), "files": sorted(files)}
+        elif entry.is_file():
+            if entry.suffix.lower() == ".md":
+                files.append(rel)
+            elif entry.suffix.lower() in IMAGE_EXTS:
+                images.append(rel)
+    return {"path": rel_path or "", "folders": sorted(folders), "files": sorted(files), "images": sorted(images)}
 
 
 def read_file(vault_path: str, rel_path: str) -> str:

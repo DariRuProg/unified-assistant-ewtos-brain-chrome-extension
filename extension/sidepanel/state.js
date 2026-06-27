@@ -11,4 +11,5 @@ export const state = {
   pendingToolOptions: null,
   _chatPageModeScrape: null,
   currentToolCleanup: null,
+  toolViewMode: "list",
 };

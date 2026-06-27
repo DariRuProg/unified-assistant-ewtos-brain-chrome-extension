@@ -57,19 +57,9 @@ export async function renderVaultExplorer() {
   const viewerBox = el("div", { className: "vault-viewer", style: "display:none" });
   const status = el("div", { className: "tool-status" });
 
-  state.panelBody.append(header, breadcrumb, listBox, viewerBox, status);
-
-  // Floating Vault-Chat Button — opens classic Karpathy chat for current vault
-  const fab = el("button", {
-    type: "button",
-    className: "vault-fab",
-    title: "Mit Vault chatten (Karpathy)",
-    textContent: "💬",
-  });
-  state.panelBody.append(fab);
-  fab.addEventListener("click", () => {
-    openTool("chat");
-  });
+  const chatFab = el("button", { className: "vault-chat-fab", title: "Chat mit Vault", textContent: "💬" });
+  chatFab.addEventListener("click", () => openWorkspaceTab("notes/scratchpad.md", false, "vault"));
+  state.panelBody.append(header, breadcrumb, listBox, viewerBox, status, chatFab);
 
   let currentVaultId = null;
   let currentPath = "";
@@ -83,6 +73,7 @@ export async function renderVaultExplorer() {
   const expandedPaths = new Set();
   let savedScrollTop = 0;
   let revealPath = null;
+  let selectedFile = null;  // im Tab geöffnete Datei — im Baum markiert
   try {
     const _p = await chrome.storage.local.get(["explorerShowHidden", "explorerAllowDelete"]);
     explorerShowHidden = !!_p.explorerShowHidden;
@@ -137,6 +128,28 @@ export async function renderVaultExplorer() {
       breadcrumb.append(sep, fileLabel);
       return;
     }
+    if (selectedFile) {
+      // Breadcrumb zeigt den Pfad der im Tab geöffneten Datei. Ordner-Segmente
+      // klappen den Baum auf diese Ebene zusammen + scrollen hin.
+      const segs = selectedFile.split("/").filter(Boolean);
+      const rootLink = el("a", { href: "#", textContent: "/", className: "vault-crumb" });
+      rootLink.addEventListener("click", (e) => { e.preventDefault(); collapseToFolder(null); });
+      breadcrumb.append(rootLink);
+      let acc = "";
+      for (let i = 0; i < segs.length; i++) {
+        breadcrumb.append(el("span", { className: "vault-crumb-sep", textContent: " / " }));
+        acc = acc ? acc + "/" + segs[i] : segs[i];
+        if (i === segs.length - 1) {
+          breadcrumb.append(el("span", { className: "vault-crumb-current", textContent: segs[i] }));
+        } else {
+          const folderPath = acc;
+          const a = el("a", { href: "#", textContent: segs[i], className: "vault-crumb" });
+          a.addEventListener("click", (e) => { e.preventDefault(); collapseToFolder(folderPath); });
+          breadcrumb.append(a);
+        }
+      }
+      return;
+    }
     const root = el("a", { href: "#", textContent: "/", className: "vault-crumb" });
     root.addEventListener("click", (e) => { e.preventDefault(); navigateTo(""); });
     breadcrumb.append(root);
@@ -177,7 +190,8 @@ export async function renderVaultExplorer() {
     }
     const folders = data.folders || [];
     const files = data.files || [];
-    if (depth === 0 && !folders.length && !files.length) {
+    const images = data.images || [];
+    if (depth === 0 && !folders.length && !files.length && !images.length) {
       container.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
       return;
     }
@@ -219,7 +233,16 @@ export async function renderVaultExplorer() {
       row.style.paddingLeft = (depth * 14 + 20) + "px";
       row.append(el("span", { className: "vault-icon", textContent: "📄" }), el("span", { className: "vault-name", textContent: basename(f) }));
       if (canWrite && explorerAllowDelete) row.append(makeDeleteBtn(f, () => renderView()));
-      row.addEventListener("click", () => openFile(f));
+      row.addEventListener("click", () => { selectedFile = f; markSelected(); renderBreadcrumb(); openWorkspaceTab(f); });
+      row.addEventListener("contextmenu", (e) => { e.preventDefault(); showRowMenu(e.clientX, e.clientY, f); });
+      container.append(row);
+    }
+    for (const f of images) {
+      const row = el("div", { className: "vault-entry vault-file vault-image-file" });
+      row.dataset.path = f;
+      row.style.paddingLeft = (depth * 14 + 20) + "px";
+      row.append(el("span", { className: "vault-icon", textContent: "🖼️" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      row.addEventListener("click", () => { selectedFile = f; markSelected(); renderBreadcrumb(); openWorkspaceTab(f); });
       container.append(row);
     }
   }
@@ -276,6 +299,130 @@ export async function renderVaultExplorer() {
     await renderView();
   }
 
+  // Breadcrumb-Klick: Baum auf die angeklickte Ebene zusammenklappen + hinscrollen.
+  // folderPath = null → komplett zur Wurzel (alle Ordner zu, Auswahl gelöscht).
+  async function collapseToFolder(folderPath) {
+    searchActive = false;
+    currentFile = null;
+    if (!folderPath) {
+      expandedPaths.clear();
+      selectedFile = null;
+    } else {
+      for (const p of Array.from(expandedPaths)) {
+        if (p !== folderPath && p.startsWith(folderPath + "/")) expandedPaths.delete(p);
+      }
+      let acc = "";
+      for (const seg of folderPath.split("/")) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); }
+      revealPath = folderPath;
+    }
+    await renderView();
+  }
+
+  // Datei im Baum sichtbar machen + markieren (z.B. wenn ihr Tab aktiv wird).
+  async function revealFile(relPath) {
+    selectedFile = relPath;
+    const sel = (window.CSS && CSS.escape) ? CSS.escape(relPath) : relPath.replace(/"/g, '\\"');
+    const visible = listBox.querySelector(`.vault-file[data-path="${sel}"]`);
+    if (visible && !currentFile && !searchActive) {
+      markSelected();
+      renderBreadcrumb();
+      visible.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    let acc = "";
+    for (const seg of relPath.split("/").slice(0, -1)) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); }
+    revealPath = relPath;
+    currentFile = null;
+    searchActive = false;
+    await renderView();
+  }
+
+  // Explorer-Markierung an den aktiven Browser-Tab koppeln (Sidebar ist tab-übergreifend):
+  // wird ein Workspace-Tab aktiv, markiert der Explorer dessen Datei (ggf. Vault-Wechsel).
+  const WORKSPACE_PREFIX = chrome.runtime.getURL("workspace/workspace.html");
+  async function syncToTab(tab) {
+    if (!tab || !tab.url || !tab.url.startsWith(WORKSPACE_PREFIX)) return;
+    if (searchActive || currentFile) return;  // Suche/Datei-Viewer nicht unterbrechen
+    let vid, rel;
+    try { const u = new URL(tab.url); vid = u.searchParams.get("vault_id"); rel = u.searchParams.get("rel_path"); }
+    catch { return; }
+    if (!vid || !rel) return;
+    if (vid !== currentVaultId) {
+      if (!vaultsById[vid]) return;
+      currentVaultId = vid;
+      vaultSelect.value = vid;
+      canWrite = !!(vaultsById[vid]?.permissions?.write_files);
+      await chrome.storage.local.set({ selectedVaultId: vid });
+      expandedPaths.clear();
+    }
+    await revealFile(rel);
+  }
+  async function syncToActiveTab() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await syncToTab(tab);
+    } catch (_) {}
+  }
+
+  // Datei im Browserfenster öffnen (eigener Tab mit Ansicht/Editor/Chat).
+  // Default: bestehenden Workspace-Tab wiederverwenden (Tab fragt selbst nach,
+  // falls dort ungespeicherte Änderungen offen sind). forceNew=true → neuer Tab.
+  function openWorkspaceTab(relPath, forceNew = false, chatMode = "") {
+    if (!currentVaultId || !relPath) return;
+    const extra = chatMode ? `&chat_mode=${encodeURIComponent(chatMode)}` : "";
+    const url = chrome.runtime.getURL(
+      `workspace/workspace.html?vault_id=${encodeURIComponent(currentVaultId)}&rel_path=${encodeURIComponent(relPath)}${extra}`
+    );
+    if (forceNew) { chrome.tabs.create({ url }); return; }
+    const prefix = chrome.runtime.getURL("workspace/workspace.html");
+    chrome.tabs.query({}, (tabs) => {
+      const existing = (tabs || []).find((t) => t.url && t.url.startsWith(prefix));
+      if (!existing) { chrome.tabs.create({ url }); return; }
+      // Broadcast an Extension-Seiten (tabs.sendMessage erreicht nur Content-Scripts).
+      // targetTabId filtert auf den richtigen Workspace-Tab; der Tab navigiert selbst
+      // und fragt vorher bei ungespeicherten Änderungen nach.
+      chrome.runtime.sendMessage(
+        { type: "ws_open_file", targetTabId: existing.id, vault_id: currentVaultId, rel_path: relPath, chat_mode: chatMode },
+        (resp) => {
+          if (chrome.runtime.lastError || resp === undefined) {
+            // Kein Empfänger (Tab noch am Laden) → direkt auf die Datei setzen.
+            chrome.tabs.update(existing.id, { url, active: true }, () => { void chrome.runtime.lastError; });
+          } else {
+            chrome.tabs.update(existing.id, { active: true });
+          }
+        }
+      );
+    });
+  }
+
+  // Mini-Kontextmenü für „In neuem Tab öffnen" (Rechtsklick auf eine Datei).
+  let rowMenuEl = null;
+  function closeRowMenu() {
+    if (rowMenuEl) { rowMenuEl.remove(); rowMenuEl = null; }
+    document.removeEventListener("click", closeRowMenu);
+  }
+  function showRowMenu(x, y, relPath) {
+    closeRowMenu();
+    rowMenuEl = el("div", { className: "vault-ctx-menu" });
+    const item = el("button", { type: "button", className: "vault-ctx-item", textContent: "In neuem Tab öffnen" });
+    item.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); openWorkspaceTab(relPath, true); });
+    rowMenuEl.append(item);
+    rowMenuEl.style.left = x + "px";
+    rowMenuEl.style.top = y + "px";
+    document.body.append(rowMenuEl);
+    setTimeout(() => document.addEventListener("click", closeRowMenu), 0);
+  }
+
+  // Markiert die im Tab geöffnete Datei im Baum (ohne Datei-Viewer im Sidepanel).
+  function markSelected() {
+    if (!selectedFile) return;
+    const sel = (window.CSS && CSS.escape) ? CSS.escape(selectedFile) : selectedFile.replace(/"/g, '\\"');
+    const target = listBox.querySelector(`.vault-file[data-path="${sel}"]`);
+    if (!target) return;  // Datei nicht sichtbar (zugeklappt) — bestehende Highlights nicht anfassen
+    listBox.querySelectorAll(".vault-entry.vault-active").forEach((e) => e.classList.remove("vault-active"));
+    target.classList.add("vault-active");
+  }
+
   async function openFile(relPath, findQuery = "") {
     if (!currentVaultId) return;
     savedScrollTop = listBox.scrollTop || 0;  // Scroll für Rückkehr merken
@@ -313,9 +460,10 @@ export async function renderVaultExplorer() {
         );
         row.append(textWrap);
         row.addEventListener("click", () => {
-          searchActive = false;
-          openFile(r.rel_path, q);
+          selectedFile = r.rel_path;
+          openWorkspaceTab(r.rel_path);
         });
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); showRowMenu(e.clientX, e.clientY, r.rel_path); });
         listBox.append(row);
       }
       setStatus("");
@@ -519,6 +667,7 @@ export async function renderVaultExplorer() {
     } else if (savedScrollTop) {
       listBox.scrollTop = savedScrollTop; savedScrollTop = 0;
     }
+    if (selectedFile) markSelected();  // Markierung der im Tab offenen Datei halten
   }
 
   function showEditor(initialContent) {
@@ -644,8 +793,19 @@ export async function renderVaultExplorer() {
     await chrome.storage.local.set({ selectedVaultId: currentVaultId });
     currentPath = "";
     currentFile = null;
+    selectedFile = null;
     await renderView();
   });
+
+  // Aktiven Tab beobachten → Markierung folgt dem geöffneten Workspace-Tab.
+  const onTabActivated = () => syncToActiveTab();
+  const onTabUpdated = (id, info, tab) => { if (info.url && tab.active) syncToActiveTab(); };
+  chrome.tabs.onActivated.addListener(onTabActivated);
+  chrome.tabs.onUpdated.addListener(onTabUpdated);
+  state.currentToolCleanup = () => {
+    chrome.tabs.onActivated.removeListener(onTabActivated);
+    chrome.tabs.onUpdated.removeListener(onTabUpdated);
+  };
 
   // Initial vault load
   try {
@@ -680,6 +840,7 @@ export async function renderVaultExplorer() {
       currentFile = initialFile;
     }
     await renderView();
+    if (!initialFile) await syncToActiveTab();  // beim Öffnen direkt den aktiven Tab spiegeln
   } catch (err) {
     setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
   }

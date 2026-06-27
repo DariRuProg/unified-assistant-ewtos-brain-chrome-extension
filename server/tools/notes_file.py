@@ -84,16 +84,25 @@ def _strip_frontmatter(text: str) -> str:
 def load(kind: str, vault_id: str | None = None) -> dict:
     cfg = _config_for(kind)
     path = _file_path(kind, vault_id)
+    rel_path: str | None = None
+    if vault_id:
+        v = settings.get_vault(vault_id)
+        if v:
+            try:
+                rel_path = str(path.relative_to(Path(v["path"]))).replace("\\", "/")
+            except ValueError:
+                pass
     with _file_lock:
         if not path.exists():
             today = date.today().isoformat()
             path.write_text(_empty(cfg["tag"], today), encoding="utf-8")
-            return {"started": today, "content": "", "path": str(path)}
+            return {"started": today, "content": "", "path": str(path), "rel_path": rel_path}
         raw = path.read_text(encoding="utf-8")
     return {
         "started": _parse_started(raw),
         "content": _strip_frontmatter(raw),
         "path": str(path),
+        "rel_path": rel_path,
     }
 
 

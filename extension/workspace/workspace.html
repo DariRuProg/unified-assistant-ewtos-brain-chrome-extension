@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EwtosBrain — Datei</title>
+  <link rel="stylesheet" href="../themes.css">
+  <link rel="stylesheet" href="workspace.css">
+</head>
+<body>
+  <header class="ws-topbar">
+    <span class="ws-file-path" id="ws-file-path">…</span>
+    <span class="ws-vault-name" id="ws-vault-name"></span>
+    <span class="ws-spacer"></span>
+    <button type="button" id="ws-layout-toggle" class="ws-btn" title="Chat-Position umschalten (unten / seitlich)">Chat: unten</button>
+  </header>
+
+  <div class="ws-split" id="ws-split">
+    <section class="ws-left">
+      <div class="ws-left-toolbar" id="ws-left-toolbar"></div>
+      <div class="ws-changed-banner" id="ws-changed-banner" style="display:none">
+        <span>Datei wurde durch den Chat geändert.</span>
+        <button type="button" id="ws-reload-btn" class="ws-btn">Neu laden</button>
+      </div>
+      <div class="ws-view" id="ws-view"></div>
+      <textarea class="ws-editor" id="ws-editor" style="display:none" spellcheck="false"></textarea>
+      <div class="ws-left-status" id="ws-left-status"></div>
+    </section>
+
+    <aside class="ws-right">
+      <div class="ws-chat-head">
+        <span id="ws-chat-title">Chat zur Datei</span>
+        <button type="button" id="ws-mode-toggle" class="ws-btn" title="Zwischen Datei-Chat und Vault-Chat wechseln">↔ Vault</button>
+      </div>
+      <div class="ws-chat-log" id="ws-chat-log"></div>
+      <div class="ws-chat-status" id="ws-chat-status"></div>
+      <div class="ws-chat-input-row">
+        <textarea class="ws-chat-input" id="ws-chat-input" rows="2" placeholder="Frage oder Anweisung zu dieser Datei… (Enter = senden, Shift+Enter = Zeilenumbruch)"></textarea>
+        <button type="button" id="ws-chat-send" class="ws-btn ws-btn-primary">Senden</button>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="workspace.js"></script>
+</body>
+</html>

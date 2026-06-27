@@ -12,3 +12,5 @@ export const quickActions = document.getElementById("quick-actions");
 export const offlineBannerText = document.getElementById("offline-banner-text");
 export const DEFAULT_OFFLINE_HTML = offlineBannerText ? offlineBannerText.innerHTML : "";
 export const burgerBtn = document.getElementById("burger-btn");
+export const viewToggleBtn = document.getElementById("view-toggle");
+export const pageChatBtn = document.getElementById("page-chat-btn");
