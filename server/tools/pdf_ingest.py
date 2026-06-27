@@ -12,7 +12,7 @@ def extract_text(data: bytes, filename: str = "") -> str:
 
 
 def extract_info(data: bytes, filename: str = "") -> dict:
-    """Wie extract_text, liefert zusätzlich PDF-Metadaten (title, author, pages).
+    """Wie extract_text, liefert zusätzlich Metadaten (title, author, pages).
 
     Returns:
         {"text": str, "title": str, "author": str, "pages": int}
@@ -20,7 +20,37 @@ def extract_info(data: bytes, filename: str = "") -> dict:
     fname = (filename or "").lower()
     if fname.endswith(".pdf"):
         return _extract_pdf(data)
+    if fname.endswith(".docx"):
+        return _extract_docx(data)
     return {"text": data.decode("utf-8", errors="replace"), "title": "", "author": "", "pages": 0}
+
+
+def _extract_docx(data: bytes) -> dict:
+    try:
+        from docx import Document
+    except ImportError:
+        raise ImportError("python-docx nicht installiert. `pip install python-docx` ausführen.")
+    try:
+        doc = Document(io.BytesIO(data))
+    except Exception as e:
+        raise ValueError(f"DOCX konnte nicht gelesen werden: {e}")
+    parts = []
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if text:
+            parts.append(text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells if c.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+    props = doc.core_properties
+    return {
+        "text": "\n\n".join(parts),
+        "title": (props.title or "").strip(),
+        "author": (props.author or "").strip(),
+        "pages": 0,
+    }
 
 
 def _extract_pdf(data: bytes) -> dict:

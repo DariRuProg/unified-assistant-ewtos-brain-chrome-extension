@@ -165,8 +165,13 @@ async def ingest_document_endpoint(
 ) -> dict[str, Any]:
     if not settings.vault_permission(vault_id, "write_raw"):
         raise HTTPException(403, t("err.raw_ingest_denied"))
-    allowed = ("application/pdf", "text/plain", "text/markdown")
-    if file.content_type and not any(file.content_type.startswith(m) for m in allowed):
+    allowed_mime = ("application/pdf", "text/plain", "text/markdown",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    allowed_ext = (".pdf", ".txt", ".md", ".docx")
+    fname = (file.filename or "").lower()
+    mime_ok = not file.content_type or any(file.content_type.startswith(m) for m in allowed_mime)
+    ext_ok = any(fname.endswith(e) for e in allowed_ext)
+    if not mime_ok and not ext_ok:
         raise HTTPException(400, t("err.filetype_unsupported", mime=file.content_type))
     data = await file.read()
     try:
