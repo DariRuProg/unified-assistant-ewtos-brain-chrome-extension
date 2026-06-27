@@ -3,6 +3,7 @@ import { el } from "../sidepanel/dom.js";
 import { getHttpBase } from "../sidepanel/modules/api.js";
 import { renderMarkdown, openInObsidian } from "../sidepanel/markdown.js";
 import { applyTheme } from "../sidepanel/modules/theme.js";
+import { renderBaseInto } from "../sidepanel/renderers/base-view.js";
 
 // Tools, die die angeheftete Datei verändern → danach Ansicht links neu laden.
 const WRITE_TOOLS = new Set(["insert_into_open_file", "write_wiki_page", "generate_image"]);
@@ -24,6 +25,7 @@ let chatBusy = false;
 let leftDirty = false;
 let explorerAllowDelete = false;
 let deleted = false;
+let sensitiveFolders = [];
 let chatMode = chatModeParam;
 let currentLoadedPath = chatMode === "vault" ? SCRATCHPAD_PATH : relPath;
 
@@ -114,6 +116,53 @@ function isImagePath(p) {
   const ext = p.slice(p.lastIndexOf(".")).toLowerCase();
   return IMAGE_EXTS.has(ext);
 }
+function isBasePath(p) {
+  return p.toLowerCase().endsWith(".base");
+}
+
+async function loadSensitiveFolders() {
+  sensitiveFolders = [];
+  try {
+    const res = await fetch(`${httpBase}/tools/vault_sensitive/${encodeURIComponent(vaultId)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    sensitiveFolders = data.folders || [];
+  } catch (_) {}
+}
+
+function fileInheritedSensitive() {
+  const p = currentLoadedPath;
+  return sensitiveFolders.some((f) => p === f || p.startsWith(f + "/"));
+}
+
+// Sensibel-Flag direkt aus dem Frontmatter des geladenen Inhalts ableiten.
+function frontmatterSensitive() {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(rawContent || "");
+  if (!m) return false;
+  return /^\s*(sensibel|sensitive)\s*:\s*(true|yes|ja|1)\s*$/im.test(m[1]);
+}
+
+async function toggleFileSensitive(makeSensitive) {
+  try {
+    const res = await fetch(`${httpBase}/tools/vault_sensitive/file/${encodeURIComponent(vaultId)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rel_path: currentLoadedPath, sensitive: makeSensitive }),
+    });
+    if (res.status === 403) { setLeftStatus("Datei-Flag braucht Schreibrecht (write_files).", "error"); return; }
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(errText(e, res.status)); }
+    await loadFile();  // Frontmatter hat sich geändert → neu laden, Toolbar aktualisiert sich
+    setLeftStatus(makeSensitive ? "Als sensibel markiert." : "Sensibel-Markierung entfernt.", "success");
+  } catch (err) {
+    setLeftStatus("Sensibel-Flag fehlgeschlagen: " + (err.message || err), "error");
+  }
+}
+
+function openVaultFileInTab(rel) {
+  const url = chrome.runtime.getURL(
+    `workspace/workspace.html?vault_id=${encodeURIComponent(vaultId)}&rel_path=${encodeURIComponent(rel)}`
+  );
+  chrome.tabs.create({ url });
+}
 
 async function loadFile(path) {
   if (path !== undefined) currentLoadedPath = path;
@@ -168,6 +217,11 @@ function renderView() {
   editorEl.style.display = "none";
   viewEl.style.display = "";
   bannerEl.style.display = "none";
+  if (isBasePath(currentLoadedPath)) {
+    renderBaseInto(viewEl, httpBase, vaultId, currentLoadedPath, openVaultFileInTab);
+    buildToolbar();
+    return;
+  }
   viewEl.innerHTML = renderMarkdown(rawContent);
   wireVaultImages(viewEl);
   buildToolbar();
@@ -192,6 +246,22 @@ function buildToolbar() {
     const delBtn = el("button", { type: "button", className: "ws-btn", textContent: "🗑 Löschen" });
     delBtn.addEventListener("click", deleteFile);
     toolbarEl.append(delBtn);
+  }
+  if (currentLoadedPath.toLowerCase().endsWith(".md")) {
+    const inherited = fileInheritedSensitive();
+    const flagged = frontmatterSensitive();
+    const locked = inherited || flagged;
+    const lockBtn = el("button", {
+      type: "button",
+      className: "ws-btn" + (locked ? " ws-btn-sensitive" : ""),
+      textContent: locked ? "🔒 Sensibel" : "🔓 Sensibel",
+      title: inherited
+        ? "Über den Ordner als sensibel gesperrt — am Ordner im Explorer ändern"
+        : (flagged ? "Sensibel — klicken zum Entsperren" : "Als sensibel markieren (DSGVO — nur freigegebenes LLM)"),
+    });
+    if (inherited || !canWrite) lockBtn.disabled = true;
+    else lockBtn.addEventListener("click", () => toggleFileSensitive(!flagged));
+    toolbarEl.append(lockBtn);
   }
   const obsidianBtn = el("button", { type: "button", className: "ws-btn", textContent: "✎ In Obsidian", title: "Diese Datei in Obsidian öffnen" });
   obsidianBtn.addEventListener("click", () => { if (vaultName) openInObsidian(vaultName, relPath); });
@@ -277,18 +347,34 @@ async function refreshLeftAfterChat() {
 
 // ---- Chat (an die Datei geheftet) -------------------------------------------
 
-function addChatMsg(role, initialText = "") {
+function addChatMsg(role, initialText = "", streaming = true) {
   const wrap = el("div", { className: `ws-chat-msg ${role}` });
   const bubble = el("div", { className: "ws-chat-bubble" });
   if (role === "user") {
     bubble.textContent = initialText;
-  } else {
+  } else if (initialText) {
+    bubble.innerHTML = renderMarkdown(initialText);
+    wireVaultImages(bubble);
+  } else if (streaming) {
     bubble.classList.add("streaming");
   }
   wrap.append(bubble);
   chatLogEl.append(wrap);
   chatLogEl.scrollTop = chatLogEl.scrollHeight;
   return bubble;
+}
+
+async function loadChatHistory() {
+  try {
+    const res = await fetch(`${httpBase}/vaults/${encodeURIComponent(vaultId)}/chat/history`);
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const msg of (data.messages || [])) {
+      if (msg.role === "user" || msg.role === "assistant") {
+        addChatMsg(msg.role, msg.content || "", false);
+      }
+    }
+  } catch (_) {}
 }
 
 async function sendChat() {
@@ -310,8 +396,14 @@ async function sendChat() {
       wireVaultImages(bubble);
       chatLogEl.scrollTop = chatLogEl.scrollHeight;
     } else if (event === "tool_start") {
-      const path = data.input?.path ? ` ${data.input.path}` : "";
-      chatStatusEl.textContent = `${data.tool}${path}…`;
+      const path = data.input?.path || data.input?.rel_path || data.input?.url || "";
+      const actWrap = el("div", { className: "ws-chat-msg assistant chat-activity" });
+      const actBubble = el("div", { className: "ws-chat-bubble" });
+      actBubble.textContent = `⚙ ${data.tool}${path ? ": " + path : ""}…`;
+      actWrap.append(actBubble);
+      chatLogEl.append(actWrap);
+      chatLogEl.scrollTop = chatLogEl.scrollHeight;
+      chatStatusEl.textContent = `${data.tool}…`;
     } else if (event === "tool_end") {
       if (data.ok && WRITE_TOOLS.has(data.tool)) leftDirty = true;
       if (!data.ok) chatStatusEl.textContent = `Tool fehlgeschlagen: ${data.tool}`;
@@ -418,6 +510,7 @@ async function boot() {
 
   httpBase = await getHttpBase();
   await loadVaultMeta();
+  await loadSensitiveFolders();
 
   document.getElementById("ws-reload-btn").addEventListener("click", () => loadFile().catch(() => {}));
 
@@ -468,8 +561,66 @@ async function boot() {
     const targetPath = isVault ? SCRATCHPAD_PATH : relPath;
     filePathEl.textContent = targetPath;
     document.title = `${targetPath} — EwtosBrain`;
+    loadChatHistory().catch(() => {});
     loadFile(targetPath).catch(() => {});
   });
+
+  // Clear-History
+  document.getElementById("ws-chat-clear")?.addEventListener("click", async () => {
+    if (!confirm("Chat-Verlauf löschen?")) return;
+    await fetch(`${httpBase}/tools/chat/${encodeURIComponent(vaultId)}/clear`, { method: "POST" }).catch(() => {});
+    chatLogEl.replaceChildren();
+    chatStatusEl.textContent = "";
+  });
+
+  // Checkboxen: Volltextsuche + Tool-Aktivität
+  const searchToggle = document.getElementById("ws-search-toggle");
+  const activityToggle = document.getElementById("ws-activity-toggle");
+  try {
+    const sr = await fetch(`${httpBase}/settings`);
+    if (sr.ok) {
+      const s = await sr.json();
+      if (searchToggle) searchToggle.checked = s.vault_search_enabled !== false;
+      if (activityToggle) {
+        activityToggle.checked = s.chat_show_activity !== false;
+        chatLogEl.classList.toggle("hide-activity", !activityToggle.checked);
+      }
+    }
+  } catch (_) {}
+  searchToggle?.addEventListener("change", () => {
+    fetch(`${httpBase}/settings`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vault_search_enabled: searchToggle.checked }) }).catch(() => {});
+  });
+  activityToggle?.addEventListener("change", () => {
+    chatLogEl.classList.toggle("hide-activity", !activityToggle.checked);
+    fetch(`${httpBase}/settings`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_show_activity: activityToggle.checked }) }).catch(() => {});
+  });
+
+  // Spracheingabe (Mic)
+  const micBtn = document.getElementById("ws-mic-btn");
+  let micRecognition = null;
+  micBtn?.addEventListener("click", () => {
+    if (micRecognition) {
+      micRecognition.stop(); micRecognition = null; micBtn.classList.remove("recording"); return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Spracheingabe nicht verfügbar."); return; }
+    const r = new SR();
+    r.lang = "de-DE"; r.interimResults = true; r.continuous = false;
+    const base = chatInputEl.value;
+    r.onresult = (e) => {
+      chatInputEl.value = base + Array.from(e.results).map((x) => x[0].transcript).join("");
+    };
+    r.onend = () => { micRecognition = null; micBtn.classList.remove("recording"); };
+    r.onerror = () => { micRecognition = null; micBtn.classList.remove("recording"); };
+    micRecognition = r;
+    r.start();
+    micBtn.classList.add("recording");
+  });
+
+  // Chat-History laden
+  await loadChatHistory();
 
   chatSendBtn.addEventListener("click", sendChat);
   chatInputEl.addEventListener("keydown", (e) => {

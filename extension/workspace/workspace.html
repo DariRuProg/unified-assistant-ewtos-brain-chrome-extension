@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EwtosBrain — Datei</title>
   <link rel="stylesheet" href="../themes.css">
+  <link rel="stylesheet" href="../sidepanel/renderers/base-view.css">
   <link rel="stylesheet" href="workspace.css">
 </head>
 <body>
@@ -30,12 +31,20 @@
     <aside class="ws-right">
       <div class="ws-chat-head">
         <span id="ws-chat-title">Chat zur Datei</span>
-        <button type="button" id="ws-mode-toggle" class="ws-btn" title="Zwischen Datei-Chat und Vault-Chat wechseln">↔ Vault</button>
+        <div class="ws-chat-head-actions">
+          <button type="button" id="ws-mode-toggle" class="ws-btn" title="Zwischen Datei-Chat und Vault-Chat wechseln">↔ Vault</button>
+          <button type="button" id="ws-chat-clear" class="ws-btn" title="Verlauf löschen">✕</button>
+        </div>
+      </div>
+      <div class="ws-chat-options">
+        <label><input type="checkbox" id="ws-search-toggle" checked> Volltextsuche</label>
+        <label><input type="checkbox" id="ws-activity-toggle" checked> Tool-Aktivität</label>
       </div>
       <div class="ws-chat-log" id="ws-chat-log"></div>
       <div class="ws-chat-status" id="ws-chat-status"></div>
       <div class="ws-chat-input-row">
-        <textarea class="ws-chat-input" id="ws-chat-input" rows="2" placeholder="Frage oder Anweisung zu dieser Datei… (Enter = senden, Shift+Enter = Zeilenumbruch)"></textarea>
+        <textarea class="ws-chat-input" id="ws-chat-input" rows="2" placeholder="Frage oder Anweisung… (Enter = senden, Shift+Enter = Zeilenumbruch)"></textarea>
+        <button type="button" id="ws-mic-btn" class="ws-btn" title="Spracheingabe">🎙</button>
         <button type="button" id="ws-chat-send" class="ws-btn ws-btn-primary">Senden</button>
       </div>
     </aside>
