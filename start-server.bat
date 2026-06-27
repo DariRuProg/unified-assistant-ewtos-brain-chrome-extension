@@ -68,7 +68,13 @@ if exist "server\requirements.txt" (
     echo [WARN] server\requirements.txt wurde nicht gefunden!
 )
 
-:: 4. Server starten
+:: 4. Alten Server-Prozess auf Port 9988 beenden (falls noch aktiv)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":9988 " ^| findstr "ABHÖREN LISTENING"') do (
+    echo [INFO] Beende alten Server-Prozess (PID %%p)...
+    taskkill /PID %%p /F >nul 2>&1
+)
+
+:: 5. Server starten
 echo [INFO] Starte EwtosBrain Server...
 echo.
 if exist "server\main.py" (
