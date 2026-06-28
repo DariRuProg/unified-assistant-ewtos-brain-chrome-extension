@@ -843,6 +843,12 @@ export async function renderDocumentIngest() {
   subfolderSelect.style.cssText = "width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border,#444);background:var(--bg-card,#2a2a2a);color:var(--text,inherit);margin-bottom:12px;font-size:13px;";
   SUBFOLDERS.forEach(sf => subfolderSelect.append(el("option", { value: sf, textContent: sf })));
 
+  const sensitiveRow = el("label");
+  sensitiveRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;cursor:pointer;";
+  const sensitiveCb = el("input");
+  sensitiveCb.type = "checkbox";
+  sensitiveRow.append(sensitiveCb, el("span", { textContent: "Als sensibel kennzeichnen (DSGVO — nur freigegebenes LLM)" }));
+
   const uploadBtn = el("button", { textContent: "In Vault speichern (raw/)" });
   uploadBtn.style.cssText = "width:100%;";
   uploadBtn.disabled = true;
@@ -873,6 +879,7 @@ export async function renderDocumentIngest() {
       fd.append("vault_id", selectedVaultId);
       fd.append("subfolder", subfolderSelect.value);
       fd.append("title", titleInput.value.trim());
+      fd.append("sensitive", sensitiveCb.checked ? "true" : "false");
       const res = await fetch(`${httpBase}/tools/ingest/document`, { method: "POST", body: fd });
       const text = await res.text();
       let data = null;
@@ -892,5 +899,5 @@ export async function renderDocumentIngest() {
     }
   });
 
-  state.panelBody.replaceChildren(fileInput, titleInput, subfolderSelect, uploadBtn, status, resultBox);
+  state.panelBody.replaceChildren(fileInput, titleInput, subfolderSelect, sensitiveRow, uploadBtn, status, resultBox);
 }

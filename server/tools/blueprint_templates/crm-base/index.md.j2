@@ -1,0 +1,23 @@
+---
+typ: index
+titel: CRM
+aktualisiert: {{ today }}
+---
+
+# CRM — {{ vault_name }}
+
+Agentur-Kundenverwaltung. Kunden, Projekte und Aktivitäten direkt im Vault.
+
+## Kundenstamm
+
+![[crm/kunden/kundenstamm.base]]
+
+## Projekt-Pipeline
+
+![[crm/projekte/projekt-pipeline.base]]
+
+## So funktioniert's
+
+- Neue Kunden als Datei in `crm/kunden/` (Vorlage: `crm/templates/kunde.md`).
+- Neue Projekte in `crm/projekte/` — Feld `kunde:` als Wikilink auf die Kundenkarte setzen.
+- Der Agent trägt Projektarbeit automatisch ins `## Aktivitäts-Log` der Kundenkarte ein.

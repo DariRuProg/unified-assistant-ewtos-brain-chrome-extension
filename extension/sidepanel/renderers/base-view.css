@@ -1,0 +1,34 @@
+/* Obsidian-.base als Tabellen/Karten-Ansicht. ewtos.com */
+.base-view { display: flex; flex-direction: column; gap: 8px; }
+.base-title { font-size: 1.05rem; font-weight: 600; }
+.base-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border, #2a2a2a); }
+.base-tab {
+  background: transparent; border: none; border-bottom: 2px solid transparent;
+  padding: 6px 10px; cursor: pointer; color: var(--text-muted, #999);
+  font-size: 0.85rem; border-radius: 0;
+}
+.base-tab:hover { color: var(--text, #eee); }
+.base-tab.active { color: var(--text, #eee); border-bottom-color: var(--accent, #6c8cff); font-weight: 600; }
+.base-view-meta { font-size: 0.75rem; color: var(--text-muted, #888); }
+.base-group-head {
+  font-size: 0.85rem; font-weight: 600; margin: 10px 0 2px;
+  color: var(--accent, #6c8cff);
+}
+.base-table-wrap { overflow-x: auto; }
+.base-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.base-table th, .base-table td {
+  text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border, #262626);
+  white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis;
+}
+.base-table th { color: var(--text-muted, #999); font-weight: 600; position: sticky; top: 0; background: var(--bg, #1a1a1a); }
+.base-table tbody tr { cursor: pointer; }
+.base-table tbody tr:hover { background: var(--hover, rgba(255,255,255,0.04)); }
+.base-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.base-card {
+  border: 1px solid var(--border, #2a2a2a); border-radius: 8px; padding: 10px;
+  cursor: pointer; display: flex; flex-direction: column; gap: 4px; background: var(--card-bg, rgba(255,255,255,0.02));
+}
+.base-card:hover { border-color: var(--accent, #6c8cff); }
+.base-card-title { font-weight: 600; font-size: 0.9rem; }
+.base-card-field { font-size: 0.78rem; color: var(--text-muted, #aaa); display: flex; gap: 6px; }
+.base-card-field .k { color: var(--text-muted, #777); min-width: 70px; }

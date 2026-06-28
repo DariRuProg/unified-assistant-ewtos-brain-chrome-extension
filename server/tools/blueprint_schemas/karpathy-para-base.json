@@ -16,7 +16,6 @@
     { "path": "raw/eigene-notizen", "kind": "raw" },
     { "path": "raw/kunden-input", "kind": "raw" },
     { "path": "raw/chat-archive", "kind": "raw" },
-    { "path": "raw/assets", "kind": "raw" },
     { "path": "wiki/resources/creators", "kind": "asset", "asset_type": "creator", "emoji": "🎙" },
     { "path": "wiki/resources/videos", "kind": "asset", "asset_type": "video", "emoji": "🎬" },
     { "path": "wiki/resources/playlists", "kind": "asset", "asset_type": "playlist", "emoji": "🎵" }

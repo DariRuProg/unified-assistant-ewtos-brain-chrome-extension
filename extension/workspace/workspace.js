@@ -39,6 +39,25 @@ let deleted = false;
 let sensitiveFolders = [];
 let chatMode = chatModeParam;
 let currentLoadedPath = chatMode === "vault" ? resolvedScratchpadPath : relPath;
+let _applyFileModeFromNav = null; // assigned in boot() — switches UI to file-chat after navigateTo
+
+const fileHistory = [];
+function navigateTo(path) {
+    if (!path || path === currentLoadedPath) return;
+    fileHistory.push(currentLoadedPath);
+    loadFile(path);
+    document.getElementById("ws-back-btn")?.removeAttribute("disabled");
+    if (chatMode === "vault" && _applyFileModeFromNav) _applyFileModeFromNav(path);
+    chrome.runtime.sendMessage({ type: "ws_nav_file", vault_id: vaultId, rel_path: path })
+        .catch(() => {});
+}
+function goBack() {
+    const prev = fileHistory.pop();
+    if (prev !== undefined) {
+        loadFile(prev);
+        if (!fileHistory.length) document.getElementById("ws-back-btn")?.setAttribute("disabled", "");
+    }
+}
 
 const viewEl = document.getElementById("ws-view");
 const editorEl = document.getElementById("ws-editor");
@@ -74,6 +93,47 @@ function wireVaultImages(root) {
     img.addEventListener("error", () => {
       img.replaceWith(document.createTextNode(`[Bild nicht gefunden: ${rel}]`));
     });
+  });
+}
+
+function wireVaultPaths(container) {
+  const RE = /\b((?:wiki|raw|kontext|notes|crm|inbox|journal|templates|assets)(?:\/[^\s<>"'`{}|\\^\[\]#]+)+\.(?:md|txt|json|png|jpg|jpeg|gif|webp))\b/g;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const targets = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    let p = node.parentElement;
+    let skip = false;
+    while (p && p !== container) {
+      if (["CODE", "PRE", "A"].includes(p.tagName)) { skip = true; break; }
+      p = p.parentElement;
+    }
+    RE.lastIndex = 0;
+    if (!skip && RE.test(node.textContent)) targets.push(node);
+  }
+  for (const node of targets) {
+    RE.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    while ((m = RE.exec(node.textContent)) !== null) {
+      if (m.index > last) frag.append(node.textContent.slice(last, m.index));
+      const a = el("a", { href: "#", className: "ws-tool-path-link", textContent: m[1] });
+      const captured = m[1];
+      a.addEventListener("click", (ev) => { ev.preventDefault(); navigateTo(captured); });
+      frag.append(a);
+      last = m.index + m[0].length;
+    }
+    if (last < node.textContent.length) frag.append(node.textContent.slice(last));
+    node.replaceWith(frag);
+  }
+  // Code-Spans mit Vault-Pfaden klickbar machen (KI schreibt Pfade oft in Backticks)
+  const VAULT_PATH_SIMPLE = /^(?:wiki|raw|kontext|notes|crm|inbox|journal|templates|assets)\/[^\s]+\.(?:md|txt|json|png|jpg|jpeg|gif|webp)$/;
+  container.querySelectorAll("code:not(.ws-vault-code-link)").forEach((code) => {
+    const text = code.textContent.trim();
+    if (VAULT_PATH_SIMPLE.test(text)) {
+      code.classList.add("ws-vault-code-link");
+      code.title = "Datei öffnen";
+    }
   });
 }
 
@@ -405,14 +465,24 @@ async function sendChat() {
       assistantText += data.text;
       bubble.innerHTML = renderMarkdown(assistantText);
       wireVaultImages(bubble);
+      wireVaultPaths(bubble);
       chatLogEl.scrollTop = chatLogEl.scrollHeight;
     } else if (event === "tool_start") {
       const path = data.input?.path || data.input?.rel_path || data.input?.url || "";
       const actWrap = el("div", { className: "ws-chat-msg assistant chat-activity" });
       const actBubble = el("div", { className: "ws-chat-bubble" });
-      actBubble.textContent = `⚙ ${data.tool}${path ? ": " + path : ""}…`;
+      const isFilePath = path && !path.startsWith("http") && /\.[a-z0-9]+$/i.test(path);
+      if (isFilePath) {
+        actBubble.append(`⚙ ${data.tool}: `);
+        const pathLink = el("a", { href: "#", className: "ws-tool-path-link", textContent: path });
+        pathLink.addEventListener("click", (e) => { e.preventDefault(); navigateTo(path); });
+        actBubble.append(pathLink, "…");
+      } else {
+        actBubble.textContent = `⚙ ${data.tool}${path ? ": " + path : ""}…`;
+      }
       actWrap.append(actBubble);
       chatLogEl.append(actWrap);
+      chatLogEl.append(bubble.parentElement);
       chatLogEl.scrollTop = chatLogEl.scrollHeight;
       chatStatusEl.textContent = `${data.tool}…`;
     } else if (event === "tool_end") {
@@ -420,9 +490,14 @@ async function sendChat() {
       if (!data.ok) chatStatusEl.textContent = `Tool fehlgeschlagen: ${data.tool}`;
     } else if (event === "done") {
       bubble.classList.remove("streaming");
+      wireVaultPaths(bubble);
       if (!assistantText.trim()) bubble.textContent = "(keine Antwort)";
       const u = data.usage || {};
-      chatStatusEl.textContent = `fertig — ${u.input_tokens || 0} in / ${u.output_tokens || 0} out`;
+      const cacheHit = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
+      const fileInfo = chatMode === "file" ? ` · Datei: ${rawContent.length} Zeichen` : "";
+      const msgCount = data.messages?.length;
+      const histInfo = msgCount ? ` · ${msgCount} Msgs` : "";
+      chatStatusEl.textContent = `fertig (${u.input_tokens || 0} in / ${u.output_tokens || 0} out${cacheHit} · ${toolLevel}${fileInfo}${histInfo})`;
       if (leftDirty) refreshLeftAfterChat();
     } else if (event === "error") {
       bubble.classList.remove("streaming");
@@ -431,12 +506,16 @@ async function sendChat() {
     }
   }
 
+  const toolsFull = document.getElementById("ws-tools-full")?.checked || false;
+  const toolLevel = toolsFull ? "full" : (chatMode === "vault" ? "knowledge" : "none");
+
   try {
     const res = await fetch(`${httpBase}/tools/chat/${encodeURIComponent(vaultId)}/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({
         message,
+        tool_level: toolLevel,
         ...(chatMode === "file" ? { pinned_file: { vault_id: vaultId, rel_path: currentLoadedPath } } : {}),
       }),
     });
@@ -505,6 +584,7 @@ async function boot() {
   await applyStoredTheme();
   await loadStoredLayout();
   layoutToggleBtn.addEventListener("click", toggleLayout);
+  document.getElementById("ws-back-btn")?.addEventListener("click", goBack);
 
   if (!vaultId || !relPath) {
     setLeftStatus("Fehlende Parameter (vault_id / rel_path).", "error");
@@ -525,7 +605,7 @@ async function boot() {
 
   document.getElementById("ws-reload-btn").addEventListener("click", () => loadFile().catch(() => {}));
 
-  // Wiki-Links / relative .md-Links öffnen die Zieldatei in einem neuen Tab.
+  // Wiki-Links in der Datei-Ansicht (linke Seite) → neuer Tab
   viewEl.addEventListener("click", (e) => {
     const link = e.target.closest("a.wiki-link");
     if (!link) return;
@@ -539,9 +619,47 @@ async function boot() {
     chrome.tabs.create({ url });
   });
 
+  // Wiki-Links + Code-Spans mit Vault-Pfaden in Chat-Antworten → navigateTo
+  chatLogEl.addEventListener("click", (e) => {
+    const link = e.target.closest("a.wiki-link");
+    if (link) {
+      e.preventDefault();
+      let rel = link.getAttribute("data-rel");
+      if (!rel) return;
+      if (!/\.[a-z0-9]+$/i.test(rel)) rel += ".md";
+      navigateTo(rel);
+      return;
+    }
+    const code = e.target.closest("code.ws-vault-code-link");
+    if (code) {
+      e.preventDefault();
+      navigateTo(code.textContent.trim());
+    }
+  });
+
   const chatTitleEl = document.getElementById("ws-chat-title");
   const modeToggleBtn = document.getElementById("ws-mode-toggle");
   const filePathEl = document.getElementById("ws-file-path");
+
+  _applyFileModeFromNav = (path) => {
+    chatMode = "file";
+    chatTitleEl.textContent = "Chat zur Datei";
+    if (modeToggleBtn) {
+      modeToggleBtn.textContent = "↔ Vault";
+      modeToggleBtn.style.display = "";   // sichtbar machen (war bei FAB-Öffnung ggf. "none")
+    }
+    filePathEl.textContent = path;
+    document.title = `${path} — EwtosBrain`;
+    const note = el("div", { className: "ws-chat-msg assistant" });
+    const noteBubble = el("div", {
+      className: "ws-chat-bubble",
+      style: "opacity:0.6;font-size:12px;font-style:italic",
+      textContent: `↪ Datei-Chat: ${path}`,
+    });
+    note.append(noteBubble);
+    chatLogEl.append(note);
+    chatLogEl.scrollTop = chatLogEl.scrollHeight;
+  };
 
   // Initial-Zustand wenn via FAB mit chat_mode=vault geöffnet
   if (chatModeParam === "vault") {
@@ -573,6 +691,59 @@ async function boot() {
     await fetch(`${httpBase}/tools/chat/${encodeURIComponent(vaultId)}/clear`, { method: "POST" }).catch(() => {});
     chatLogEl.replaceChildren();
     chatStatusEl.textContent = "";
+  });
+
+  // Debug-Dialog
+  const debugDialog = document.getElementById("ws-debug-dialog");
+  const debugBody = document.getElementById("ws-debug-body");
+  const debugStatus = document.getElementById("ws-debug-status");
+  document.getElementById("ws-debug-close")?.addEventListener("click", () => debugDialog?.close());
+  document.getElementById("ws-debug-btn")?.addEventListener("click", async () => {
+    if (!debugDialog || !httpBase) return;
+    debugStatus.textContent = "lädt…";
+    debugBody.innerHTML = "";
+    debugDialog.showModal();
+    try {
+      const toolsFull = document.getElementById("ws-tools-full")?.checked || false;
+      const toolLevel = toolsFull ? "full" : (chatMode === "vault" ? "knowledge" : "none");
+      const pinnedRel = chatMode === "file" ? (currentLoadedPath || "") : "";
+      const qs = `tool_level=${encodeURIComponent(toolLevel)}&pinned_rel=${encodeURIComponent(pinnedRel)}`;
+      const res = await fetch(`${httpBase}/tools/chat/${encodeURIComponent(vaultId)}/debug-context?${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      debugStatus.textContent = "";
+      const kB = n => n >= 1000 ? `${(n / 1000).toFixed(1)} kZ` : `${n} Z`;
+      const row = (label, val) =>
+        `<tr><td style="color:var(--ws-muted);padding:2px 12px 2px 0;white-space:nowrap">${label}</td><td><strong>${val}</strong></td></tr>`;
+      const total = d.system_prompt_tokens_est + d.tool_defs_tokens_est + d.history_tokens_est;
+      const sysEscaped = d.system_prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      debugBody.innerHTML = `
+        <table style="border-collapse:collapse;margin-bottom:16px;font-size:13px">
+          ${row("Modus", `${d.tool_level}${d.pinned_rel ? " · Datei: " + d.pinned_rel : ""}`)}
+          ${row("Prompt-Quelle", d.prompt_source)}
+          ${row("System-Prompt", `${kB(d.system_prompt_chars)} ≈ ${d.system_prompt_tokens_est} Tokens`)}
+          ${row("Tool-Definitionen", `${d.tool_count} Tools · ${kB(d.tool_defs_chars)} ≈ ${d.tool_defs_tokens_est} Tokens`)}
+          ${row("Verlauf (History)", `${d.history_messages} Msgs · ${kB(d.history_chars)} ≈ ${d.history_tokens_est} Tokens`)}
+          ${row("Σ (ohne Datei/Nachricht)", `<span style="color:var(--ws-accent)">~${total} Tokens</span>`)}
+        </table>
+        <details>
+          <summary style="cursor:pointer;color:var(--ws-muted);font-size:12px;margin-bottom:8px">System-Prompt anzeigen (${kB(d.system_prompt_chars)})</summary>
+          <pre style="white-space:pre-wrap;font-size:12px;background:var(--ws-code-bg);padding:10px;border-radius:8px;overflow:auto;max-height:340px">${sysEscaped}</pre>
+        </details>`;
+      if (d.api_payload) {
+        const payloadJson = JSON.stringify(d.api_payload, null, 2);
+        const byteKb = (new Blob([payloadJson]).size / 1024).toFixed(1);
+        const jsonEscaped = payloadJson.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        debugBody.innerHTML += `
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer;color:var(--ws-muted);font-size:12px;margin-bottom:8px">Roh-JSON (API-Payload, ${byteKb} kB) — ohne Datei-Inhalt + aktuelle Nachricht</summary>
+            <pre style="white-space:pre-wrap;font-size:11px;background:var(--ws-code-bg);padding:10px;border-radius:8px;overflow:auto;max-height:400px">${jsonEscaped}</pre>
+          </details>`;
+      }
+    } catch (err) {
+      debugStatus.textContent = "";
+      debugBody.textContent = `Fehler: ${err.message}`;
+    }
   });
 
   // Checkboxen: Volltextsuche + Tool-Aktivität

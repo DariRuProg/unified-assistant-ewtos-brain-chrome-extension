@@ -245,10 +245,12 @@ def save_raw_content(
     canonical: str | None = None,
     h1: str | None = None,
     tags: list[str] | None = None,
+    sensitive: bool = False,
 ) -> dict[str, Any]:
     """Save arbitrary content to vault/raw/<subfolder>/<date>-<slug>.md.
 
     Permissions: requires `write_raw` on the target vault.
+    sensitive=True markiert die Datei mit `sensibel: true` (nur freigegebenes LLM).
     """
     vault = settings.get_vault(vault_id)
     if not vault:
@@ -283,6 +285,8 @@ def save_raw_content(
         f"datum: {today}",
         f"titel: {title.strip()}",
     ]
+    if sensitive:
+        frontmatter_lines.append("sensibel: true")
     if description:
         frontmatter_lines.append(f"beschreibung: {description.strip()}")
     if tags:

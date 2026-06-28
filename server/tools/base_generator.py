@@ -52,8 +52,11 @@ def _render_filter(f: dict) -> str:
 def _render_source_filter(source: dict) -> str:
     folder = source["folder"]
     recursive = source.get("recursive", True)
-    fn = "file.inFolder" if recursive else "file.inDirectFolder"
-    return f'{fn}("{folder}")'
+    # Obsidian Bases kennt nur file.inFolder() (rekursiv). "Nur direkter Ordner"
+    # gibt es nicht als Funktion — entspricht einem Gleichheits-Check auf file.folder.
+    if recursive:
+        return f'file.inFolder("{folder}")'
+    return f'file.folder == "{folder}"'
 
 
 def _build_filters_block(source: dict, filters: list[dict] | None) -> list[str]:
@@ -138,7 +141,15 @@ def _render_view(view: dict, default_order: list[str]) -> list[str]:
 
     group_by = view.get("group_by")
     if group_by:
-        lines.append(f"    groupBy: {group_by}")
+        if isinstance(group_by, dict):
+            prop = group_by["property"]
+            direction = str(group_by.get("direction", "asc")).upper()
+        else:
+            prop = group_by
+            direction = "ASC"
+        lines.append("    groupBy:")
+        lines.append(f"      property: {prop}")
+        lines.append(f"      direction: {direction}")
 
     if default_order:
         lines.append("    order:")

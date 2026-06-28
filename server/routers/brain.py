@@ -162,6 +162,7 @@ async def ingest_document_endpoint(
     vault_id: str = Form(...),
     subfolder: str = Form("artikel"),
     title: str = Form(""),
+    sensitive: bool = Form(False),
 ) -> dict[str, Any]:
     if not settings.vault_permission(vault_id, "write_raw"):
         raise HTTPException(403, t("err.raw_ingest_denied"))
@@ -196,6 +197,7 @@ async def ingest_document_endpoint(
             content=content,
             target_subfolder=subfolder,
             description=" | ".join(desc_parts),
+            sensitive=sensitive,
         )
     except PermissionError as e:
         raise HTTPException(403, str(e))

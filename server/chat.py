@@ -21,8 +21,8 @@ import config
 import i18n
 import paths
 import settings
-from llm_client import effective_llm_config, get_backend
-from tools import blueprint, bookmarks, notes_file, playlists, raw_promoter, vault_audit, videos, wiki_reader
+from llm_client import active_allowed_for_sensitive, effective_llm_config, get_backend
+from tools import blueprint, bookmarks, notes_file, playlists, raw_promoter, sensitive, vault_audit, videos, wiki_reader
 
 log = logging.getLogger("ewtosbrain.chat")
 
@@ -32,66 +32,25 @@ DEFAULT_MAX_TURNS = 20
 MAX_TOOL_ITERATIONS = 15
 MAX_TOKENS_RESPONSE = 16000
 
-BASE_SYSTEM_PROMPT = """Du bist ein Assistent für einen Markdown-Vault. Du hilfst dem Owner Informationen aus seinem Vault zu finden — du bist NICHT der Owner.
+BASE_SYSTEM_PROMPT = """You are an assistant for a Markdown vault. You help the owner find information in their vault — you are NOT the owner.
 
-## Vault-Lese-Tools
-- `list_folder(path)` — listet .md-Dateien und Unterordner. Pfad relativ zum Vault-Root. Leer = Vault-Root.
-- `read_file(path)` — liest eine .md-Datei. Pfad relativ zum Vault-Root.
-- `search_vault(q)` — case-insensitive Volltextsuche über alle .md-Dateien (inkl. raw/). Gibt Treffer-Pfade + Snippets zurück. Danach gezielt mit `read_file` die relevanten Treffer lesen.
-- `audit_vault()` — read-only Health-Check: Orphans, un-ingestete raw-Dateien, kaputte Wikilinks, fehlende Frontmatter, CLAUDE.md-Drift. Nutze bei „prüf/checke/lint meinen Vault". Du führst KEINE Reparaturen selbst aus — du berichtest die Befunde und empfiehlst den CLAUDE.md-Upgrade-Button im Sidepanel.
+Your tools are described in the tool list (read/search vault, notes/todos/bookmarks, playlists, YouTube farming / writing wiki pages, web/media like scrape/SEO/image). When a tool applies is stated in its own description — follow it. Only some tools may be available; use only what is actually present.
 
-## Notiz-Tools (vault-übergreifend, eine zentrale Inbox)
+The topic axis in the vault is the free frontmatter field `thema` (e.g. `ai`, `marketing`) — no topic folders, no whitelist. Videos/playlists live flat under `wiki/resources/`.
 
-**Todos** (`notes/todos.md`) — strukturierte Aufgabenliste:
-- `list_todos()` — alle Todos mit done-Status und Due-Date.
-- `add_todo(text, due?)` — neuen Todo am Ende anhängen. Due-Format: `YYYY-MM-DD` oder `YYYY-MM-DD HH:MM`.
-- `update_todo(match_text, action)` — Todo abhaken (`complete`), Haken weg (`uncomplete`) oder löschen (`delete`). VOR jedem update_todo erst `list_todos` rufen. Bei mehrdeutigem Match Nutzer fragen — nicht raten.
+HONESTY (HARD): Only perform actions via tools. If a tool fails or a tool is missing (e.g. because it is not loaded in the current mode), say so clearly — **NEVER claim you created a file / farmed a video / saved something when no tool call actually did it.** No invented paths, titles, transcripts or numbers.
 
-**Scratchpad** (`notes/scratchpad.md`) — freier Notiz-Bereich. Nutze diese Tools wenn der Nutzer sagt: „**notiere**", „**merk dir das**", „**schreib auf**", „**leg eine Notiz ab**", „**halt fest**", „**Note**", „**Memo**", „**speicher das**" — solange er NICHT explizit eine Vault-Datei meint:
-- `read_scratchpad()` — den Inhalt lesen.
-- `append_scratchpad(text)` — neue Notiz unten anhängen, mit `## YYYY-MM-DD`-Überschrift. **Default-Tool** für „notiere/merk dir".
-- `replace_scratchpad(content)` — GANZEN Inhalt überschreiben. Nur wenn Nutzer „lösch alles im Scratchpad", „ersetze den Scratchpad" o.ä. explizit fordert.
+IMPORTANT: Note tools (todos/scratchpad/bookmarks) write to a GLOBAL inbox, not into the vault. For vague "note this / remember this" requests without a clearly intended vault file, the default is the scratchpad (`append_scratchpad`); if unclear, ask briefly.
 
-**Bookmarks** (`notes/bookmarks.md`) — schnelle URL-Inbox. Nutze diese Tools wenn der Nutzer sagt: „**merk URL**", „**bookmark**", „**speicher den link**", „**diese seite merken**", „**diese URL festhalten**":
-- `list_bookmarks()` — alle gespeicherten Bookmarks zeigen.
-- `add_bookmark(url, title?, note?, source?)` — neuen Bookmark anhängen, Datum automatisch.
-- `delete_bookmark(match)` — Substring-Match auf Titel oder URL. Bei Mehrdeutigkeit Fehler — dann Nutzer fragen.
+SURGICAL EDITING: For small, targeted changes to existing files (changing or deleting a sentence/a line) use `edit_file` (exact find/replace, with automatic backup) — do NOT rewrite the whole file via `write_wiki_page`. Use `write_wiki_page` only for entirely new pages or full rewrites.
 
-**Playlists** (`wiki/resources/playlists/<slug>.md` im aktiven Vault) — themen-kuratierte Sammlungen. Erfordert `write_playlists`-Recht auf dem aktiven Vault. Bei Permission-Fehler den Fehler 1:1 weitergeben:
-- `list_playlists()` — alle Playlists des Vaults zeigen. Jeder Eintrag enthält ein `thema`-Feld.
-- `create_playlist(name, thema?)` — neue Playlist anlegen unter `wiki/resources/playlists/<slug>.md`. `thema` ist ein freier Frontmatter-String (z.B. `ai`, `marketing`, `health`).
-- `add_to_playlist(name, url, title?, dauer?, thema?)` — Eintrag hinzufügen. Master-Video-Page wird unter `wiki/resources/videos/` angelegt. `thema` wird sonst aus der Playlist geerbt.
-- `remove_from_playlist(name, match)` — Eintrag per Substring-Match löschen.
+## Vault navigation
+Strictly follow the vault conventions below — they come from the vault's CLAUDE.md and describe structure, routines, writing style. If it says "read index.md first" → do that. If a routine is described → follow it. Wikilinks `[[pagename]]` mean `read_file('<path>/pagename.md')` (the path follows from context).
 
-**Themen-Hinweis:** Die Ordnerstruktur ist flach (PARA): Videos/Playlists liegen immer unter `wiki/resources/`. Die Themen-Achse ist das freie Frontmatter-Feld `thema` — keine Ordner, keine Whitelist. Wenn der Nutzer ein klares Thema nennt (z.B. Health, Marketing, Web-Development), setze es als `thema`.
+Cite sources with "Source: <path>".
+If you cannot find an answer in the vault, say so honestly — invent nothing. If a tool fails, report the error — NEVER confirm operations that were not carried out."""
 
-Nutze die Tools wenn der Nutzer sagt: „leg playlist X an", „füg [URL] zu meiner [name]-Playlist hinzu", „zeig meine playlists", „nimm das aus der playlist raus".
-
-**Promote zu raw** (`promote_to_raw`) — verschiebt einen Scratchpad-Block oder Todo in `vault/raw/<subfolder>/`. Nutze wenn der Nutzer sagt „schick X nach raw", „mach daraus eine Quelle", „das ist wichtig genug für den Vault", „promote nach raw". Datum wird automatisch gesetzt. Frag den Nutzer nach Titel + Beschreibung wenn nicht klar — beides optional, aber empfohlen. Subfolder muss eines sein: `artikel`, `eigene-notizen`, `kunden-input/<kunde>`, `chat-archive`. Erfordert das `write_raw`-Recht auf dem aktiven Vault — ohne Recht meldet das Tool einen Permission-Fehler, den du dem Nutzer 1:1 weitergibst (NICHT Erfolg behaupten, NICHT umschreiben). Wiki-Ingest passiert NICHT automatisch — am Schluss den Nutzer auf den ingest-Hint hinweisen den das Tool zurückgibt.
-
-## Farming & Aufbau-Tools (führen ECHTE Aktionen aus — niemals nur so tun als ob)
-- `pull_youtube(url)` — zieht das Transkript eines YouTube-Videos (über Server-API bzw. die Chrome-Extension) und legt eine Roh-Datei unter `raw/youtube/` an. Nutze bei „farm dieses Video", „/farm <url>", „zieh das Transkript". Erfordert `write_raw`. Metadaten wie Aufrufe/Likes nur wenn ein YouTube-API-Key gesetzt ist — sonst lass sie ehrlich offen, erfinde KEINE Zahlen/Titel.
-- `write_wiki_page(rel_path, content, overwrite?)` — schreibt/aktualisiert eine `.md` im Vault (z.B. `wiki/resources/videos/<slug>.md`). So überführst du eine `raw/`-Quelle ins Wiki (Ingest/Kuratierung): erst `read_file` der raw-Datei, dann kuratierte Seite mit `write_wiki_page` schreiben. Erfordert `write_files`.
-- `save_to_raw(title, content, target_subfolder, description?)` — beliebige Quelle (Artikel/Notiz) nach `raw/<subfolder>/` schreiben. Erfordert `write_raw`.
-- `rebuild_indexes()` — legt fehlende `index.md`-Hubs an und baut die `## Pages`-Listen neu auf (mechanisch, kein LLM). Nutze bei „/rebuild-index" / „Indexe aufräumen". Erfordert `write_files`.
-
-## Web/Media-Tools
-- `scrape_url(url)` — lädt eine BELIEBIGE öffentliche URL server-seitig (Playwright, JS-Rendering) als Markdown. Braucht KEINE Extension. Nutze dies wenn der Nutzer eine konkrete URL nennt.
-- `page_scrape(mode?)`, `seo_check()`, `url_extractor(filter_domain?)`, `image_analyse()`, `color_picker()`, `screenshot()` — arbeiten auf der AKTUELL im Browser geöffneten Seite (aktiver Tab) und brauchen die verbundene Chrome-Extension. Meldet ein Tool, die Extension sei nicht verbunden, gib das dem Nutzer 1:1 weiter — behaupte NICHT, du hättest die Seite analysiert.
-- `generate_image(prompt)` — erzeugt ein Bild (Gemini), speichert es als Vault-Asset und liefert die fertige `![…](assets/…)`-Embed-Zeile zurück (z.B. mit `insert_into_open_file` in die offene Datei schreiben). Erfordert `write_files`. Braucht KEINE Extension.
-- `insert_into_open_file(content, position?)` — fügt Text in die GERADE GEÖFFNETE/angeheftete Datei ein (Append oder nach einer Überschrift). Nutze dies für „schreib das hier rein", „füg das Transkript/Bild in diese Datei ein". Nur im Datei-Chat verfügbar. Erfordert `write_files`.
-
-EHRLICHKEIT (HART): Führe Aktionen NUR über diese Tools aus. Wenn ein Tool fehlschlägt oder dir ein Tool fehlt, sag das klar — **behaupte NIEMALS, du hättest eine Datei angelegt/ein Video gefarmt/etwas gespeichert, wenn kein Tool-Call das wirklich getan hat.** Keine erfundenen Pfade, Titel, Transkripte oder Zahlen.
-
-WICHTIG: Notiz-Tools schreiben in einer GLOBALEN Notiz-Datei, nicht im Vault. Wenn unklar ist, ob der Nutzer eine Vault-Page oder den Scratchpad meint, frage kurz nach. Default bei vagen „notiere"-Anfragen: Scratchpad.
-
-## Vault-Navigation
-Halte dich strikt an die Vault-Konventionen unten — sie kommen aus der CLAUDE.md des Vaults und beschreiben Struktur, Routinen, Schreibstil. Wenn dort steht "lies erst index.md" → tu das. Wenn dort eine Routine beschrieben ist → folge ihr. Wikilinks `[[seitenname]]` heißen `read_file('<pfad>/seitenname.md')` (Pfad ergibt sich aus dem Kontext).
-
-Quellen zitieren mit "Quelle: <pfad>".
-Wenn du im Vault keine Antwort findest, sag das ehrlich — erfinde nichts. Wenn ein Todo-/Scratchpad-Tool fehlschlägt, melde den Fehler — bestätige NIEMALS Operationen die nicht ausgeführt wurden."""
-
-DEFAULT_TAIL = """\n\n(Kein CLAUDE.md im Vault gefunden — navigiere bestmöglich anhand der Datei- und Ordnernamen. Beginne mit `list_folder('')` um die oberste Struktur zu sehen.)"""
+DEFAULT_TAIL = """\n\n(No CLAUDE.md found in the vault — navigate as best you can using file and folder names. Start with `list_folder('')` to see the top-level structure.)"""
 
 
 PROMPT_GENERATOR_INSTRUCTION = """Du bekommst gleich die CLAUDE.md eines Vaults (typischerweise ein Obsidian-Vault, oft nach Karpathy-Methode aufgebaut). Deine Aufgabe: schreib einen System-Prompt für einen anderen Assistenten (auch ein LLM), der diesen Vault als Wissensquelle nutzen soll, um Fragen seines Owners zu beantworten.
@@ -158,74 +117,74 @@ def _trim_history(messages: list[dict], max_turns: int) -> list[dict]:
 
 SEARCH_TOOL_DEF = {
     "name": "search_vault",
-    "description": "Case-insensitive Volltextsuche über alle .md-Dateien des Vaults (inkl. raw/). Gibt Treffer-Pfade + Kontext-Snippets zurück. Danach gezielt mit read_file die relevanten Dateien vollständig lesen.",
+    "description": "Case-insensitive full-text search across all .md files of the vault (incl. raw/). Returns matching paths + context snippets. Then read the relevant files fully with read_file.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "q": {"type": "string", "description": "Suchbegriff (wird case-insensitive gematcht)"},
-            "max_results": {"type": "integer", "description": "Maximale Treffer-Anzahl (Default: 30)"},
+            "q": {"type": "string", "description": "Search term (matched case-insensitively)"},
+            "max_results": {"type": "integer", "description": "Maximum number of matches (default: 30)"},
         },
         "required": ["q"],
     },
 }
 
-SEARCH_INSTRUCTION = """\n\n## Such-Strategie
-Bei konkreten Stichwort- oder Themen-Fragen ("was macht X", "finde Y", "gibt es was zu Z", "erkläre mir Z") ZUERST `search_vault` aufrufen, dann die Treffer-Dateien mit `read_file` vollständig lesen und dann antworten. Index-/Wikilink-Navigation bleibt für Überblicks-Fragen ("welche Themen", "was hast du alles"). Wenn die Vault-CLAUDE.md "Grep" erwähnt — `search_vault` ist dieses Grep."""
+SEARCH_INSTRUCTION = """\n\n## Search strategy
+For concrete keyword or topic questions ("what does X do", "find Y", "is there anything on Z", "explain Z") FIRST call `search_vault`, then read the matching files fully with `read_file`, then answer. Index/wikilink navigation stays for overview questions ("which topics", "what do you have"). If the vault's CLAUDE.md mentions "Grep" — `search_vault` is that Grep."""
 
 TOOL_DEFS = [
     {
         "name": "list_folder",
-        "description": "Listet .md-Dateien und Unterordner an einem Pfad innerhalb des Vaults. Pfad ist relativ zum Vault-Root. Leerer Pfad oder ausgelassen = Vault-Root.",
+        "description": "Lists .md files and subfolders at a path within the vault. Path is relative to the vault root. Empty or omitted path = vault root.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Pfad zum Ordner relativ zum Vault-Root. Leer für Root.",
+                    "description": "Path to the folder relative to the vault root. Empty for root.",
                 },
             },
         },
     },
     {
         "name": "read_file",
-        "description": "Liest eine .md-Datei aus dem Vault. Pfad ist relativ zum Vault-Root.",
+        "description": "Reads a .md file from the vault. Path is relative to the vault root.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Pfad relativ zum Vault-Root"},
+                "path": {"type": "string", "description": "Path relative to the vault root"},
             },
             "required": ["path"],
         },
     },
     {
         "name": "audit_vault",
-        "description": "Read-only Health-Check des Vaults: findet Orphans (Pages nicht im Index), un-ingestete raw-Dateien, kaputte Wikilinks, fehlende Pflicht-Frontmatter und veraltete CLAUDE.md-Sektionen. Nutze bei 'prüf/checke/lint meinen Vault', 'ist mein Vault sauber', 'was stimmt nicht'.",
+        "description": "Read-only health check of the vault: finds orphans (pages not in the index), un-ingested raw files, broken wikilinks, missing required frontmatter and outdated CLAUDE.md sections. Use for 'check/lint my vault', 'is my vault clean', 'what's wrong'.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "list_todos",
-        "description": "Zeigt alle Todos aus der globalen Todos-Liste. VOR jedem update_todo aufrufen, um den eindeutigen Treffer zu finden.",
+        "description": "Shows all todos from the global todos list. Call BEFORE every update_todo to find the unique match.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "add_todo",
-        "description": "Hängt einen neuen Todo am Ende der Liste an. Optional mit Fälligkeitsdatum.",
+        "description": "Appends a new todo at the end of the list. Optionally with a due date.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "Todo-Text"},
-                "due": {"type": "string", "description": "Optional. Format YYYY-MM-DD oder YYYY-MM-DD HH:MM"},
+                "text": {"type": "string", "description": "Todo text"},
+                "due": {"type": "string", "description": "Optional. Format YYYY-MM-DD or YYYY-MM-DD HH:MM"},
             },
             "required": ["text"],
         },
     },
     {
         "name": "update_todo",
-        "description": "Verändert ein bestehendes Todo. action=complete/uncomplete/delete. match_text wird per Substring (case-insensitive) gegen die Todo-Texte gematcht. Bei mehrdeutigem Match wirft das Tool einen Fehler — dann Nutzer fragen.",
+        "description": "Modifies an existing todo. action=complete/uncomplete/delete. match_text is matched as a substring (case-insensitive) against the todo texts. On an ambiguous match the tool raises an error — then ask the user.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "match_text": {"type": "string", "description": "Eindeutiger Substring des Todo-Texts"},
+                "match_text": {"type": "string", "description": "Unique substring of the todo text"},
                 "action": {"type": "string", "enum": ["complete", "uncomplete", "delete"]},
             },
             "required": ["match_text", "action"],
@@ -233,64 +192,64 @@ TOOL_DEFS = [
     },
     {
         "name": "read_scratchpad",
-        "description": "Liest die zentrale freie Notiz-Datei (Scratchpad). Nutze dieses Tool wenn der Nutzer fragt 'was hab ich notiert', 'zeig meine notizen', 'was steht im scratchpad'.",
+        "description": "Reads the central free-form note file (scratchpad). Use this tool when the user asks 'what did I note', 'show my notes', 'what's in the scratchpad'.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "append_scratchpad",
-        "description": "Hängt eine neue Notiz unten an die zentrale Notiz-Datei (Scratchpad), mit ## YYYY-MM-DD als Überschrift. DEFAULT-TOOL für freie Notizen — nutze es wenn der Nutzer sagt: 'notiere', 'merk dir', 'schreib auf', 'leg eine note ab', 'halt fest', 'speicher das', 'memo', 'note'. Niemals diese Anfragen einfach mit Text bestätigen ohne das Tool zu rufen.",
+        "description": "Appends a new note to the bottom of the central note file (scratchpad), with ## YYYY-MM-DD as a heading. DEFAULT TOOL for free-form notes — use it when the user says: 'note', 'remember', 'write down', 'jot this', 'keep this', 'save this', 'memo'. Never just confirm these requests with text without calling the tool.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "Inhalt der neuen Notiz (ohne Datums-Header — das macht das Tool)"},
+                "text": {"type": "string", "description": "Content of the new note (without date header — the tool adds it)"},
             },
             "required": ["text"],
         },
     },
     {
         "name": "replace_scratchpad",
-        "description": "Überschreibt den GANZEN Scratchpad-Inhalt. Nur nutzen wenn der Nutzer das explizit will ('lösch alles', 'ersetze den scratchpad mit ...'). Bei normalen 'notiere'-Anfragen → append_scratchpad.",
+        "description": "Overwrites the ENTIRE scratchpad content. Only use when the user explicitly wants it ('delete everything', 'replace the scratchpad with ...'). For normal 'note' requests → append_scratchpad.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "content": {"type": "string", "description": "Neuer kompletter Inhalt"},
+                "content": {"type": "string", "description": "New complete content"},
             },
             "required": ["content"],
         },
     },
     {
         "name": "list_bookmarks",
-        "description": "Zeigt alle gespeicherten Bookmarks aus notes/bookmarks.md. Nutze wenn der Nutzer fragt 'was hab ich gemerkt', 'zeig meine bookmarks', 'welche urls hab ich gespeichert'.",
+        "description": "Shows all saved bookmarks from notes/bookmarks.md. Use when the user asks 'what did I save', 'show my bookmarks', 'which urls did I save'.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "add_bookmark",
-        "description": "Fügt eine URL zur Bookmarks-Inbox hinzu. Nutze wenn der Nutzer sagt 'merk URL X', 'bookmark diese seite', 'speicher den link X'. Datum wird automatisch gesetzt.",
+        "description": "Adds a URL to the bookmarks inbox. Use when the user says 'save URL X', 'bookmark this page', 'save the link X'. The date is set automatically.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "Die URL (mit http:// oder https://)"},
-                "title": {"type": "string", "description": "Optional. Titel oder Beschreibung. Default = URL."},
-                "note": {"type": "string", "description": "Optional. Eine kurze Notiz."},
-                "source": {"type": "string", "description": "Optional. Default 'manual'. Beispiele: chrome-tab, context-menu, multi-tab."},
+                "url": {"type": "string", "description": "The URL (with http:// or https://)"},
+                "title": {"type": "string", "description": "Optional. Title or description. Default = URL."},
+                "note": {"type": "string", "description": "Optional. A short note."},
+                "source": {"type": "string", "description": "Optional. Default 'manual'. Examples: chrome-tab, context-menu, multi-tab."},
             },
             "required": ["url"],
         },
     },
     {
         "name": "delete_bookmark",
-        "description": "Löscht einen Bookmark per Substring-Match auf Titel oder URL. Bei Mehrdeutigkeit Fehler — dann Nutzer fragen.",
+        "description": "Deletes a bookmark by substring match on title or URL. On ambiguity raises an error — then ask the user.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "match": {"type": "string", "description": "Substring von Titel oder URL"},
+                "match": {"type": "string", "description": "Substring of title or URL"},
             },
             "required": ["match"],
         },
     },
     {
         "name": "list_playlists",
-        "description": "Listet alle Playlists des aktiven Vaults (wiki/resources/playlists/). Jeder Eintrag enthält `name`, `slug`, `thema`, `path`, `item_count`. Erfordert write_playlists-Recht.",
+        "description": "Lists all playlists of the active vault (wiki/resources/playlists/). Each entry contains `name`, `slug`, `thema`, `path`, `item_count`. Requires write_playlists permission.",
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -298,98 +257,98 @@ TOOL_DEFS = [
     },
     {
         "name": "create_playlist",
-        "description": "Legt eine neue Playlist an unter wiki/resources/playlists/<slug>.md mit Frontmatter (typ:playlist, titel, optional thema). Bei doppeltem Namen Fehler.",
+        "description": "Creates a new playlist at wiki/resources/playlists/<slug>.md with frontmatter (typ:playlist, titel, optional thema). On a duplicate name raises an error.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Lesbarer Name, z.B. 'KI Tutorials'"},
-                "thema": {"type": "string", "description": "Optional. Freies Frontmatter-Feld (z.B. 'ai', 'health', 'marketing')."},
+                "name": {"type": "string", "description": "Readable name, e.g. 'AI Tutorials'"},
+                "thema": {"type": "string", "description": "Optional. Free frontmatter field (e.g. 'ai', 'health', 'marketing')."},
             },
             "required": ["name"],
         },
     },
     {
         "name": "add_to_playlist",
-        "description": "Fügt ein Video zu einer Playlist hinzu. Erzeugt SOFORT die Master-Video-Page in wiki/resources/videos/<slug>.md (Frontmatter mit URL, Kanal, Dauer, Thumbnail; Body als Skeleton mit pending Summary/Transkript), und schreibt einen Referenz-Block in die Playlist. WICHTIG: Wenn der Nutzer sagt 'füg X zur playlist Y hinzu' — RUFE DIESES TOOL. Bestätige NIEMALS Erfolg ohne den Tool-Aufruf. Bei Erfolg melde den Inhalt der Tool-Antwort. Duplikat-Check per URL.",
+        "description": "Adds a video to a playlist. IMMEDIATELY creates the master video page at wiki/resources/videos/<slug>.md (frontmatter with URL, channel, duration, thumbnail; body as a skeleton with pending summary/transcript), and writes a reference block into the playlist. IMPORTANT: When the user says 'add X to playlist Y' — CALL THIS TOOL. NEVER confirm success without the tool call. On success, report the content of the tool response. Duplicate check by URL.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Lesbarer Playlist-Name (wie bei create_playlist)"},
-                "url": {"type": "string", "description": "URL des Videos"},
-                "title": {"type": "string", "description": "Sichtbarer Titel des Videos"},
-                "youtuber": {"type": "string", "description": "Optional. Channel-Name / YouTuber."},
-                "dauer": {"type": "string", "description": "Optional. Format HH:MM oder MM:SS."},
-                "thema": {"type": "string", "description": "Optional. Freies Frontmatter-Feld; wird sonst aus der Playlist geerbt."},
+                "name": {"type": "string", "description": "Readable playlist name (as in create_playlist)"},
+                "url": {"type": "string", "description": "URL of the video"},
+                "title": {"type": "string", "description": "Visible title of the video"},
+                "youtuber": {"type": "string", "description": "Optional. Channel name / YouTuber."},
+                "dauer": {"type": "string", "description": "Optional. Format HH:MM or MM:SS."},
+                "thema": {"type": "string", "description": "Optional. Free frontmatter field; otherwise inherited from the playlist."},
             },
             "required": ["name", "url", "title"],
         },
     },
     {
         "name": "remove_from_playlist",
-        "description": "Entfernt ein Item per Substring-Match (Titel oder URL). Bei Mehrdeutigkeit Fehler.",
+        "description": "Removes an item by substring match (title or URL). On ambiguity raises an error.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Playlist-Name"},
-                "match": {"type": "string", "description": "Substring von Titel oder URL"},
+                "name": {"type": "string", "description": "Playlist name"},
+                "match": {"type": "string", "description": "Substring of title or URL"},
             },
             "required": ["name", "match"],
         },
     },
     {
         "name": "promote_to_raw",
-        "description": "Bewegt einen Scratchpad-Block oder Todo nach vault/raw/<subfolder>/. Nutze für 'schick X nach raw', 'das ist wichtig für den Vault', 'mach daraus eine Quelle'. Datum wird automatisch gesetzt. ERFORDERT das write_raw-Recht auf dem aktiven Vault. Bei PermissionError den Fehler 1:1 an den Nutzer weitergeben.",
+        "description": "Moves a scratchpad block or todo to vault/raw/<subfolder>/. Use for 'send X to raw', 'this is important for the vault', 'turn this into a source'. The date is set automatically. REQUIRES the write_raw permission on the active vault. On PermissionError pass the error through to the user verbatim.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "source": {"type": "string", "enum": ["scratchpad", "todos"]},
                 "identifier": {
                     "type": "string",
-                    "description": "Bei scratchpad: Datum YYYY-MM-DD oder Substring des Inhalts. Bei todos: Substring des Todo-Texts.",
+                    "description": "For scratchpad: date YYYY-MM-DD or substring of the content. For todos: substring of the todo text.",
                 },
                 "target_subfolder": {
                     "type": "string",
-                    "description": "Pfad unter raw/, beginnend mit: artikel, eigene-notizen, kunden-input/<kunde>, chat-archive",
+                    "description": "Path under raw/, starting with: artikel, eigene-notizen, kunden-input/<kunde>, chat-archive",
                 },
                 "filename_slug": {
                     "type": "string",
-                    "description": "Optional. Kebab-case Slug ohne Datum. Wird sonst aus title oder Inhalt generiert.",
+                    "description": "Optional. Kebab-case slug without date. Otherwise generated from title or content.",
                 },
-                "title": {"type": "string", "description": "Optional. Titel im Frontmatter und H1."},
-                "description": {"type": "string", "description": "Optional. Beschreibung im Frontmatter und Lead-Absatz."},
+                "title": {"type": "string", "description": "Optional. Title in frontmatter and H1."},
+                "description": {"type": "string", "description": "Optional. Description in frontmatter and lead paragraph."},
             },
             "required": ["source", "identifier", "target_subfolder"],
         },
     },
     {
         "name": "pull_youtube",
-        "description": "Zieht das Transkript eines YouTube-Videos (Server-API oder Chrome-Extension) und legt eine Roh-Datei unter raw/youtube/ an. Nutze für '/farm <url>', 'farm dieses Video', 'zieh das Transkript'. ERFORDERT write_raw. Erfinde KEINE Metadaten — nur was wirklich kommt.",
+        "description": "Pulls the transcript of a YouTube video (server API or Chrome extension) and creates a raw file under raw/youtube/. Use for '/farm <url>', 'farm this video', 'pull the transcript'. REQUIRES write_raw. Invent NO metadata — only what actually comes back.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "YouTube-Video-URL."},
-                "title": {"type": "string", "description": "Optional. Titel falls bekannt, sonst aus der URL/ID."},
-                "with_timestamps": {"type": "boolean", "description": "Optional, Default false."},
+                "url": {"type": "string", "description": "YouTube video URL."},
+                "title": {"type": "string", "description": "Optional. Title if known, otherwise from the URL/ID."},
+                "with_timestamps": {"type": "boolean", "description": "Optional, default false."},
             },
             "required": ["url"],
         },
     },
     {
         "name": "write_wiki_page",
-        "description": "Schreibt/aktualisiert eine .md-Datei im Vault (z.B. wiki/resources/videos/<slug>.md). Für Ingest/Kuratierung: erst read_file der raw-Quelle, dann kuratierte Seite hier schreiben. ERFORDERT write_files. Bei PermissionError den Fehler 1:1 weitergeben.",
+        "description": "Writes/updates a .md file in the vault (e.g. wiki/resources/videos/<slug>.md). For ingest/curation: first read_file the raw source, then write the curated page here. REQUIRES write_files. On PermissionError pass the error through verbatim.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "rel_path": {"type": "string", "description": "Pfad relativ zum Vault-Root, endet auf .md."},
-                "content": {"type": "string", "description": "Vollständiger Datei-Inhalt (Frontmatter + Markdown)."},
-                "overwrite": {"type": "boolean", "description": "Optional. true = bestehende Datei überschreiben. Default false (nur neu anlegen)."},
+                "rel_path": {"type": "string", "description": "Path relative to the vault root, ending in .md."},
+                "content": {"type": "string", "description": "Full file content (frontmatter + markdown)."},
+                "overwrite": {"type": "boolean", "description": "Optional. true = overwrite existing file. Default false (create new only)."},
             },
             "required": ["rel_path", "content"],
         },
     },
     {
         "name": "save_to_raw",
-        "description": "Speichert beliebigen Inhalt (Artikel, Notiz) nach raw/<subfolder>/<datum>-<slug>.md. ERFORDERT write_raw. Subfolder: artikel, eigene-notizen, kunden-input/<kunde>, chat-archive.",
+        "description": "Saves arbitrary content (article, note) to raw/<subfolder>/<date>-<slug>.md. REQUIRES write_raw. Subfolder: artikel, eigene-notizen, kunden-input/<kunde>, chat-archive.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -403,88 +362,145 @@ TOOL_DEFS = [
     },
     {
         "name": "rebuild_indexes",
-        "description": "Legt fehlende index.md-Hubs an und baut die ## Pages-Listen neu auf (mechanisch, kein LLM). Nutze für '/rebuild-index', 'Indexe aufräumen/neu aufbauen'. ERFORDERT write_files.",
+        "description": "Creates missing index.md hubs and rebuilds the ## Pages lists (mechanical, no LLM). Use for '/rebuild-index', 'clean up / rebuild indexes'. REQUIRES write_files.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "scrape_url",
-        "description": "Lädt eine BELIEBIGE öffentliche URL server-seitig (Playwright, JS-Rendering) und gibt sie als sauberes Markdown zurück. Braucht KEINE Extension. Nutze dies wenn der Nutzer eine konkrete URL nennt; für die schon im Browser offene Seite stattdessen page_scrape.",
+        "description": "Loads ANY public URL server-side (Playwright, JS rendering) and returns it as clean markdown. Needs NO extension. Use this when the user names a concrete URL; for the page already open in the browser use page_scrape instead.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "Vollständige URL (mit https://)."},
-                "mode": {"type": "string", "description": "Optional. 'content' (Default) = Hauptinhalt."},
+                "url": {"type": "string", "description": "Full URL (with https://)."},
+                "mode": {"type": "string", "description": "Optional. 'content' (default) = main content."},
             },
             "required": ["url"],
         },
     },
     {
         "name": "page_scrape",
-        "description": "Scrapt die AKTUELL im Browser geöffnete Seite (aktiver Tab) als sauberes Markdown (ohne Nav/Footer/Cookies), inkl. FAQ. Erfordert die verbundene Chrome-Extension. Für eine BELIEBIGE URL stattdessen scrape_url nutzen.",
+        "description": "Scrapes the page CURRENTLY open in the browser (active tab) as clean markdown (without nav/footer/cookies), incl. FAQ. Requires the connected Chrome extension. For ANY URL use scrape_url instead.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "mode": {"type": "string", "description": "Optional. 'content' (Default) = Hauptinhalt."},
+                "mode": {"type": "string", "description": "Optional. 'content' (default) = main content."},
             },
         },
     },
     {
         "name": "seo_check",
-        "description": "SEO-Audit der AKTUELL im Browser geöffneten Seite (aktiver Tab): Title, Meta-Description, H1-H3-Struktur, Canonical, OG/Twitter-Tags, Viewport, Robots. Erfordert die verbundene Chrome-Extension. Für eine BELIEBIGE URL stattdessen scrape_url nutzen.",
+        "description": "SEO audit of the page CURRENTLY open in the browser (active tab): title, meta description, H1-H3 structure, canonical, OG/Twitter tags, viewport, robots. Requires the connected Chrome extension. For ANY URL use scrape_url instead.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "url_extractor",
-        "description": "Extrahiert alle Link-URLs der AKTUELL im Browser geöffneten Seite (aktiver Tab). Erfordert die verbundene Chrome-Extension.",
+        "description": "Extracts all link URLs of the page CURRENTLY open in the browser (active tab). Requires the connected Chrome extension.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "filter_domain": {"type": "boolean", "description": "Optional. true (Default) = nur Links der aktuellen Domain."},
+                "filter_domain": {"type": "boolean", "description": "Optional. true (default) = only links of the current domain."},
             },
         },
     },
     {
         "name": "image_analyse",
-        "description": "Listet alle Bilder der AKTUELL im Browser geöffneten Seite (aktiver Tab) mit Alt-Text-Check (fehlende alt-Attribute, Dimensionen). Erfordert die verbundene Chrome-Extension.",
+        "description": "Lists all images of the page CURRENTLY open in the browser (active tab) with alt-text check (missing alt attributes, dimensions). Requires the connected Chrome extension.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "color_picker",
-        "description": "Zieht das Farbschema der AKTUELL im Browser geöffneten Seite (aktiver Tab): CSS-Custom-Properties und berechnete Schlüsselfarben. Erfordert die verbundene Chrome-Extension.",
+        "description": "Pulls the color scheme of the page CURRENTLY open in the browser (active tab): CSS custom properties and computed key colors. Requires the connected Chrome extension.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "screenshot",
-        "description": "Macht einen Screenshot des sichtbaren Bereichs der AKTUELL im Browser geöffneten Seite (aktiver Tab). Das Bild erscheint im UI — du bekommst nur eine Bestätigung, keinen Bildinhalt. Erfordert die verbundene Chrome-Extension.",
+        "description": "Takes a screenshot of the visible area of the page CURRENTLY open in the browser (active tab). The image appears in the UI — you only get a confirmation, no image content. Requires the connected Chrome extension.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "generate_image",
-        "description": "Erzeugt ein Bild aus einem Text-Prompt (Gemini) und speichert es als Asset im Vault (Default-Ordner 'assets/'). Gibt den vault-relativen Pfad + die fertige Embed-Markdown-Zeile ![…](assets/…) zurück, die du z.B. mit insert_into_open_file in die offene Datei schreiben kannst. ERFORDERT write_files. Braucht KEINE Extension.",
+        "description": "Generates an image from a text prompt (Gemini) and saves it as an asset in the vault (default folder 'assets/'). Returns the vault-relative path + the ready embed markdown line ![…](assets/…), which you can write into the open file e.g. with insert_into_open_file. REQUIRES write_files. Needs NO extension.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "prompt": {"type": "string", "description": "Bildbeschreibung."},
-                "model": {"type": "string", "description": "Optional. Default aus den Einstellungen."},
-                "asset_subfolder": {"type": "string", "description": "Optional. Vault-root-relativer Zielordner. Default 'assets'."},
+                "prompt": {"type": "string", "description": "Image description."},
+                "model": {"type": "string", "description": "Optional. Default from settings."},
+                "asset_subfolder": {"type": "string", "description": "Optional. Vault-root-relative target folder. Default 'assets'."},
             },
             "required": ["prompt"],
         },
     },
     {
         "name": "insert_into_open_file",
-        "description": "Fügt Text in die GERADE GEÖFFNETE/angeheftete Datei ein (Append ans Ende oder nach einer Überschrift). Nutze dies für 'schreib das hier rein', 'füg das Transkript/Bild in diese Datei ein'. Kein rel_path — Ziel ist immer die angeheftete Datei. ERFORDERT write_files und einen Datei-Chat ('Mit dieser Datei chatten').",
+        "description": "Inserts text into the CURRENTLY open/pinned file (append at the end or after a heading). Use this for 'write this in here', 'insert the transcript/image into this file'. No rel_path — the target is always the pinned file. REQUIRES write_files and a file chat ('chat with this file').",
         "input_schema": {
             "type": "object",
             "properties": {
-                "content": {"type": "string", "description": "Einzufügender Markdown-Text."},
+                "content": {"type": "string", "description": "Markdown text to insert."},
                 "position": {"type": "string", "enum": ["append", "after_heading"], "description": "Default append."},
-                "after_heading": {"type": "string", "description": "Bei after_heading: exakter Überschriften-Text ohne #."},
+                "after_heading": {"type": "string", "description": "For after_heading: exact heading text without #."},
             },
             "required": ["content"],
         },
     },
+    {
+        "name": "edit_file",
+        "description": "Surgical change: replaces ONE exact text segment in a vault file with another — or deletes it (leave replace empty). USE THIS for small targeted changes ('delete this sentence', 'change this line') instead of rewriting the whole file via write_wiki_page. 'find' must occur EXACTLY and UNIQUELY (otherwise an error — then provide more context). rel_path optional, default is the pinned file. REQUIRES write_files.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "find": {"type": "string", "description": "Exact existing text incl. enough context (also line breaks) to be unique."},
+                "replace": {"type": "string", "description": "New text. Empty = delete."},
+                "rel_path": {"type": "string", "description": "Optional: path relative to the vault root. Default: pinned file."},
+            },
+            "required": ["find"],
+        },
+    },
 ]
+
+
+# Read-only-Teilmenge: Navigation + (separat) Volltextsuche. search_vault über search_on.
+_READONLY_TOOL_NAMES = {"list_folder", "read_file", "audit_vault"}
+READONLY_TOOL_DEFS = [t for t in TOOL_DEFS if t["name"] in _READONLY_TOOL_NAMES]
+
+# Notiz-Tools (global, kein Vault nötig) — in Vault- und File-Chat immer dabei.
+_NOTES_TOOL_NAMES = {"list_todos", "add_todo", "update_todo", "read_scratchpad",
+                     "append_scratchpad", "replace_scratchpad",
+                     "list_bookmarks", "add_bookmark", "delete_bookmark"}
+NOTES_TOOL_DEFS = [t for t in TOOL_DEFS if t["name"] in _NOTES_TOOL_NAMES]
+
+# Bearbeiten der OFFENEN Datei (File-Chat mit Tools) — kein Farming/SEO/Media.
+_FILE_EDIT_TOOL_NAMES = {"edit_file", "insert_into_open_file"}
+FILE_EDIT_TOOL_DEFS = [t for t in TOOL_DEFS if t["name"] in _FILE_EDIT_TOOL_NAMES]
+
+# Page-Chat „festhalten": Konversation in raw/ speichern (bestehendes Tool, kein Duplikat).
+SAVE_RAW_DEF = next(t for t in TOOL_DEFS if t["name"] == "save_to_raw")
+
+TOOL_LEVELS = ("none", "knowledge", "full")
+
+
+def _active_tools(mode: str, tool_level: str, search_on: bool) -> list[dict]:
+    """Modus-bewusster Tool-Satz. mode: 'vault' | 'file' | 'page'.
+    tool_level vom UI-Schalter: 'none' (kein Tool), sonst der modus-spezifische Satz;
+    'full' schaltet im Vault-Chat zusätzlich das volle Arsenal frei."""
+    if tool_level == "none":
+        return []
+    search = [SEARCH_TOOL_DEF] if search_on else []
+    expanded = tool_level == "full"
+    if mode == "page":
+        # 'merken'-Modus: Notizen + Konversation in raw/ festhalten. Keine Vault-Navigation.
+        return NOTES_TOOL_DEFS + [SAVE_RAW_DEF]
+    if mode == "file":
+        # Datei-Chat mit Tools: lesen, suchen, Notizen, die OFFENE Datei bearbeiten.
+        return READONLY_TOOL_DEFS + NOTES_TOOL_DEFS + FILE_EDIT_TOOL_DEFS + search
+    # vault: Default schlank (lesen + suchen + Notizen); 'alle' → volles Arsenal.
+    base = READONLY_TOOL_DEFS + NOTES_TOOL_DEFS + search
+    return (TOOL_DEFS + search) if expanded else base
+
+
+def _norm_tool_level(value: str | None, default: str = "full") -> str:
+    v = (value or "").strip().lower()
+    return v if v in TOOL_LEVELS else default
 
 
 _TOOL_GROUPS = [
@@ -494,8 +510,8 @@ _TOOL_GROUPS = [
                          "add_bookmark", "delete_bookmark"]),
     ("Playlists & Videos", ["list_playlists", "create_playlist", "add_to_playlist",
                             "remove_from_playlist"]),
-    ("Schreiben & Farming", ["pull_youtube", "write_wiki_page", "save_to_raw", "promote_to_raw",
-                             "rebuild_indexes", "insert_into_open_file"]),
+    ("Schreiben & Farming", ["pull_youtube", "write_wiki_page", "edit_file", "save_to_raw",
+                             "promote_to_raw", "rebuild_indexes", "insert_into_open_file"]),
     ("Web & Media", ["scrape_url", "page_scrape", "seo_check", "url_extractor", "image_analyse",
                      "color_picker", "screenshot", "generate_image"]),
 ]
@@ -535,34 +551,99 @@ def _tools_overview() -> str:
 
 
 def _format_folder_listing(result: dict) -> str:
-    path_label = result["path"] or "(Vault-Root)"
-    lines = [f"Pfad: {path_label}"]
+    path_label = result["path"] or "(vault root)"
+    lines = [f"Path: {path_label}"]
     if result["folders"]:
-        lines.append("Unterordner:")
+        lines.append("Subfolders:")
         lines.extend(f"  - {f}" for f in result["folders"])
     if result["files"]:
-        lines.append("Dateien:")
+        lines.append("Files:")
         lines.extend(f"  - {f}" for f in result["files"])
     if not result["folders"] and not result["files"]:
-        lines.append("(Ordner ist leer)")
+        lines.append("(folder is empty)")
     return "\n".join(lines)
 
 
-def _build_system_prompt(vault: dict) -> tuple[str, str]:
+def _date_suffix() -> str:
+    """Volatiler Zeitstempel — bewusst als ALLERLETZTES an den System-Prompt gehängt
+    (nach allen stabilen Blöcken), damit der teure, cachebare Prefix (Base + CLAUDE.md
+    + Tools + Suchanweisung) über alle Turns einer Session byte-identisch bleibt."""
+    return f"\n\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+
+def _build_system_prompt(vault: dict, include_claude_md: bool = True) -> tuple[str, str]:
     """Return (prompt, source) where source is one of:
       - 'override'   — user-edited per-vault prompt is used (and replaces CLAUDE.md)
       - 'claude_md'  — vault has CLAUDE.md, base prompt + CLAUDE.md is used
       - 'default'    — no override, no CLAUDE.md → just base prompt + hint
-    """
-    lang_directive = f"\n\nAlways respond to the user in {i18n.lang_name()}."
-    date_line = f"Aktuelles Datum und Uhrzeit: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+
+    Der Zeitstempel wird hier NICHT angehängt — das macht der Aufrufer via _date_suffix()
+    als letzten Schritt (Cache-Prefix stabil halten, siehe _date_suffix)."""
+    lang_directive = (
+        f"\n\nRespond to the user in {i18n.lang_name()} by default."
+        f" Only respond in a different language if the user explicitly requests it."
+    )
     override = (vault.get("system_prompt") or "").strip()
     if override:
-        return date_line + override + lang_directive, "override"
-    claude_md = wiki_reader.find_claude_md(vault["path"])
-    if claude_md:
-        return date_line + f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault-Konventionen (aus CLAUDE.md)\n\n{claude_md}" + lang_directive, "claude_md"
-    return date_line + BASE_SYSTEM_PROMPT + DEFAULT_TAIL + lang_directive, "default"
+        return override + lang_directive, "override"
+    if include_claude_md:
+        claude_md = wiki_reader.find_claude_md(vault["path"])
+        if claude_md:
+            return f"{BASE_SYSTEM_PROMPT}\n\n---\n\n# Vault conventions (from CLAUDE.md)\n\n{claude_md}" + lang_directive, "claude_md"
+    return BASE_SYSTEM_PROMPT + DEFAULT_TAIL + lang_directive, "default"
+
+
+def debug_context(vault_id: str, tool_level: str = "full", pinned_rel: str = "") -> dict:
+    """Token-Breakdown für Debug-UI: System-Prompt, Tool-Defs, History."""
+    vault = settings.get_vault(vault_id)
+    if vault is None:
+        raise LookupError(vault_id)
+
+    has_pinned = bool((pinned_rel or "").strip())
+    include_claude_md = not has_pinned
+    system_prompt, prompt_src = _build_system_prompt(vault, include_claude_md=include_claude_md)
+    norm_level = _norm_tool_level(tool_level, "full")
+    search_on = settings.vault_permission(vault_id, "search_vault") is not False
+    mode = "file" if has_pinned else "vault"
+    tools = _active_tools(mode, norm_level, search_on)
+    history = _load_history(vault_id)
+
+    def _msg_chars(m: dict) -> int:
+        c = m.get("content", "")
+        if isinstance(c, list):
+            return sum(len(str(p.get("text") or p.get("content") or "")) for p in c if isinstance(p, dict))
+        return len(str(c or ""))
+
+    tool_defs_str = json.dumps(tools, ensure_ascii=False)
+    hist_chars = sum(_msg_chars(m) for m in history)
+    est = lambda n: max(1, n // 4)
+
+    full_system_prompt = system_prompt + _date_suffix()
+    _, model = effective_llm_config()
+
+    return {
+        "vault_id": vault_id,
+        "prompt_source": prompt_src,
+        "tool_level": norm_level,
+        "pinned_rel": pinned_rel or None,
+        "system_prompt": system_prompt,
+        "system_prompt_chars": len(system_prompt),
+        "system_prompt_tokens_est": est(len(system_prompt)),
+        "tool_count": len(tools),
+        "tool_defs_chars": len(tool_defs_str),
+        "tool_defs_tokens_est": est(len(tool_defs_str)),
+        "history_messages": len(history),
+        "history_chars": hist_chars,
+        "history_tokens_est": est(hist_chars),
+        "api_payload": {
+            "model": model or DEFAULT_MODEL,
+            "max_tokens": MAX_TOKENS_RESPONSE,
+            "system": [{"type": "text", "text": full_system_prompt, "cache_control": {"type": "ephemeral"}}],
+            "tools": tools,
+            "messages": history,
+            "_note": "Datei-Inhalt (bei Datei-Chat) + aktuelle Nutzernachricht werden beim echten Request zusätzlich an 'messages' angehängt.",
+        },
+    }
 
 
 def _block_to_input(block) -> dict:
@@ -603,7 +684,7 @@ def _block_to_input(block) -> dict:
 
 def _format_todos(items: list[dict]) -> str:
     if not items:
-        return "(keine Todos)"
+        return "(no todos)"
     lines = []
     for it in items:
         check = "[x]" if it["done"] else "[ ]"
@@ -619,21 +700,21 @@ def _format_audit(report: dict) -> str:
     s = report.get("summary", {})
     sev = s.get("by_severity", {})
     lines = [
-        f"**Vault-Audit:** {s.get('total', 0)} Befunde "
+        f"**Vault audit:** {s.get('total', 0)} findings "
         f"({sev.get('error', 0)} 🔴, {sev.get('warn', 0)} 🟡, {sev.get('info', 0)} 🔵) "
-        f"— {s.get('files_scanned', 0)} Dateien gescannt.",
+        f"— {s.get('files_scanned', 0)} files scanned.",
     ]
     findings = report.get("findings", [])
     if not findings:
-        return "Vault-Audit: keine Befunde — alles sauber."
+        return "Vault audit: no findings — all clean."
     for f in findings:
         icon = _SEVERITY_ICON.get(f["severity"], "•")
         path = f" `{f['path']}`" if f.get("path") else ""
         lines.append(f"- {icon} [{f['category']}]{path}: {f['message']} → {f['recommendation']}")
     has_claude = any(f["category"] == "claude_md_drift" for f in findings)
     if has_claude:
-        lines.append("\n_CLAUDE.md-Upgrade ist verfügbar — der Nutzer kann es im Sidepanel "
-                     "('Vault-Gesundheit' → CLAUDE.md aktualisieren) mit Diff-Vorschau anwenden._")
+        lines.append("\n_A CLAUDE.md upgrade is available — the user can apply it in the sidepanel "
+                     "('Vault health' → update CLAUDE.md) with a diff preview._")
     return "\n".join(lines)
 
 
@@ -645,18 +726,18 @@ def _call_server_tool(path: str, payload: dict, *, needs_browser: bool,
     try:
         resp = httpx.post(f"http://{config.HOST}:{config.PORT}{path}", json=payload, timeout=timeout)
     except Exception as e:
-        return None, f"Server-Tool nicht erreichbar (läuft der Server?): {e}"
+        return None, f"Server tool not reachable (is the server running?): {e}"
     if resp.status_code == 503:
         if needs_browser:
-            return None, ("Browser-Tool braucht die verbundene Chrome-Extension. "
-                          "Öffne das Side-Panel/die Extension und versuch es erneut.")
-        return None, f"Tool nicht verfügbar (HTTP 503): {resp.text[:200]}"
+            return None, ("Browser tool needs the connected Chrome extension. "
+                          "Open the side panel / the extension and try again.")
+        return None, f"Tool not available (HTTP 503): {resp.text[:200]}"
     if resp.status_code != 200:
-        return None, f"Tool-Fehler HTTP {resp.status_code}: {resp.text[:200]}"
+        return None, f"Tool error HTTP {resp.status_code}: {resp.text[:200]}"
     try:
         return resp.json(), None
     except Exception:
-        return None, "Tool lieferte kein JSON"
+        return None, "Tool returned no JSON"
 
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -664,11 +745,11 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 def _slugify_simple(text: str, max_len: int = 40) -> str:
     s = _SLUG_RE.sub("-", (text or "").strip().lower()).strip("-")
-    return (s[:max_len].strip("-") or "bild")
+    return (s[:max_len].strip("-") or "image")
 
 
 def _format_seo(d: dict) -> str:
-    lines = ["SEO-Audit (aktive Seite):"]
+    lines = ["SEO audit (active page):"]
     for label, key in (("URL", "url"), ("Title", "title"), ("Description", "description"),
                        ("Canonical", "canonical"), ("Viewport", "viewport"), ("Robots", "robots")):
         if d.get(key):
@@ -720,13 +801,26 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             return _format_folder_listing(wiki_reader.list_folder(vault_path, rel)), False
         if name == "read_file":
             path = tool_input.get("path", "")
-            return wiki_reader.read_file(vault_path, path), False
+            content = wiki_reader.read_file(vault_path, path)
+            blocked = sensitive.guard_text(content, vault_id=vault_id, rel_path=path)
+            if blocked:
+                return blocked, True
+            return content, False
         if name == "search_vault":
             q = tool_input.get("q", "")
             hits = wiki_reader.search_files(vault_path, q, tool_input.get("max_results", 30))
             if not hits:
-                return f"Keine Treffer für '{q}'.", False
-            return "\n".join(f"- {h['rel_path']}: …{h['snippet']}…" for h in hits), False
+                return f"No matches for '{q}'.", False
+            # DSGVO: Snippets sensibler Dateien nur ausgeben, wenn das aktive LLM dafür
+            # freigegeben ist — sonst Pfad zeigen, Inhalt zurückhalten.
+            allow_sensitive = active_allowed_for_sensitive()
+            lines = []
+            for h in hits:
+                if not allow_sensitive and sensitive.is_file_sensitive(vault_path, h["rel_path"], vault_id):
+                    lines.append(f"- {h['rel_path']}: {i18n.t('chat.search_hit_sensitive')}")
+                else:
+                    lines.append(f"- {h['rel_path']}: …{h['snippet']}…")
+            return "\n".join(lines), False
         if name == "audit_vault":
             report = vault_audit.audit_vault(vault_id)
             return _format_audit(report), False
@@ -736,8 +830,8 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             res = notes_file.add_todo(
                 tool_input.get("text", ""), tool_input.get("due"), vault_id=vault_id,
             )
-            due_str = f" (fällig {res['due']})" if res["due"] else ""
-            return f"Todo hinzugefügt: {res['added']}{due_str}", False
+            due_str = f" (due {res['due']})" if res["due"] else ""
+            return f"Todo added: {res['added']}{due_str}", False
         if name == "update_todo":
             res = notes_file.update_todo(
                 tool_input.get("match_text", ""),
@@ -747,25 +841,25 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             return f"{res['action']}: {res['todo']}", False
         if name == "read_scratchpad":
             data = notes_file.read_scratchpad(vault_id=vault_id)
-            return data["content"] or "(Scratchpad ist leer)", False
+            return data["content"] or "(scratchpad is empty)", False
         if name == "append_scratchpad":
             res = notes_file.append_scratchpad(tool_input.get("text", ""), vault_id=vault_id)
-            return f"Scratchpad ergänzt unter Datum {res['date']}", False
+            return f"Scratchpad appended under date {res['date']}", False
         if name == "replace_scratchpad":
             res = notes_file.replace_scratchpad(tool_input.get("content", ""), vault_id=vault_id)
-            note = " (vorherige Version gesichert)" if res.get("backup") else ""
-            return f"Scratchpad ersetzt ({res['length']} Zeichen){note}", False
+            note = " (previous version backed up)" if res.get("backup") else ""
+            return f"Scratchpad replaced ({res['length']} chars){note}", False
         if name == "list_bookmarks":
             items = bookmarks.list_bookmarks(vault_id=vault_id)
             if not items:
-                return "(keine Bookmarks gespeichert)", False
+                return "(no bookmarks saved)", False
             lines = []
             for it in items:
                 line = f"- [{it['date']}] [{it['title']}]({it['url']})"
                 if it["note"]:
                     line += f" — {it['note']}"
                 if it["source"]:
-                    line += f" (quelle: {it['source']})"
+                    line += f" (source: {it['source']})"
                 lines.append(line)
             return "\n".join(lines), False
         if name == "add_bookmark":
@@ -776,14 +870,14 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 tool_input.get("source") or "manual",
                 vault_id=vault_id,
             )
-            return f"Bookmark hinzugefügt: {res['added']} ({res['url']})", False
+            return f"Bookmark added: {res['added']} ({res['url']})", False
         if name == "delete_bookmark":
             res = bookmarks.delete_bookmark(tool_input.get("match", ""), vault_id=vault_id)
-            return f"Bookmark gelöscht: {res['deleted']}", False
+            return f"Bookmark deleted: {res['deleted']}", False
         if name == "list_playlists":
             pls = playlists.list_playlists(vault_id)
             if not pls:
-                return "(keine Playlists im aktiven Vault)", False
+                return "(no playlists in the active vault)", False
             lines = [
                 f"- {p['name']}{' [' + p['thema'] + ']' if p.get('thema') else ''} ({p['item_count']} Items) → {p['path']}"
                 for p in pls
@@ -795,7 +889,7 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 tool_input.get("name", ""),
                 tool_input.get("thema"),
             )
-            return f"Playlist '{res['name']}' angelegt → {res['path']}", False
+            return f"Playlist '{res['name']}' created → {res['path']}", False
         if name == "add_to_playlist":
             res = playlists.add_to_playlist(
                 vault_id,
@@ -807,16 +901,16 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 thema=tool_input.get("thema"),
             )
             if not res.get("added"):
-                return f"Bereits in Playlist (Duplikat): {res.get('title') or res.get('url')}", False
-            note = " — Video-Page neu angelegt" if res.get("video_created") else " — Video-Page existierte schon, Playlist-Liste erweitert"
-            return f"Hinzugefügt zu '{res['name']}': {res['title']} → {res['video_page']}{note}", False
+                return f"Already in playlist (duplicate): {res.get('title') or res.get('url')}", False
+            note = " — video page newly created" if res.get("video_created") else " — video page already existed, playlist list extended"
+            return f"Added to '{res['name']}': {res['title']} → {res['video_page']}{note}", False
         if name == "remove_from_playlist":
             res = playlists.remove_from_playlist(
                 vault_id,
                 tool_input.get("name", ""),
                 tool_input.get("match", ""),
             )
-            return f"Entfernt: {res['title']}", False
+            return f"Removed: {res['title']}", False
         if name == "promote_to_raw":
             res = raw_promoter.promote_to_raw(
                 vault_id=vault_id,
@@ -828,14 +922,14 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 description=tool_input.get("description"),
             )
             return (
-                f"Promotet nach {res['raw_path']}. {res['ingest_hint']}",
+                f"Promoted to {res['raw_path']}. {res['ingest_hint']}",
                 False,
             )
 
         if name == "pull_youtube":
             url = (tool_input.get("url") or "").strip()
             if not url:
-                return "url fehlt", True
+                return "url missing", True
             with_ts = bool(tool_input.get("with_timestamps"))
             try:
                 resp = httpx.post(
@@ -843,16 +937,16 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                     json={"url": url, "with_timestamps": with_ts}, timeout=130,
                 )
             except Exception as e:
-                return f"YouTube-Pull nicht möglich (läuft der Server, ist die Extension verbunden?): {e}", True
+                return f"YouTube pull not possible (is the server running, is the extension connected?): {e}", True
             if resp.status_code == 503:
-                return ("Kein Transkript: Server-API hat nichts geliefert und die Chrome-Extension "
-                        "ist nicht verbunden (Browser-Fallback fehlt). Extension öffnen und erneut versuchen."), True
+                return ("No transcript: server API returned nothing and the Chrome extension "
+                        "is not connected (browser fallback missing). Open the extension and try again."), True
             if resp.status_code != 200:
-                return f"Transkript-Fehler HTTP {resp.status_code}: {resp.text[:200]}", True
+                return f"Transcript error HTTP {resp.status_code}: {resp.text[:200]}", True
             data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
             transcript = (data.get("transcript") or "").strip()
             if not transcript:
-                return f"Kein Transkript erhalten: {str(data)[:200]}", True
+                return f"No transcript received: {str(data)[:200]}", True
             res = raw_promoter.save_video_to_raw(
                 vault_id=vault_id, url=url,
                 title=(data.get("title") or tool_input.get("title") or "").strip(),
@@ -862,30 +956,30 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 upload_date=data.get("upload_date"), thumbnail_url=data.get("thumbnail_url"),
                 description=data.get("description"),
             )
-            meta_note = "inkl. Metadaten" if data.get("channel") or data.get("views") is not None else "ohne Metadaten (yt-dlp/Key?)"
-            return (f"Transkript gezogen ({len(transcript)} Zeichen, {meta_note}) und gespeichert: {res['raw_path']}. "
-                    f"Für die Wiki-Seite: write_wiki_page nutzen (oder /ingest in Claude Code).", False)
+            meta_note = "incl. metadata" if data.get("channel") or data.get("views") is not None else "without metadata (yt-dlp/key?)"
+            return (f"Transcript pulled ({len(transcript)} chars, {meta_note}) and saved: {res['raw_path']}. "
+                    f"For the wiki page: use write_wiki_page (or /ingest in Claude Code).", False)
 
         if name == "write_wiki_page":
             if not settings.vault_permission(vault_id, "write_files"):
-                return ("Kein Schreibrecht auf Dateien in diesem Vault. In den Einstellungen aktivieren: "
-                        "'EwtosBrain darf .md-Dateien bearbeiten und neue anlegen'."), True
+                return ("No write permission for files in this vault. Enable it in settings: "
+                        "'EwtosBrain may edit and create .md files'."), True
             rel = (tool_input.get("rel_path") or "").strip()
             if not rel:
-                return "rel_path fehlt", True
+                return "rel_path missing", True
             if not rel.endswith(".md"):
                 rel += ".md"
             content = tool_input.get("content") or ""
             try:
                 wiki_reader.create_file(vault_path, rel, content)
-                return f"Seite angelegt: {rel}", False
+                return f"Page created: {rel}", False
             except FileExistsError:
                 if not tool_input.get("overwrite"):
-                    return f"Datei existiert bereits: {rel}. Setze overwrite=true zum Überschreiben.", True
+                    return f"File already exists: {rel}. Set overwrite=true to overwrite.", True
                 backup = wiki_reader.backup_file(vault_path, rel)
                 wiki_reader.write_file(vault_path, rel, content)
-                note = f" (vorherige Version gesichert: {backup})" if backup else ""
-                return f"Seite aktualisiert: {rel}{note}", False
+                note = f" (previous version backed up: {backup})" if backup else ""
+                return f"Page updated: {rel}{note}", False
 
         if name == "save_to_raw":
             res = raw_promoter.save_raw_content(
@@ -894,19 +988,19 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 target_subfolder=tool_input.get("target_subfolder", ""),
                 description=tool_input.get("description"),
             )
-            return f"Gespeichert: {res['raw_path']}. {res['ingest_hint']}", False
+            return f"Saved: {res['raw_path']}. {res['ingest_hint']}", False
 
         if name == "rebuild_indexes":
             if not settings.vault_permission(vault_id, "write_files"):
-                return "Kein Schreibrecht (write_files) — für den Index-Aufbau in den Einstellungen aktivieren.", True
+                return "No write permission (write_files) — enable it in settings to rebuild indexes.", True
             res = blueprint.rebuild_vault_indexes(vault_id)
-            return (f"Indexe aufgebaut: {len(res.get('created_hubs', []))} neue Hubs, "
-                    f"{len(res.get('mocs_updated', []))} MOCs aktualisiert.", False)
+            return (f"Indexes rebuilt: {len(res.get('created_hubs', []))} new hubs, "
+                    f"{len(res.get('mocs_updated', []))} MOCs updated.", False)
 
         if name == "scrape_url":
             url = (tool_input.get("url") or "").strip()
             if not url:
-                return "url fehlt", True
+                return "url missing", True
             data, err = _call_server_tool(
                 "/tools/scrape_url", {"url": url, "mode": tool_input.get("mode", "content")},
                 needs_browser=False, timeout=130,
@@ -914,7 +1008,7 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             if err:
                 return err, True
             md = (data.get("markdown") or data.get("content") or "").strip()
-            return (md[:12000] or "(kein Inhalt erkannt)"), False
+            return (md[:12000] or "(no content detected)"), False
 
         if name == "page_scrape":
             data, err = _call_server_tool(
@@ -923,7 +1017,7 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             if err:
                 return err, True
             md = (data.get("markdown") or data.get("content") or "").strip()
-            return (md[:12000] or "(kein Inhalt erkannt)"), False
+            return (md[:12000] or "(no content detected)"), False
 
         if name == "seo_check":
             data, err = _call_server_tool("/tools/seo_check", {}, needs_browser=True)
@@ -940,8 +1034,8 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
                 return err, True
             urls = data.get("urls") or []
             if not urls:
-                return "Keine Links gefunden.", False
-            head = f"{data.get('count', len(urls))} Links (Basis {data.get('base_url', '?')}):\n"
+                return "No links found.", False
+            head = f"{data.get('count', len(urls))} links (base {data.get('base_url', '?')}):\n"
             return head + "\n".join(f"- {u}" for u in urls[:200]), False
 
         if name == "image_analyse":
@@ -949,9 +1043,9 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             if err:
                 return err, True
             imgs = data.get("images") or []
-            lines = [f"{data.get('total', len(imgs))} Bilder, {data.get('missing_alt', 0)} ohne alt-Text:"]
+            lines = [f"{data.get('total', len(imgs))} images, {data.get('missing_alt', 0)} without alt text:"]
             for im in imgs[:80]:
-                alt = im.get("alt") or "(kein alt)"
+                alt = im.get("alt") or "(no alt)"
                 lines.append(f"- {im.get('width', '?')}x{im.get('height', '?')} {alt} — {im.get('src', '')}")
             return "\n".join(lines), False
 
@@ -965,16 +1059,16 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             data, err = _call_server_tool("/tools/screenshot", {}, needs_browser=True)
             if err:
                 return err, True
-            return (f"Screenshot erstellt ({data.get('format', 'png')}). "
-                    "Er ist im UI verfügbar — als Text kann ich ihn nicht einbetten."), False
+            return (f"Screenshot created ({data.get('format', 'png')}). "
+                    "It is available in the UI — I cannot embed it as text."), False
 
         if name == "generate_image":
             if not settings.vault_permission(vault_id, "write_files"):
-                return ("Kein Schreibrecht (write_files) — zum Speichern generierter Bilder im Vault "
-                        "in den Einstellungen aktivieren."), True
+                return ("No write permission (write_files) — enable it in settings to save "
+                        "generated images in the vault."), True
             prompt = (tool_input.get("prompt") or "").strip()
             if not prompt:
-                return "prompt fehlt", True
+                return "prompt missing", True
             data, err = _call_server_tool(
                 "/tools/image_generate", {"prompt": prompt, "model": tool_input.get("model")},
                 needs_browser=False, timeout=200,
@@ -982,40 +1076,61 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
             if err:
                 return err, True
             if not data.get("ok"):
-                return f"Bild-Generierung fehlgeschlagen: {data.get('error')}", True
+                return f"Image generation failed: {data.get('error')}", True
             try:
                 raw = base64.b64decode(data["image_base64"])
             except Exception as e:
-                return f"Bild-Daten ungültig: {e}", True
+                return f"Image data invalid: {e}", True
             subfolder = (tool_input.get("asset_subfolder") or "assets").strip("/") or "assets"
             rel = f"{subfolder}/{int(time.time())}-{_slugify_simple(prompt)}.png"
             saved = wiki_reader.write_asset(vault_path, rel, raw)
-            return (f"Bild generiert und gespeichert unter `{saved}` (relativ zum Vault-Root).\n"
-                    f"ZEIGE dem Nutzer das Bild, indem du GENAU diese Markdown-Zeile unverändert in "
-                    f"deine Antwort übernimmst (sie rendert inline im Chat):\n"
+            return (f"Image generated and saved at `{saved}` (relative to the vault root).\n"
+                    f"SHOW the user the image by copying EXACTLY this markdown line unchanged into "
+                    f"your answer (it renders inline in the chat):\n"
                     f"![{prompt[:80]}]({saved})"), False
 
         if name == "insert_into_open_file":
             if not settings.vault_permission(vault_id, "write_files"):
-                return "Kein Schreibrecht (write_files) — in den Einstellungen aktivieren.", True
+                return "No write permission (write_files) — enable it in settings.", True
             if not pinned_rel:
-                return ("Keine Datei angeheftet — dieses Tool funktioniert nur im Datei-Chat "
-                        "('Mit dieser Datei chatten'). Für andere Pfade write_wiki_page nutzen."), True
+                return ("No file pinned — this tool only works in file chat "
+                        "('chat with this file'). For other paths use write_wiki_page."), True
             add = tool_input.get("content") or ""
             if not add.strip():
-                return "content fehlt", True
+                return "content missing", True
             existing = wiki_reader.read_file(vault_path, pinned_rel)
             heading = (tool_input.get("after_heading") or "").strip()
             if tool_input.get("position") == "after_heading" and heading:
                 new, found = _insert_after_heading(existing, heading, add)
                 if not found:
-                    return f"Überschrift '{heading}' nicht gefunden in {pinned_rel}.", True
+                    return f"Heading '{heading}' not found in {pinned_rel}.", True
             else:
                 new = existing.rstrip() + "\n\n" + add.strip() + "\n"
             wiki_reader.write_file(vault_path, pinned_rel, new)
-            return f"In {pinned_rel} eingefügt ({len(add)} Zeichen).", False
+            return f"Inserted into {pinned_rel} ({len(add)} chars).", False
 
-        return f"Unbekanntes Tool: {name}", True
+        if name == "edit_file":
+            if not settings.vault_permission(vault_id, "write_files"):
+                return "No write permission (write_files) — enable it in settings.", True
+            rel = (tool_input.get("rel_path") or "").strip() or pinned_rel
+            if not rel:
+                return "No file specified (rel_path missing and no file chat active).", True
+            find = tool_input.get("find") or ""
+            if not find:
+                return "find missing.", True
+            replace = tool_input.get("replace") or ""
+            existing = wiki_reader.read_file(vault_path, rel)
+            count = existing.count(find)
+            if count == 0:
+                return f"Text not found in {rel} — nothing changed. Check the exact wording.", True
+            if count > 1:
+                return f"Text occurs {count}× in {rel} — not unique. Provide more surrounding context.", True
+            new = existing.replace(find, replace)
+            wiki_reader.write_file(vault_path, rel, new)
+            action = "Deleted" if not replace.strip() else "Replaced"
+            return f"{action} in {rel} ({len(find)} → {len(replace)} chars).", False
+
+        return f"Unknown tool: {name}", True
     except PermissionError as e:
         return str(e), True
     except FileNotFoundError as e:
@@ -1024,7 +1139,7 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
         return str(e), True
     except Exception as e:
         log.exception("Tool error")
-        return f"Tool-Fehler: {e}", True
+        return f"Tool error: {e}", True
 
 
 # --- Public API ------------------------------------------------------------
@@ -1032,7 +1147,7 @@ def _execute_tool(name: str, tool_input: dict, vault_path: str, vault_id: str,
 def load(vault_id: str) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
-        raise LookupError(f"Vault {vault_id} nicht gefunden")
+        raise LookupError(f"Vault {vault_id} not found")
     _, source = _build_system_prompt(vault)
     return {
         "vault": vault,
@@ -1046,7 +1161,7 @@ def load(vault_id: str) -> dict:
 def clear(vault_id: str) -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
-        raise LookupError(f"Vault {vault_id} nicht gefunden")
+        raise LookupError(f"Vault {vault_id} not found")
     f = _chat_file(vault_id)
     if f.exists():
         f.unlink()
@@ -1054,12 +1169,12 @@ def clear(vault_id: str) -> dict:
 
 
 _KNOWN_COMMANDS = {
-    "farm": "Der Nutzer hat `/farm <url>` aufgerufen. Rufe das Tool `pull_youtube` mit der URL auf (zieht Transkript + legt raw/youtube/-Datei an), dann nenne kurz Pfad + nächsten Schritt. Erfinde nichts.",
-    "ingest": "Der Nutzer hat `/ingest <pfad>` aufgerufen. Lies die genannte raw-Datei mit `read_file`, kuratiere sie (Frontmatter typ/titel/status/zuletzt + Sektionen wie in templates/) und schreibe die Wiki-Seite mit `write_wiki_page` (z.B. wiki/resources/videos/<slug>.md).",
-    "query": "Der Nutzer hat `/query <frage>` aufgerufen. Beantworte AUS dem Wiki: starte bei wiki/index.md, navigiere mit read_file zu relevanten Seiten und belege mit [[Wikilinks]]. Nichts erfinden.",
-    "lint": "Der Nutzer hat `/lint` aufgerufen. Rufe `audit_vault` und berichte die Befunde gruppiert. Für Index/MOC-Fixes: `rebuild_indexes` anbieten.",
-    "audit": "Der Nutzer hat `/audit` aufgerufen. Rufe `audit_vault` (read-only) und berichte die Befunde.",
-    "rebuild-index": "Der Nutzer hat `/rebuild-index` aufgerufen. Rufe das Tool `rebuild_indexes` auf und berichte das Ergebnis.",
+    "farm": "The user called `/farm <url>`. Call the `pull_youtube` tool with the URL (pulls the transcript + creates a raw/youtube/ file), then briefly state the path + next step. Invent nothing.",
+    "ingest": "The user called `/ingest <path>`. Read the named raw file with `read_file`, curate it (frontmatter typ/titel/status/zuletzt + sections like in templates/) and write the wiki page with `write_wiki_page` (e.g. wiki/resources/videos/<slug>.md).",
+    "query": "The user called `/query <question>`. Answer FROM the wiki: start at wiki/index.md, navigate with read_file to relevant pages and back it up with [[wikilinks]]. Invent nothing.",
+    "lint": "The user called `/lint`. Call `audit_vault` and report the findings grouped. For index/MOC fixes: offer `rebuild_indexes`.",
+    "audit": "The user called `/audit`. Call `audit_vault` (read-only) and report the findings.",
+    "rebuild-index": "The user called `/rebuild-index`. Call the `rebuild_indexes` tool and report the result.",
 }
 
 
@@ -1085,11 +1200,11 @@ def _cost_clause() -> str:
     """Im Hinweis-Modus: bittet den Chat, vor teurer LLM-Kuratierung auf API-Kosten +
     Claude-Code-Alternative hinzuweisen. Im Vollmodus leer."""
     if (settings.get("chat_heavy_ops_mode") or "full") == "hint":
-        return ("\n\n## Kosten-Hinweis-Modus\n"
-                "Bevor du teure LLM-Kuratierung machst (Ingest = Wiki-Seite aus langem Transkript schreiben, "
-                "Zusammenfassungen): weise den Nutzer EINMAL kurz darauf hin, dass das über den hier konfigurierten "
-                "LLM läuft (API-Kosten) und via Claude Code auf der Subscription günstiger wäre — dann mach weiter, "
-                "wenn er will. Mechanisches (Transkript ziehen, raw/Datei schreiben, Indexe, Playlists) einfach ausführen.")
+        return ("\n\n## Cost-hint mode\n"
+                "Before doing expensive LLM curation (ingest = writing a wiki page from a long transcript, "
+                "summaries): remind the user ONCE briefly that this runs via the LLM configured here (API costs) "
+                "and would be cheaper via Claude Code on the subscription — then continue if they want. "
+                "Just execute mechanical work (pulling a transcript, writing a raw/ file, indexes, playlists).")
     return ""
 
 
@@ -1105,36 +1220,39 @@ def _pinned_section(vault_path: str, pinned_rel: str) -> str:
     except Exception:
         content = ""
     return (
-        "\n\n---\n\n## Aktuell geöffnete Datei\n"
-        f"Pfad: `{pinned_rel}`\n"
-        "Wenn der Nutzer 'hier rein', 'in diese Datei', 'füg das ein' o.ä. meint, schreibe mit "
-        "`insert_into_open_file` GENAU in diese Datei (kein rel_path nötig). Für eine komplette "
-        "Neufassung `write_wiki_page` mit diesem Pfad.\n\n"
-        "Aktueller Inhalt:\n```markdown\n" + content[:8000] + "\n```"
+        "\n\n---\n\n## Currently open file\n"
+        f"Path: `{pinned_rel}`\n"
+        "When the user means 'in here', 'into this file', 'insert this' or similar, write with "
+        "`insert_into_open_file` EXACTLY into this file (no rel_path needed). For a full rewrite "
+        "use `write_wiki_page` with this path.\n\n"
+        "Current content:\n```markdown\n" + content[:8000] + "\n```"
     )
 
 
 def send(vault_id: str, user_message: str, page_context: str | None = None,
-         pinned_file: dict | None = None) -> dict:
+         pinned_file: dict | None = None, tool_level: str = "full") -> dict:
     vault = settings.get_vault(vault_id)
     if not vault:
-        raise LookupError(f"Vault {vault_id} nicht gefunden")
+        raise LookupError(f"Vault {vault_id} not found")
 
     user_message = (user_message or "").strip()
     if not user_message:
-        raise ValueError("Leere Nachricht")
+        raise ValueError("Empty message")
 
     _, model = effective_llm_config()
     model = model or DEFAULT_MODEL
     max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
     search_on = bool(settings.get("vault_search_enabled", True))
-    system_prompt, _ = _build_system_prompt(vault)
+    pinned_rel = ((pinned_file or {}).get("rel_path") or "").strip() or None
+    system_prompt, _ = _build_system_prompt(vault, include_claude_md=not bool(pinned_rel))
     if search_on:
         system_prompt += SEARCH_INSTRUCTION
     if page_context:
-        system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
-    pinned_rel = ((pinned_file or {}).get("rel_path") or "").strip() or None
+        system_prompt += "\n\n---\n\n## Currently open page in the browser\n\n" + page_context[:8000]
     if pinned_rel:
+        blocked = sensitive.guard_file(vault["path"], pinned_rel, vault_id=vault.get("id"))
+        if blocked:
+            raise ValueError(blocked)
         system_prompt += _pinned_section(vault["path"], pinned_rel)
 
     route = _slash_route(user_message)
@@ -1145,11 +1263,13 @@ def send(vault_id: str, user_message: str, page_context: str | None = None,
         _save_history(vault_id, history)
         return {"reply": route["reply"], "consulted": [], "messages": history, "usage": _zero_usage()}
     if route and route.get("directive"):
-        system_prompt += "\n\n## Aktueller Befehl\n" + route["directive"]
+        system_prompt += "\n\n## Current command\n" + route["directive"]
     system_prompt += _cost_clause()
+    system_prompt += _date_suffix()
 
     vault_path = vault["path"]
-    active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
+    mode = "file" if pinned_rel else "vault"
+    active_tools = _active_tools(mode, _norm_tool_level(tool_level), search_on)
 
     history = _load_history(vault_id)
     history.append({"role": "user", "content": user_message})
@@ -1162,7 +1282,7 @@ def send(vault_id: str, user_message: str, page_context: str | None = None,
 
     while True:
         if tool_iterations >= MAX_TOOL_ITERATIONS:
-            raise RuntimeError(f"Tool-Loop hat das Iterations-Limit ({MAX_TOOL_ITERATIONS}) erreicht")
+            raise RuntimeError(f"Tool loop reached the iteration limit ({MAX_TOOL_ITERATIONS})")
 
         response = backend.complete(
             model=model,
@@ -1255,7 +1375,7 @@ def resolve_source(source_type: str, source_ref: dict) -> tuple[str, str]:
             raise ValueError(f"{source_type}-Quelle braucht vault_id und rel_path")
         vault = settings.get_vault(vault_id)
         if not vault:
-            raise ValueError(f"Vault {vault_id} nicht gefunden")
+            raise ValueError(f"Vault {vault_id} not found")
         text = wiki_reader.read_file(vault["path"], rel_path)
         title = rel_path if source_type == "vault_file" else Path(rel_path).stem
         return (title, text)
@@ -1267,10 +1387,13 @@ def resolve_source(source_type: str, source_ref: dict) -> tuple[str, str]:
             raise ValueError("video-Quelle braucht vault_id und slug")
         vault = settings.get_vault(vault_id)
         if not vault:
-            raise ValueError(f"Vault {vault_id} nicht gefunden")
+            raise ValueError(f"Vault {vault_id} not found")
         video = videos.get_video(vault_id, slug)
         if not video:
-            raise ValueError(f"Video {slug} nicht gefunden")
+            raise ValueError(f"Video {slug} not found")
+        blocked = sensitive.guard_meta(video["frontmatter"], vault_id=vault_id, rel_path=video.get("rel_path"))
+        if blocked:
+            raise ValueError(blocked)
         title = video["frontmatter"].get("titel") or slug
         master_body = video.get("body") or ""
         transcript_rel = str(video["frontmatter"].get("transcript") or "").strip()
@@ -1294,6 +1417,7 @@ def send_source_stream(
     strict_source: bool = True,
     include_tools: bool = False,
     vault_id: str | None = None,
+    tool_level: str | None = None,
 ) -> Iterator[str]:
     """SSE stream: chat about a single source (page / transcript / video).
 
@@ -1303,49 +1427,61 @@ def send_source_stream(
     try:
         user_message = (user_message or "").strip()
         if not user_message:
-            yield _sse("error", {"message": "Leere Nachricht"})
+            yield _sse("error", {"message": "Empty message"})
             return
 
         title, content_text = resolve_source(source_type, source_ref)
+
+        blocked = sensitive.guard_text(
+            content_text,
+            vault_id=(source_ref or {}).get("vault_id"),
+            rel_path=(source_ref or {}).get("rel_path"),
+        )
+        if blocked:
+            yield _sse("error", {"message": blocked})
+            return
 
         _, model = effective_llm_config()
         model = model or DEFAULT_MODEL
 
         if strict_source:
             knowledge_instruction = (
-                "Antworte ausschließlich basierend auf diesem Inhalt.\n"
-                "Wenn die Antwort nicht im Inhalt steht, sag das klar — füge kein externes Wissen hinzu."
+                "Answer based solely on this content.\n"
+                "If the answer is not in the content, say so clearly — do not add external knowledge."
             )
         else:
             knowledge_instruction = (
-                "Nutze primär den bereitgestellten Inhalt als Quelle. Du darfst allgemeines Wissen ergänzend einsetzen,\n"
-                "um Zusammenhänge zu erklären — mach aber deutlich wenn du über den Inhalt hinausgehst."
+                "Use the provided content as your primary source. You may add general knowledge\n"
+                "to explain context — but make clear when you go beyond the content."
             )
 
         source_label = {
-            "page": "Seiteninhalt",
-            "transcript": "Transcript",
-            "vault_file": "Vault-Datei",
-            "video": "Video (Master-Page + Transcript)",
-        }.get(source_type, "Inhalt")
+            "page": "page content",
+            "transcript": "transcript",
+            "vault_file": "vault file",
+            "video": "video (master page + transcript)",
+        }.get(source_type, "content")
 
-        # Tools nur wenn gewünscht UND ein Vault vorhanden ist (Tools brauchen vault_path/vault_id).
-        vault = settings.get_vault(vault_id) if (include_tools and vault_id) else None
+        # Tool-Satz aus tool_level. Backward-compat: legacy include_tools → none/full.
+        level = _norm_tool_level(tool_level, "full" if include_tools else "none")
+        need_vault = level in ("knowledge", "full") and bool(vault_id)
+        vault = settings.get_vault(vault_id) if need_vault else None
         vault_path = vault["path"] if vault else None
-        active_tools = (
-            TOOL_DEFS + ([SEARCH_TOOL_DEF] if settings.get("vault_search_enabled", True) else [])
-        ) if vault else []
+        search_on = bool(settings.get("vault_search_enabled", True))
+        active_tools = _active_tools("page", level, search_on) if vault else []
         tools_note = (
-            "\n\nDu hast Tools (Web/Media wie SEO/Scrape/Bild-Generierung, Vault lesen/schreiben, "
-            "Notizen/Bookmarks). Nutze sie, wenn die Aufgabe es erfordert — der Fokus bleibt aber die "
-            "oben gezeigte Quelle. Erfinde keine Tool-Ergebnisse; melde Fehler ehrlich."
-        ) if vault else ""
+            "\n\nYou also have tools to take notes (scratchpad/todos) and to save this "
+            "conversation to the vault's raw/ folder. Use them only when the user asks to "
+            "remember or keep something — the focus stays on the source shown above. "
+            "Do not invent tool results; report errors honestly."
+        ) if active_tools else ""
 
         system_prompt = (
-            f'Du beantwortest Fragen zu folgendem {source_label}: "{title}".\n'
+            f'You answer questions about the following {source_label}: "{title}".\n'
             + knowledge_instruction + tools_note + "\n\n"
             "---\n\n" + content_text[:80000]
-            + f"\n\nAlways respond to the user in {i18n.lang_name()}."
+            + f"\n\nRespond to the user in {i18n.lang_name()} by default."
+            " Only respond in a different language if the user explicitly requests it."
         )
         api_messages = list(history) + [{"role": "user", "content": user_message}]
 
@@ -1356,7 +1492,7 @@ def send_source_stream(
 
         while True:
             if tool_iterations >= MAX_TOOL_ITERATIONS:
-                yield _sse("error", {"message": f"Tool-Loop hat das Iterations-Limit ({MAX_TOOL_ITERATIONS}) erreicht"})
+                yield _sse("error", {"message": f"Tool loop reached the iteration limit ({MAX_TOOL_ITERATIONS})"})
                 return
 
             stream = backend.stream_complete(
@@ -1418,7 +1554,7 @@ def send_page_stream(page_content: str, user_message: str, history: list[dict], 
 
 
 def send_stream(vault_id: str, user_message: str, page_context: str | None = None,
-                pinned_file: dict | None = None) -> Iterator[str]:
+                pinned_file: dict | None = None, tool_level: str = "full") -> Iterator[str]:
     """SSE generator. Yields strings ready for StreamingResponse.
 
     Event types:
@@ -1431,24 +1567,28 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
     try:
         vault = settings.get_vault(vault_id)
         if not vault:
-            yield _sse("error", {"message": f"Vault {vault_id} nicht gefunden"})
+            yield _sse("error", {"message": f"Vault {vault_id} not found"})
             return
         user_message = (user_message or "").strip()
         if not user_message:
-            yield _sse("error", {"message": "Leere Nachricht"})
+            yield _sse("error", {"message": "Empty message"})
             return
 
         _, model = effective_llm_config()
         model = model or DEFAULT_MODEL
         max_turns = int(settings.get("max_user_turns") or DEFAULT_MAX_TURNS)
         search_on = bool(settings.get("vault_search_enabled", True))
-        system_prompt, _ = _build_system_prompt(vault)
+        pinned_rel = ((pinned_file or {}).get("rel_path") or "").strip() or None
+        system_prompt, _ = _build_system_prompt(vault, include_claude_md=not bool(pinned_rel))
         if search_on:
             system_prompt += SEARCH_INSTRUCTION
         if page_context:
-            system_prompt += "\n\n---\n\n## Aktuell geöffnete Seite im Browser\n\n" + page_context[:8000]
-        pinned_rel = ((pinned_file or {}).get("rel_path") or "").strip() or None
+            system_prompt += "\n\n---\n\n## Currently open page in the browser\n\n" + page_context[:8000]
         if pinned_rel:
+            blocked = sensitive.guard_file(vault["path"], pinned_rel, vault_id=vault.get("id"))
+            if blocked:
+                yield _sse("error", {"message": blocked})
+                return
             system_prompt += _pinned_section(vault["path"], pinned_rel)
 
         route = _slash_route(user_message)
@@ -1461,11 +1601,13 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
             yield _sse("done", {"messages": history, "consulted": [], "usage": _zero_usage(), "vault": vault})
             return
         if route and route.get("directive"):
-            system_prompt += "\n\n## Aktueller Befehl\n" + route["directive"]
+            system_prompt += "\n\n## Current command\n" + route["directive"]
         system_prompt += _cost_clause()
+        system_prompt += _date_suffix()
 
         vault_path = vault["path"]
-        active_tools = TOOL_DEFS + ([SEARCH_TOOL_DEF] if search_on else [])
+        mode = "file" if pinned_rel else "vault"
+        active_tools = _active_tools(mode, _norm_tool_level(tool_level), search_on)
 
         history = _load_history(vault_id)
         history.append({"role": "user", "content": user_message})
@@ -1484,7 +1626,7 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
 
         while True:
             if tool_iterations >= MAX_TOOL_ITERATIONS:
-                yield _sse("error", {"message": f"Tool-Loop hat das Iterations-Limit ({MAX_TOOL_ITERATIONS}) erreicht"})
+                yield _sse("error", {"message": f"Tool loop reached the iteration limit ({MAX_TOOL_ITERATIONS})"})
                 return
 
             stream = backend.stream_complete(

@@ -13,6 +13,7 @@
     <span class="ws-file-path" id="ws-file-path">…</span>
     <span class="ws-vault-name" id="ws-vault-name"></span>
     <span class="ws-spacer"></span>
+    <button type="button" id="ws-back-btn" class="ws-btn" disabled title="Zurück zur vorherigen Datei">← Zurück</button>
     <button type="button" id="ws-layout-toggle" class="ws-btn" title="Chat-Position umschalten (unten / seitlich)">Chat: unten</button>
   </header>
 
@@ -39,7 +40,18 @@
       <div class="ws-chat-options">
         <label><input type="checkbox" id="ws-search-toggle" checked> Volltextsuche</label>
         <label><input type="checkbox" id="ws-activity-toggle" checked> Tool-Aktivität</label>
+        <label title="Sparsam = nur Lesen/Suchen (günstiger). Alle = aktiviert Schreiben, SEO, Bilder, Farming."><input type="checkbox" id="ws-tools-full"> Tools: alle</label>
+        <button type="button" id="ws-debug-btn" class="ws-btn" style="font-size:11px;padding:1px 7px;margin-left:auto" title="Zeigt was an die KI gesendet wird (System-Prompt, Tools, Verlauf)">⚙ Debug</button>
       </div>
+
+      <dialog id="ws-debug-dialog" style="width:min(720px,96vw);max-height:80vh;overflow:auto;border:1px solid var(--ws-border);border-radius:12px;background:var(--ws-bg);color:var(--ws-text);padding:0">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--ws-border);position:sticky;top:0;background:var(--ws-panel)">
+          <strong style="flex:1">Debug: KI-Kontext</strong>
+          <span id="ws-debug-status" style="font-size:12px;color:var(--ws-muted)"></span>
+          <button type="button" id="ws-debug-close" class="ws-btn" style="font-size:12px;padding:2px 8px">✕</button>
+        </div>
+        <div id="ws-debug-body" style="padding:16px;font-size:13px;line-height:1.6"></div>
+      </dialog>
       <div class="ws-chat-log" id="ws-chat-log"></div>
       <div class="ws-chat-status" id="ws-chat-status"></div>
       <div class="ws-chat-input-row">

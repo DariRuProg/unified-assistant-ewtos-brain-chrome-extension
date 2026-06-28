@@ -4,12 +4,31 @@ import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
 import { renderMarkdown, renderLineDiff, openInObsidian } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
+import { renderBaseInto } from './base-view.js';
 
 const VH_SEVERITY = {
   error: { icon: "🔴", label: "Fehler" },
   warn: { icon: "🟡", label: "Warnung" },
   info: { icon: "🔵", label: "Info" },
 };
+
+// Schicht-Zuordnung nach Top-Level-Segment — färbt Ordner im Explorer.
+// Unterordner erben die Farbe des Top-Ordners (z.B. raw/youtube = raw).
+const LAYER_BY_TOP = {
+  raw: "raw", wiki: "wiki", crm: "crm", kontext: "kontext",
+  inbox: "workspace", journal: "workspace",
+  templates: "os", assets: "os",
+  ".claude": "os", ".obsidian": "os", ".ewtosbrain": "os", ".ewtos-backups": "os",
+};
+function layerOf(path) {
+  return LAYER_BY_TOP[(path || "").split("/")[0]] || "";
+}
+
+// Legende: Schicht -> Anzeige-Label.
+const LAYER_LEGEND = [
+  ["raw", "raw"], ["wiki", "wiki"], ["crm", "crm"],
+  ["kontext", "kontext"], ["workspace", "inbox/journal"], ["os", "os"],
+];
 
 // Modell-agnostischer Copy-Paste-Prompt zum Ingesten aller noch nicht ingesteten
 // Roh-Quellen. In Claude Code oder ein beliebiges LLM mit Vault-Zugriff einfügen.
@@ -52,6 +71,13 @@ export async function renderVaultExplorer() {
   searchRow.append(searchInput, searchBtn, guideBtn);
   header.append(vaultSelect, searchRow);
 
+  const legend = el("div", { className: "vault-legend" });
+  for (const [layer, label] of LAYER_LEGEND) {
+    const item = el("span", { className: "vault-legend-item" });
+    item.append(el("span", { className: "vault-legend-dot layer-" + layer }), el("span", { textContent: label }));
+    legend.append(item);
+  }
+
   const breadcrumb = el("div", { className: "vault-breadcrumb" });
   const listBox = el("div", { className: "vault-list" });
   const viewerBox = el("div", { className: "vault-viewer", style: "display:none" });
@@ -59,7 +85,7 @@ export async function renderVaultExplorer() {
 
   const chatFab = el("button", { className: "vault-chat-fab", title: "Chat mit Vault", textContent: "💬" });
   chatFab.addEventListener("click", () => openWorkspaceTab("notes/scratchpad.md", false, "vault"));
-  state.panelBody.append(header, breadcrumb, listBox, viewerBox, status, chatFab);
+  state.panelBody.append(header, legend, breadcrumb, listBox, viewerBox, status, chatFab);
 
   let currentVaultId = null;
   let currentPath = "";
@@ -70,6 +96,8 @@ export async function renderVaultExplorer() {
   let pendingFind = "";
   let explorerShowHidden = false;
   let explorerAllowDelete = false;
+  let sensitiveFolders = new Set();  // explizit als sensibel markierte Ordner
+  let sensitiveFiles = new Set();    // einzeln per Frontmatter markierte Dateien
   const expandedPaths = new Set();
   let savedScrollTop = 0;
   let revealPath = null;
@@ -99,6 +127,88 @@ export async function renderVaultExplorer() {
       } catch (err) {
         setStatus("Löschen fehlgeschlagen: " + (err.message || err), "error");
       }
+    });
+    return b;
+  }
+
+  async function loadSensitiveState() {
+    sensitiveFolders = new Set();
+    sensitiveFiles = new Set();
+    if (!currentVaultId) return;
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_sensitive/${encodeURIComponent(currentVaultId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      sensitiveFolders = new Set(data.folders || []);
+      sensitiveFiles = new Set(data.files || []);
+    } catch (_) {}
+  }
+
+  // Sensibler Vorfahre eines Pfads (geerbte Sperre), oder null.
+  function ancestorSensitive(path) {
+    for (const f of sensitiveFolders) {
+      if (path !== f && path.startsWith(f + "/")) return f;
+    }
+    return null;
+  }
+
+  // Lock-Zustand für eine Zeile. inherited = über einen Eltern-Ordner gesperrt.
+  function lockState(path, isFolder) {
+    const inherited = ancestorSensitive(path);
+    const selfLocked = isFolder ? sensitiveFolders.has(path) : sensitiveFiles.has(path);
+    return { locked: selfLocked || !!inherited, inherited: !!inherited && !selfLocked };
+  }
+
+  async function toggleFolderSensitive(path, makeSensitive) {
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_sensitive/folder/${encodeURIComponent(currentVaultId)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: path, sensitive: makeSensitive }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${res.status}`); }
+      const data = await res.json();
+      sensitiveFolders = new Set(data.folders || []);
+      setStatus(makeSensitive ? `Ordner gesperrt: ${path}` : `Ordner entsperrt: ${path}`);
+      await renderView();
+    } catch (err) {
+      setStatus("Ordner-Flag fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  async function toggleFileSensitive(path, makeSensitive) {
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_sensitive/file/${encodeURIComponent(currentVaultId)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rel_path: path, sensitive: makeSensitive }),
+      });
+      if (res.status === 403) { setStatus("Datei-Flag braucht Schreibrecht (write_files).", "error"); return; }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${res.status}`); }
+      if (makeSensitive) sensitiveFiles.add(path); else sensitiveFiles.delete(path);
+      setStatus(makeSensitive ? `Datei gesperrt: ${path}` : `Datei entsperrt: ${path}`);
+      await renderView();
+    } catch (err) {
+      setStatus("Datei-Flag fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  function makeLockBtn(path, isFolder) {
+    const st = lockState(path, isFolder);
+    const b = el("span", {
+      className: "vault-row-lock" + (st.locked ? " on" : "") + (st.inherited ? " inherited" : ""),
+      textContent: st.locked ? "🔒" : "🔓",
+    });
+    if (st.inherited) {
+      b.title = "Gesperrt über übergeordneten Ordner";
+    } else {
+      b.title = st.locked
+        ? (isFolder ? "Ordner ist sensibel — klicken zum Entsperren" : "Datei ist sensibel — klicken zum Entsperren")
+        : (isFolder ? "Ordner als sensibel markieren (DSGVO — nur freigegebenes LLM)" : "Datei als sensibel markieren");
+    }
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (st.inherited) return;  // geerbt: am Eltern-Ordner ändern
+      if (isFolder) toggleFolderSensitive(path, !st.locked);
+      else toggleFileSensitive(path, !st.locked);
     });
     return b;
   }
@@ -191,16 +301,28 @@ export async function renderVaultExplorer() {
     const folders = data.folders || [];
     const files = data.files || [];
     const images = data.images || [];
-    if (depth === 0 && !folders.length && !files.length && !images.length) {
+    const others = data.other || [];
+    const counts = data.counts || {};
+    if (depth === 0 && !folders.length && !files.length && !images.length && !others.length) {
       container.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
       return;
     }
     for (const f of folders) {
-      const row = el("div", { className: "vault-entry vault-folder" });
+      const layer = layerOf(f);
+      const row = el("div", { className: "vault-entry vault-folder" + (layer ? " layer-" + layer : "") });
       row.dataset.path = f;
       row.style.paddingLeft = (depth * 14 + 4) + "px";
       const caret = el("span", { className: "vault-caret", textContent: "▸" });
-      row.append(caret, el("span", { className: "vault-icon", textContent: "📁" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      const cnt = counts[f];
+      const nameText = basename(f) + (cnt != null ? ` (${cnt})` : "");
+      row.append(caret, el("span", { className: "vault-icon", textContent: "📁" }), el("span", { className: "vault-name", textContent: nameText }));
+      row.append(makeLockBtn(f, true));
+      if (canWrite) {
+        const addBtn = el("span", { className: "vault-row-add", textContent: "＋", title: "Neue Datei / Ordner hier anlegen" });
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); showCreateMenu(e.clientX, e.clientY, f); });
+        row.append(addBtn);
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); showCreateMenu(e.clientX, e.clientY, f); });
+      }
       if (canWrite && explorerAllowDelete) row.append(makeDeleteBtn(f, () => renderView()));
       const childBox = el("div", { className: "vault-tree-children", style: "display:none" });
       let loaded = false;
@@ -232,6 +354,7 @@ export async function renderVaultExplorer() {
       row.dataset.path = f;
       row.style.paddingLeft = (depth * 14 + 20) + "px";
       row.append(el("span", { className: "vault-icon", textContent: "📄" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      row.append(makeLockBtn(f, false));
       if (canWrite && explorerAllowDelete) row.append(makeDeleteBtn(f, () => renderView()));
       row.addEventListener("click", () => { selectedFile = f; markSelected(); renderBreadcrumb(); openWorkspaceTab(f); });
       row.addEventListener("contextmenu", (e) => { e.preventDefault(); showRowMenu(e.clientX, e.clientY, f); });
@@ -242,6 +365,14 @@ export async function renderVaultExplorer() {
       row.dataset.path = f;
       row.style.paddingLeft = (depth * 14 + 20) + "px";
       row.append(el("span", { className: "vault-icon", textContent: "🖼️" }), el("span", { className: "vault-name", textContent: basename(f) }));
+      row.addEventListener("click", () => { selectedFile = f; markSelected(); renderBreadcrumb(); openWorkspaceTab(f); });
+      container.append(row);
+    }
+    for (const f of others) {
+      const row = el("div", { className: "vault-entry vault-file vault-other-file" });
+      row.dataset.path = f;
+      row.style.paddingLeft = (depth * 14 + 20) + "px";
+      row.append(el("span", { className: "vault-icon", textContent: "📎" }), el("span", { className: "vault-name", textContent: basename(f) }));
       row.addEventListener("click", () => { selectedFile = f; markSelected(); renderBreadcrumb(); openWorkspaceTab(f); });
       container.append(row);
     }
@@ -354,6 +485,7 @@ export async function renderVaultExplorer() {
       canWrite = !!(vaultsById[vid]?.permissions?.write_files);
       await chrome.storage.local.set({ selectedVaultId: vid });
       expandedPaths.clear();
+      await loadSensitiveState();
     }
     await revealFile(rel);
   }
@@ -363,6 +495,25 @@ export async function renderVaultExplorer() {
       await syncToTab(tab);
     } catch (_) {}
   }
+
+  // Workspace-Tab signalisiert Datei-Navigation → Explorer springt mit
+  chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+    if (!msg || msg.type !== "ws_nav_file") return;
+    const { vault_id, rel_path } = msg;
+    if (!vault_id || !rel_path) return;
+    (async () => {
+      if (vault_id !== currentVaultId) {
+        if (!vaultsById[vault_id]) return;
+        currentVaultId = vault_id;
+        vaultSelect.value = vault_id;
+        canWrite = !!(vaultsById[vault_id]?.permissions?.write_files);
+        await chrome.storage.local.set({ selectedVaultId: vault_id });
+        expandedPaths.clear();
+        await loadSensitiveState();
+      }
+      await revealFile(rel_path);
+    })();
+  });
 
   // Datei im Browserfenster öffnen (eigener Tab mit Ansicht/Editor/Chat).
   // Default: bestehenden Workspace-Tab wiederverwenden (Tab fragt selbst nach,
@@ -407,6 +558,47 @@ export async function renderVaultExplorer() {
     const item = el("button", { type: "button", className: "vault-ctx-item", textContent: "In neuem Tab öffnen" });
     item.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); openWorkspaceTab(relPath, true); });
     rowMenuEl.append(item);
+    rowMenuEl.style.left = x + "px";
+    rowMenuEl.style.top = y + "px";
+    document.body.append(rowMenuEl);
+    setTimeout(() => document.addEventListener("click", closeRowMenu), 0);
+  }
+
+  // Neue Datei/Ordner anlegen — IN dem uebergebenen Ordner (parentRel; "" = Vault-Root).
+  async function createEntry(parentRel, kind) {
+    const isFolder = kind === "folder";
+    const name = (prompt(isFolder ? "Name des neuen Ordners:" : "Name der neuen Datei (.md):", "") || "").trim();
+    if (!name) return;
+    const rel = parentRel ? `${parentRel}/${name}` : name;
+    try {
+      if (isFolder) {
+        const r = await fetch(`${httpBase}/tools/vault_folder_new/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(rel)}`, { method: "POST" });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${r.status}`); }
+        if (parentRel) { let acc = ""; for (const seg of parentRel.split("/")) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); } }
+        expandedPaths.add(rel);
+        revealPath = rel;
+        setStatus("Ordner angelegt: " + rel);
+        await renderView();
+      } else {
+        const fileRel = rel.endsWith(".md") ? rel : rel + ".md";
+        const r = await fetch(`${httpBase}/tools/vault_file_new/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(fileRel)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "" }) });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${r.status}`); }
+        if (parentRel) { let acc = ""; for (const seg of parentRel.split("/")) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); } }
+        await openFile(fileRel);
+      }
+    } catch (err) {
+      setStatus("Anlegen fehlgeschlagen: " + (err.message || err), "error");
+    }
+  }
+
+  function showCreateMenu(x, y, parentRel) {
+    closeRowMenu();
+    rowMenuEl = el("div", { className: "vault-ctx-menu" });
+    const fileItem = el("button", { type: "button", className: "vault-ctx-item", textContent: "Neue Datei" });
+    fileItem.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); createEntry(parentRel, "file"); });
+    const folderItem = el("button", { type: "button", className: "vault-ctx-item", textContent: "Neuer Ordner" });
+    folderItem.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); createEntry(parentRel, "folder"); });
+    rowMenuEl.append(fileItem, folderItem);
     rowMenuEl.style.left = x + "px";
     rowMenuEl.style.top = y + "px";
     document.body.append(rowMenuEl);
@@ -494,6 +686,12 @@ export async function renderVaultExplorer() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const body = el("div", { className: "vault-file-body" });
+        if (currentFile.toLowerCase().endsWith(".base")) {
+          renderBaseInto(body, httpBase, currentVaultId, currentFile, (rel) => {
+            selectedFile = rel;
+            openWorkspaceTab(rel);
+          });
+        } else {
         body.innerHTML = renderMarkdown(data.content || "");
         // Lokale Vault-Bilder über den Asset-Endpoint laden
         body.querySelectorAll("img.md-image[data-vault-src]").forEach((img) => {
@@ -501,6 +699,7 @@ export async function renderVaultExplorer() {
           img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(currentVaultId)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
           img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[Bild nicht gefunden: ${rel}]`)); });
         });
+        }
 
         // In-Datei-Suche (Strg+F): markiert alle Treffer gelb, springt durch.
         const findBar = el("div", { className: "vault-find-bar" });
@@ -577,7 +776,7 @@ export async function renderVaultExplorer() {
           openInObsidian(vaultName, currentFile);
         });
         viewerActions.append(obsidianBtn);
-        if (canWrite) {
+        if (canWrite && currentFile && currentFile.toLowerCase().endsWith(".md")) {
           const editBtn = el("button", { type: "button", className: "vault-edit-btn", textContent: "Bearbeiten" });
           const rawContent = data.content || "";
           editBtn.addEventListener("click", () => showEditor(rawContent));
@@ -618,7 +817,9 @@ export async function renderVaultExplorer() {
     if (canWrite) {
       const toolbar = el("div", { className: "vault-toolbar" });
       const newBtn = el("button", { type: "button", className: "vault-new-btn", textContent: "+ Neue Datei" });
-      toolbar.append(newBtn);
+      const newFolderBtn = el("button", { type: "button", className: "vault-new-btn", textContent: "+ Ordner" });
+      newFolderBtn.addEventListener("click", () => createEntry("", "folder"));
+      toolbar.append(newBtn, newFolderBtn);
       const newForm = el("div", { className: "vault-new-file-row", style: "display:none" });
       const newInput = el("input", { type: "text", className: "vault-new-input", placeholder: "dateiname.md" });
       const newConfirm = el("button", { type: "button", textContent: "Anlegen", className: "vault-new-confirm" });
@@ -794,6 +995,7 @@ export async function renderVaultExplorer() {
     currentPath = "";
     currentFile = null;
     selectedFile = null;
+    await loadSensitiveState();
     await renderView();
   });
 
@@ -839,6 +1041,7 @@ export async function renderVaultExplorer() {
       currentPath = parentIdx === -1 ? "" : initialFile.slice(0, parentIdx);
       currentFile = initialFile;
     }
+    await loadSensitiveState();
     await renderView();
     if (!initialFile) await syncToActiveTab();  // beim Öffnen direkt den aktiven Tab spiegeln
   } catch (err) {

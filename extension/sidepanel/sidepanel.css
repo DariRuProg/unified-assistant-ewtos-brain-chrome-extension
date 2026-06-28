@@ -1875,6 +1875,32 @@ button.small:hover { border-color: var(--status-offline); color: var(--status-of
 }
 .chat-mode-btn:not(.active):hover { opacity: 0.85; color: var(--text); border-color: var(--text-muted); }
 
+/* tool-level toggle (sparsam <-> alle Tools), rechtsbündig in der Mode-Zeile */
+.chat-tools-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.7;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, opacity 0.15s, border-color 0.15s;
+}
+.chat-tools-toggle::before { content: "○ "; }
+.chat-tools-toggle.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  opacity: 1;
+}
+.chat-tools-toggle.active::before { content: "● "; }
+.chat-tools-toggle:not(.active):hover { opacity: 1; color: var(--text); border-color: var(--text-muted); }
+
 /* scrape mode radio (Nur Inhalt / Alles) */
 .scrape-mode-row {
   display: flex;
@@ -2157,8 +2183,33 @@ a.ext-link {
 }
 .vault-entry:hover .vault-row-delete { opacity: 0.6; }
 .vault-row-delete:hover { opacity: 1; }
+.vault-row-add {
+  margin-left: auto;
+  opacity: 0;
+  cursor: pointer;
+  color: var(--text-muted, #888);
+  font-weight: 700;
+  padding: 0 6px;
+  flex: 0 0 auto;
+  transition: opacity 0.12s;
+}
+.vault-entry:hover .vault-row-add { opacity: 0.7; }
+.vault-row-add:hover { opacity: 1; color: var(--text, inherit); }
 .vault-delete-btn { background: #dc3545; color: #fff; border: none; }
 .vault-delete-btn:hover { opacity: 0.85; }
+.vault-row-lock {
+  margin-left: auto;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0.82em;
+  padding: 0 4px;
+  flex: 0 0 auto;
+  transition: opacity 0.12s;
+}
+.vault-entry:hover .vault-row-lock { opacity: 0.55; }
+.vault-row-lock:hover { opacity: 1; }
+.vault-row-lock.on { opacity: 1; }              /* gesperrt: immer sichtbar */
+.vault-row-lock.inherited { cursor: default; opacity: 0.5; }
 .vault-entry .vault-icon { flex: 0 0 auto; }
 .vault-entry .vault-name {
   flex: 1;
@@ -2591,3 +2642,84 @@ a.wiki-link { color: var(--accent); }
 }
 .batch-result-row.success { color: var(--success, #2e7d32); }
 .batch-result-row.error   { color: var(--error, #c62828); }
+
+/* CRM-Kundentabelle */
+.crm-toolbar { padding: 6px 0; display: flex; gap: 6px; align-items: center; }
+.crm-filter { flex: 1; }
+.crm-import-open { white-space: nowrap; flex: 0 0 auto; }
+.crm-import { padding: 8px 2px; display: flex; flex-direction: column; gap: 10px; }
+.crm-import-title { font-weight: 600; }
+.crm-import-map { display: flex; flex-direction: column; gap: 6px; }
+.crm-import-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+.crm-import-row { display: flex; align-items: center; gap: 8px; }
+.crm-import-label { flex: 0 0 110px; font-size: 12px; }
+.crm-import-row select { flex: 1; min-width: 0; }
+.crm-import-sens { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.crm-import-actions { display: flex; gap: 8px; }
+
+/* Explorer: Schicht-Farben + Legende */
+:root {
+  --layer-raw: #b5793a;
+  --layer-wiki: #3f9d52;
+  --layer-crm: #3b82c4;
+  --layer-kontext: #8b5cd6;
+  --layer-workspace: #d4a72c;
+  --layer-os: #8a8f98;
+}
+.vault-folder.layer-raw       { border-left: 3px solid var(--layer-raw); }
+.vault-folder.layer-wiki      { border-left: 3px solid var(--layer-wiki); }
+.vault-folder.layer-crm       { border-left: 3px solid var(--layer-crm); }
+.vault-folder.layer-kontext   { border-left: 3px solid var(--layer-kontext); }
+.vault-folder.layer-workspace { border-left: 3px solid var(--layer-workspace); }
+.vault-folder.layer-os        { border-left: 3px solid var(--layer-os); opacity: 0.8; }
+.vault-folder.layer-raw:not(:hover):not(.vault-active)       { background-color: color-mix(in srgb, var(--layer-raw) 12%, transparent); }
+.vault-folder.layer-wiki:not(:hover):not(.vault-active)      { background-color: color-mix(in srgb, var(--layer-wiki) 12%, transparent); }
+.vault-folder.layer-crm:not(:hover):not(.vault-active)       { background-color: color-mix(in srgb, var(--layer-crm) 12%, transparent); }
+.vault-folder.layer-kontext:not(:hover):not(.vault-active)   { background-color: color-mix(in srgb, var(--layer-kontext) 12%, transparent); }
+.vault-folder.layer-workspace:not(:hover):not(.vault-active) { background-color: color-mix(in srgb, var(--layer-workspace) 12%, transparent); }
+.vault-folder.layer-os:not(:hover):not(.vault-active)        { background-color: color-mix(in srgb, var(--layer-os) 12%, transparent); }
+
+.vault-other-file .vault-icon,
+.vault-other-file .vault-name { opacity: 0.7; }
+
+.vault-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  color: var(--text-muted, #888);
+}
+.vault-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.vault-legend-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
+.vault-legend-dot.layer-raw       { background: var(--layer-raw); }
+.vault-legend-dot.layer-wiki      { background: var(--layer-wiki); }
+.vault-legend-dot.layer-crm       { background: var(--layer-crm); }
+.vault-legend-dot.layer-kontext   { background: var(--layer-kontext); }
+.vault-legend-dot.layer-workspace { background: var(--layer-workspace); }
+.vault-legend-dot.layer-os        { background: var(--layer-os); }
+.crm-table-wrap { overflow-x: auto; }
+.crm-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.crm-table th,
+.crm-table td {
+  border: 1px solid var(--border, #ddd);
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.crm-table th.crm-th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-subtle);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.crm-table th.crm-th:hover { color: var(--text); }
+.crm-row { cursor: pointer; }
+.crm-row:hover td { background: var(--bg-subtle); }
+.crm-empty-cell { color: var(--text-muted); text-align: center; }

@@ -99,6 +99,21 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
 
 if __name__ == "__main__":
+    import socket
+    import sys
     import uvicorn
+
+    # Klarer Hinweis statt Stacktrace, wenn der Port schon belegt ist (alter Server laeuft noch).
+    _probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _probe.bind((config.HOST, config.PORT))
+    except OSError:
+        print(
+            f"[FEHLER] Port {config.PORT} ist bereits belegt - laeuft EwtosBrain schon?\n"
+            f"Beende den alten Prozess (start-server.bat erledigt das automatisch) und starte erneut."
+        )
+        sys.exit(1)
+    finally:
+        _probe.close()
 
     uvicorn.run(app, host=config.HOST, port=config.PORT, reload=False)

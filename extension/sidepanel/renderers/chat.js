@@ -120,6 +120,14 @@ export async function renderChat() {
   let sourceChatHistory = [];
   let activeSource = null; // {type: "transcript"|"video", ref: {...}, title: string}
 
+  // Tool-Modus-Schalter: aus = sparsam (Vault → nur Lesen/Suchen, Datei/Seite → 0 Tools),
+  // an = alle Tools (schreiben, SEO, Bild, Farming). Spart Tokens, Default = sparsam.
+  let toolsFull = false;
+  function currentToolLevel() {
+    if (toolsFull) return "full";
+    return chatMode === "vault" ? "knowledge" : "none";
+  }
+
   // Scrape-Umfang (nur Seiten-Chat): Hauptinhalt (sauber) vs. ganze Seite (tief, inkl. Nav/Links).
   let scrapeMode = "content"; // "content" | "full"
   const scrapeModeRow = el("div", { className: "scrape-mode-row", style: "display:none" });
@@ -221,11 +229,26 @@ export async function renderChat() {
     return btn;
   }
   modeTabsRow.append(makeModeTab(t("chat.mode_vault"), "vault"), makeModeTab(t("chat.mode_page"), "page"), makeModeTab(t("chat.mode_file"), "datei"));
+
+  // Tool-Modus-Schalter (rechts in der Tab-Zeile): sparsam ↔ alle Tools.
+  const toolsToggle = el("button", { type: "button", className: "chat-tools-toggle" });
+  toolsToggle.title = t("chat.tools_toggle_hint");
+  toolsToggle.addEventListener("click", () => { toolsFull = !toolsFull; updateToolsToggle(); });
+  modeTabsRow.append(toolsToggle);
+  function updateToolsToggle() {
+    // Schalter nur in den drei Inhalts-Modi; Transcript/Video sind grundsätzlich tool-frei.
+    const show = chatMode === "vault" || chatMode === "page" || chatMode === "vault_file";
+    toolsToggle.style.display = show ? "" : "none";
+    toolsToggle.classList.toggle("active", toolsFull);
+    toolsToggle.textContent = toolsFull ? t("chat.tools_full") : t("chat.tools_lite");
+  }
+
   function updateModeTabs() {
     const active = chatMode === "vault" ? "vault"
       : chatMode === "page" ? "page"
       : chatMode === "vault_file" ? "datei" : null;
     for (const [m, b] of Object.entries(modeBtns)) b.classList.toggle("active", m === active);
+    updateToolsToggle();
   }
   function switchMode(mode) {
     if (mode === "vault") { if (chatMode === "vault") return; openTool("chat", {}); }
@@ -263,6 +286,7 @@ export async function renderChat() {
       sourceBanner.textContent = t("chat.source_video", { title: src.title || src.ref?.slug || "" });
     } else if (src.type === "vault_file") {
       sourceBanner.textContent = t("chat.source_file", { title: src.title || src.ref?.rel_path || "" });
+      bannerRow.append(toolsToggle);
     } else {
       sourceBanner.textContent = `🌐 ${src.title || ""}`;
     }
@@ -573,12 +597,13 @@ export async function renderChat() {
             message,
             history: fixed ? sourceChatHistory : pageChatHistory,
             strict_source: false,
-            include_tools: !!vid,
+            tool_level: currentToolLevel(),
             vault_id: vid || null,
           }),
         });
       } else if (chatMode === "vault_file") {
-        // Datei-Chat: voller tool-fähiger Vault-Stream, an die offene Datei angeheftet (schreibfähig).
+        // Datei-Chat: an die offene Datei angeheftet. Tool-Level steuert, ob nur gechattet
+        // (none) oder voll schreibfähig (full) wird.
         const vid = activeSource.ref?.vault_id;
         res = await fetch(`${httpBase}/tools/chat/${vid}/stream`, {
           method: "POST",
@@ -586,6 +611,7 @@ export async function renderChat() {
           body: JSON.stringify({
             message,
             pinned_file: { vault_id: vid, rel_path: activeSource.ref?.rel_path },
+            tool_level: currentToolLevel(),
           }),
         });
       } else if (chatMode === "transcript" || chatMode === "video") {
@@ -604,7 +630,7 @@ export async function renderChat() {
         res = await fetch(`${httpBase}/tools/chat/${currentVaultId}/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, tool_level: currentToolLevel() }),
         });
       }
       if (!res.ok || !res.body) {

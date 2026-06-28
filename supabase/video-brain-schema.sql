@@ -95,3 +95,29 @@ ALTER TABLE queue ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "queue: eigene Zeilen" ON queue;
 CREATE POLICY "queue: eigene Zeilen" ON queue
   FOR ALL USING (auth.uid() = user_id);
+
+
+-- ── Playlists (kuratiert aus Vault) ────────────────────────────────────────
+-- Wird von ewtos-brain resync befüllt (wiki/resources/playlists/*.md).
+-- Metadaten-Quelle für die App: Titel, Beschreibung, Video-Reihenfolge.
+
+CREATE TABLE IF NOT EXISTS playlists (
+  slug         TEXT NOT NULL,
+  user_id      UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  titel        TEXT,
+  beschreibung TEXT,
+  thema        TEXT,
+  source_url   TEXT,
+  status       TEXT DEFAULT 'aktiv',
+  video_order  TEXT,            -- JSON-Array von video_ids in Reihenfolge
+  last_synced  TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (slug, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS playlists_user ON playlists (user_id);
+
+ALTER TABLE playlists ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "playlists: eigene Zeilen" ON playlists;
+CREATE POLICY "playlists: eigene Zeilen" ON playlists
+  FOR ALL USING (auth.uid() = user_id);

@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "blueprint_id": "crm-base",
+  "blueprint_name": "Agentur-CRM (Kunden & Projekte)",
+  "blueprint_version": "1.0.0",
+  "author": "ewtos.com",
+  "license": "MIT",
+  "description": "Agentur-CRM-Modul für den Vault: Kundenliste als .base-Tabelle, Kundenkarten mit Aktivitäts-Log, Projektkarten (per Wikilink mit einem Kunden verknüpft) und eine Projekt-Pipeline. Der Claude-Code-Agent trägt Projektarbeit automatisch ins Aktivitäts-Log der zugehörigen Kundenkarte ein (CLAUDE.md-Konvention).",
+  "tags": ["crm", "agentur", "kunden", "projekte", "addon"],
+  "category": "addon",
+  "when_to_use": "Für Agenturen/Freelancer: Kundenstamm, Projekt-Pipeline und Aktivitäts-Log direkt im Vault — mit automatischem Log-Eintrag durch den Agenten.",
+  "extends": ["kontext-base"],
+  "folders": [
+    { "path": "crm", "kind": "area", "label": "CRM", "emoji": "🤝" },
+    { "path": "crm/kunden", "kind": "asset", "asset_type": "kunde", "label": "Kunden", "emoji": "👤" },
+    { "path": "crm/projekte", "kind": "asset", "asset_type": "projekt", "label": "Projekte", "emoji": "📁" },
+    { "path": "crm/aktivitaeten", "kind": "asset", "asset_type": "aktivitaet", "label": "Aktivitäten", "emoji": "🗒" },
+    { "path": "crm/templates", "kind": "system", "label": "CRM-Vorlagen", "emoji": "📐" }
+  ],
+  "files": [
+    { "path": "crm/index.md", "template": "crm-base/index.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "crm/templates/kunde.md", "template": "crm-base/templates/kunde.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "crm/templates/projekt.md", "template": "crm-base/templates/projekt.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "crm/templates/aktivitaet.md", "template": "crm-base/templates/aktivitaet.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "crm/kunden/beispiel-kunde.md", "template": "crm-base/examples/beispiel-kunde.md.j2", "merge_policy": "skip_if_exists" },
+    { "path": "crm/projekte/beispiel-projekt.md", "template": "crm-base/examples/beispiel-projekt.md.j2", "merge_policy": "skip_if_exists" }
+  ],
+  "bases": [
+    {
+      "path": "crm/kunden/kundenstamm.base",
+      "title": "Kundenstamm",
+      "source": { "folder": "crm/kunden", "recursive": false },
+      "filters": [
+        { "field": "typ", "op": "eq", "value": "kunde" }
+      ],
+      "columns": [
+        { "field": "file.name", "label": "Kunde" },
+        { "field": "firma", "label": "Firma" },
+        { "field": "branche", "label": "Branche" },
+        { "field": "status", "label": "Status" },
+        { "field": "vertrag_bis", "label": "Vertrag bis" },
+        { "field": "kontakt", "label": "Kontakt" },
+        { "field": "email", "label": "E-Mail" },
+        { "field": "telefon", "label": "Telefon" },
+        { "formula": "if(date(vertrag_bis) - today() < 60, '⚠️', '✓')", "label": "Frist" }
+      ],
+      "views": [
+        {
+          "type": "table",
+          "name": "Aktive Kunden",
+          "filter": { "field": "status", "op": "eq", "value": "aktiv" },
+          "sort": [{ "field": "vertrag_bis", "dir": "asc" }]
+        },
+        {
+          "type": "cards",
+          "name": "Nach Branche",
+          "group_by": "branche"
+        }
+      ]
+    },
+    {
+      "path": "crm/projekte/projekt-pipeline.base",
+      "title": "Projekt-Pipeline",
+      "source": { "folder": "crm/projekte", "recursive": false },
+      "filters": [
+        { "field": "typ", "op": "eq", "value": "projekt" }
+      ],
+      "columns": [
+        { "field": "file.name", "label": "Projekt" },
+        { "field": "kunde", "label": "Kunde" },
+        { "field": "phase", "label": "Phase" },
+        { "field": "status", "label": "Status" },
+        { "field": "deadline", "label": "Deadline" },
+        { "field": "budget", "label": "Budget" }
+      ],
+      "views": [
+        {
+          "type": "table",
+          "name": "Pipeline",
+          "sort": [{ "field": "deadline", "dir": "asc" }]
+        },
+        {
+          "type": "cards",
+          "name": "Nach Phase",
+          "group_by": "phase"
+        }
+      ]
+    }
+  ],
+  "claude_md_sections": [
+    {
+      "id": "crm-schema",
+      "order": 30,
+      "title": "CRM-Modul",
+      "content": "Dieser Vault hat ein **CRM-Modul** unter `crm/` (Agentur-Kundenverwaltung).\n\n- `crm/kunden/<slug>.md` — Kundenkarten (`typ: kunde`; Felder: `firma`, `branche`, `status` aktiv|wartend|pausiert|ehemalig, `vertrag_bis`, `kontakt`, `email`, `telefon`, `website`). Jede Karte hat eine Sektion `## Aktivitäts-Log`.\n- `crm/projekte/<slug>.md` — Projektkarten (`typ: projekt`; Felder: `kunde` als Wikilink `[[crm/kunden/<slug>]]`, `phase` lead|angebot|aktiv|abgeschlossen, `status`, `deadline`, `budget`).\n- `crm/aktivitaeten/<slug>.md` — optionale ausführliche Aktivitäts-Einträge.\n- `crm/kunden/kundenstamm.base` + `crm/projekte/projekt-pipeline.base` — Tabellen-/Karten-Ansichten in Obsidian.\n\nVerknüpfung: ein Projekt zeigt über sein `kunde:`-Frontmatter auf genau eine Kundenkarte. Slugs in kebab-case. Vorlagen liegen in `crm/templates/`.",
+      "merge_policy": "replace_if_marker"
+    },
+    {
+      "id": "crm-activity-log",
+      "order": 31,
+      "title": "Kunden-Aktivitäts-Log (Pflicht)",
+      "content": "**Wenn du an einem Projekt für einen Kunden arbeitest, trage die Arbeit unaufgefordert ins Aktivitäts-Log der verknüpften Kundenkarte ein:**\n\n1. Lies das `kunde:`-Frontmatter der Projektkarte (`crm/projekte/<projekt>.md`) — das ist die Ziel-Kundenkarte.\n2. Öffne `crm/kunden/<slug>.md` und finde die Sektion `## Aktivitäts-Log`.\n3. Hänge **oben** (neueste zuerst) eine Zeile an: `- <heutiges Datum YYYY-MM-DD> — [[crm/projekte/<projekt>|<Projektname>]]: <eine Zeile, was du getan hast>`.\n4. Setze `zuletzt:` der Kundenkarte auf das heutige Datum. Sonst nichts an der Karte ändern.\n5. Keine Duplikate: pro Sitzung max. ein Eintrag je Projekt, ausser es passiert etwas inhaltlich Neues.\n\nDas ist eine Konvention für den Agenten (kein Server-Automatismus) — du führst den Log-Eintrag selbst aus, sobald du Projektarbeit abschliesst oder committest.",
+      "merge_policy": "replace_if_marker"
+    }
+  ],
+  "briefing_sources": [],
+  "permissions_defaults": {}
+}

@@ -55,7 +55,14 @@ def _system_text(system) -> str | None:
     return str(system) or None
 
 
-def _to_oai_messages(messages: list[dict], system) -> list[dict]:
+def _has_cache_control(system) -> bool:
+    """True, wenn der System-Prompt einen ephemeral-Cache-Breakpoint trägt."""
+    return isinstance(system, list) and any(
+        isinstance(b, dict) and b.get("cache_control") for b in system
+    )
+
+
+def _to_oai_messages(messages: list[dict], system, cache_control: bool = False) -> list[dict]:
     """Konvertiert Anthropic-Nachrichten-Liste + System-Prompt zu OpenAI-Format.
 
     Wichtige Übersetzungen:
@@ -63,12 +70,21 @@ def _to_oai_messages(messages: list[dict], system) -> list[dict]:
     - user/content=str → role:user
     - user/content=[tool_result,...] → mehrere role:tool-Nachrichten
     - assistant/content=[text+tool_use,...] → role:assistant mit tool_calls
+
+    cache_control=True (nur OpenRouter): trägt der System-Block einen Cache-Breakpoint,
+    wird das System als strukturierter Content-Part mit `cache_control` ausgegeben, damit
+    OpenRouter den Prefix für Anthropic-Modelle cacht (Gemini/OpenAI cachen ohnehin implizit).
     """
     result = []
 
     sys_text = _system_text(system)
     if sys_text:
-        result.append({"role": "system", "content": sys_text})
+        if cache_control and _has_cache_control(system):
+            result.append({"role": "system", "content": [
+                {"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}},
+            ]})
+        else:
+            result.append({"role": "system", "content": sys_text})
 
     for msg in messages:
         role = msg["role"]
@@ -139,6 +155,13 @@ def _build_completion(
     if usage_obj:
         u.input_tokens = getattr(usage_obj, "prompt_tokens", 0) or 0
         u.output_tokens = getattr(usage_obj, "completion_tokens", 0) or 0
+        # Cache-Treffer sichtbar machen (OpenAI/OpenRouter: prompt_tokens_details.cached_tokens)
+        details = getattr(usage_obj, "prompt_tokens_details", None)
+        if details is not None:
+            cached = getattr(details, "cached_tokens", None)
+            if cached is None and isinstance(details, dict):
+                cached = details.get("cached_tokens")
+            u.cache_read_input_tokens = cached or 0
 
     return CompletionResult(content=content, stop_reason=stop_reason, usage=u)
 
@@ -215,13 +238,15 @@ class _OpenAIStreamHandle(StreamHandle):
 class OpenAIBackend(LLMBackend):
     """Backend für OpenAI (und OpenAI-kompatible APIs wie Mistral)."""
 
-    def __init__(self, api_key: str, base_url: str | None = None):
+    def __init__(self, api_key: str, base_url: str | None = None, cache_control: bool = False):
         self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        # Nur Provider, die das Anthropic-style cache_control verstehen (OpenRouter).
+        self._cache_control = cache_control
 
     def _build_kwargs(self, *, model, messages, system, tools, max_tokens) -> dict:
         kwargs: dict = {
             "model": model,
-            "messages": _to_oai_messages(messages, system),
+            "messages": _to_oai_messages(messages, system, cache_control=self._cache_control),
             "max_tokens": max_tokens,
         }
         if tools:

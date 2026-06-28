@@ -76,6 +76,7 @@ Wenn das Profil steht, biete passende Module an (nutze `list_available_blueprint
 - **Farming** (`karpathy-para-base`) — Wissen aus Quellen (YouTube/Artikel) ins Wiki farmen, Video/Creator/Playlist-Vorlagen + `/ingest /query /farm`.
 - **Research** (`researcher`) — Themen/Papers/Fragen mit Tabellen-Ansichten.
 - **Lernen** (`karpathy-lerner`) — Ingest/Query-Routinen + Playlist-Trending im Briefing.
+- **CRM** (`crm-base`) — Agentur-Kundenverwaltung: Kundenstamm + Projekte als `.base`-Tabellen, Aktivitäts-Log pro Kunde, Auto-Log bei Projektarbeit.
 
 Frage kurz: "Moechtest du eines davon dazunehmen?" Bei Ja: `merge_blueprint_template(<id>)` (additiv, nichts wird ueberschrieben). Bei Nein: weiter. Keines aufdraengen.
 

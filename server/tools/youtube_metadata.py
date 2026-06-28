@@ -190,7 +190,7 @@ def fetch_metadata(url_or_id: str) -> dict:
 
         description = info.get("description")
         if description:
-            result["description"] = description[:800]
+            result["description"] = description
 
     # oEmbed nutzen, wenn yt-dlp fehlt/leer oder Felder fehlen
     if not info or not result.get("title") or not result.get("channel"):

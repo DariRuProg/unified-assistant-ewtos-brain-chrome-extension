@@ -33,6 +33,29 @@ def effective_llm_config() -> tuple[str, str]:
     return provider, model
 
 
+def sensitive_llm_config() -> tuple[str, str]:
+    """Liefert (provider, model) der für sensible Dateien freigegebenen LLM.
+    Leerer Provider = nicht konfiguriert → sensible Inhalte sind dann komplett gesperrt."""
+    provider = (settings.get("sensitive_llm_provider") or "").strip().lower()
+    model = (settings.get("sensitive_llm_model") or "").strip()
+    return provider, model
+
+
+def active_allowed_for_sensitive() -> bool:
+    """True, wenn die aktive LLM die für sensible Dateien freigegebene ist.
+    Ist kein sicheres LLM konfiguriert, ist sensibler Inhalt grundsätzlich gesperrt.
+    Ist nur ein Provider (ohne Modell) freigegeben, zählt der Provider allein."""
+    s_provider, s_model = sensitive_llm_config()
+    if not s_provider:
+        return False
+    a_provider, a_model = effective_llm_config()
+    if a_provider != s_provider:
+        return False
+    if s_model and a_model != s_model:
+        return False
+    return True
+
+
 def get_backend() -> LLMBackend:
     """Instanziiert das aktive Backend. Wirft, wenn der nötige API-Key fehlt."""
     provider, _ = effective_llm_config()
@@ -64,7 +87,9 @@ def get_backend() -> LLMBackend:
         if not api_key:
             raise ValueError("Kein OpenRouter-API-Key in den Settings/Env")
         base_url = settings.get("openrouter_base_url") or "https://openrouter.ai/api/v1"
-        return OpenAIBackend(api_key=api_key, base_url=base_url)
+        # OpenRouter versteht Anthropic-style cache_control-Breakpoints (für Anthropic-Modelle);
+        # Gemini/OpenAI cachen implizit und ignorieren es unschädlich.
+        return OpenAIBackend(api_key=api_key, base_url=base_url, cache_control=True)
 
     log.warning("Unbekannter LLM-Provider '%s' — Fallback auf Anthropic", provider)
     api_key = settings.get("anthropic_api_key")

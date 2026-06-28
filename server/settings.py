@@ -29,6 +29,8 @@ EDITABLE_KEYS = {
     "max_user_turns",
     "llm_provider",
     "llm_model",
+    "sensitive_llm_provider",
+    "sensitive_llm_model",
     "openai_api_key",
     "ollama_base_url",
     "mistral_api_key",
@@ -145,6 +147,11 @@ def _normalize_vault(v: dict[str, Any]) -> dict[str, Any]:
     else:
         out["use_local_notes"] = bool(out["use_local_notes"])
     out["applied_blueprints"] = list(out.get("applied_blueprints") or [])
+    out["sensitive_folders"] = [
+        str(f).strip("/").replace("\\", "/")
+        for f in (out.get("sensitive_folders") or [])
+        if str(f).strip("/")
+    ]
     return out
 
 
@@ -316,6 +323,37 @@ def add_applied_blueprints(vault_id: str, ids: list[str]) -> list[str] | None:
             _flush()
             return existing
     return None
+
+
+def vault_sensitive_folders(vault_id: str) -> list[str]:
+    """Liste der als sensibel markierten Ordner-Pfade (relativ, normalisiert)."""
+    v = get_vault(vault_id)
+    return list(v.get("sensitive_folders") or []) if v else []
+
+
+def set_vault_sensitive_folder(vault_id: str, folder: str, on: bool) -> list[str]:
+    """Markiert/entfernt einen Ordner als sensibel. Returns die neue Liste."""
+    global _cache
+    rel = str(folder or "").strip("/").replace("\\", "/")
+    if not rel:
+        raise ValueError("Ordner-Pfad fehlt")
+    current = all()
+    vaults = list(current.get("vaults") or [])
+    for i, v in enumerate(vaults):
+        if v.get("id") == vault_id:
+            folders = [str(f).strip("/").replace("\\", "/") for f in (v.get("sensitive_folders") or [])]
+            if on and rel not in folders:
+                folders.append(rel)
+            elif not on and rel in folders:
+                folders = [f for f in folders if f != rel]
+            updated = dict(v)
+            updated["sensitive_folders"] = folders
+            vaults[i] = updated
+            current["vaults"] = vaults
+            _cache = current
+            _flush()
+            return folders
+    raise ValueError(f"Vault {vault_id} nicht gefunden")
 
 
 def vault_permission(vault_id: str, key: str) -> bool:

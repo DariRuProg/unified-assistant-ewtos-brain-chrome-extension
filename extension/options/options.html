@@ -367,6 +367,26 @@
     </datalist>
   </div>
 
+  <div class="field">
+    <h3 style="margin:18px 0 4px;">Sensible Dateien (DSGVO / Firmengeheimnisse)</h3>
+    <div class="hint">Dateien mit Frontmatter <code>sensibel: true</code> dürfen nur an das hier gewählte LLM gehen. Ist ein anderes LLM aktiv, wird der Chat mit dieser Datei blockiert. Leer = sensible Dateien sind komplett gesperrt. Empfehlung: lokales Ollama oder ein selbstgehostetes Modell.</div>
+    <label for="sensitiveLlmProvider">Erlaubter Provider</label>
+    <select id="sensitiveLlmProvider">
+      <option value="">— keiner (sensible Dateien gesperrt)</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="openai">OpenAI (GPT)</option>
+      <option value="ollama">Ollama (lokal, DSGVO)</option>
+      <option value="mistral">Mistral</option>
+      <option value="openrouter">OpenRouter</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="sensitiveLlmModel">Erlaubtes Modell (optional)</label>
+    <div class="hint">Leer = jedes Modell dieses Providers ist erlaubt. Gesetzt = nur exakt dieses Modell (muss dem aktiven Modell entsprechen).</div>
+    <input id="sensitiveLlmModel" type="text" placeholder="z.B. llama3.1:8b" autocomplete="off" />
+  </div>
+
   <div class="field provider-field" data-provider="anthropic">
     <label for="anthropicApiKey" data-i18n="options.anthropic_key_label">Anthropic API-Key</label>
     <div class="hint"><span data-i18n="options.anthropic_key_hint">Wird serverseitig gespeichert (nicht in der Extension).</span> <span id="anthropicApiKeyStatus" style="font-weight: 600;"></span></div>

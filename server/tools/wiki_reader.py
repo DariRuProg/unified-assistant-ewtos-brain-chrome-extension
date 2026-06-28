@@ -12,11 +12,34 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from tools import frontmatter as _frontmatter
+
 # Prefixes/names to ignore when listing (Obsidian internals, hidden, system).
 IGNORED_NAMES = {".obsidian", ".trash", ".git", "node_modules", "__pycache__"}
 
 # Versteckter Sicherungs-Ordner für Inhalte, die vor einem Überschreiben gesichert werden.
 BACKUP_DIRNAME = ".ewtos-backups"
+
+# Bild-Endungen, die der Explorer inline rendern kann.
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+
+def _is_hidden(name: str) -> bool:
+    return name.startswith(".") or name in IGNORED_NAMES
+
+
+def _count_children(dir_path: Path, show_hidden: bool) -> int:
+    """Zählt sichtbare Kinder (Ordner + Dateien) eines Verzeichnisses — für die
+    (N)-Anzeige im Explorer, ohne den Ordner aufzuklappen."""
+    n = 0
+    try:
+        for entry in dir_path.iterdir():
+            if not show_hidden and _is_hidden(entry.name):
+                continue
+            n += 1
+    except OSError:
+        return 0
+    return n
 
 
 def resolve_dir(vault_path: str) -> Path:
@@ -52,9 +75,10 @@ def list_folder(vault_path: str, rel_path: str = "", show_hidden: bool = False) 
     folders: list[str] = []
     files: list[str] = []
     images: list[str] = []
-    IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+    other: list[str] = []
+    counts: dict[str, int] = {}
     for entry in target.iterdir():
-        if not show_hidden and (entry.name.startswith(".") or entry.name in IGNORED_NAMES):
+        if not show_hidden and _is_hidden(entry.name):
             continue
         try:
             rel = str(entry.relative_to(root)).replace("\\", "/")
@@ -62,12 +86,23 @@ def list_folder(vault_path: str, rel_path: str = "", show_hidden: bool = False) 
             continue
         if entry.is_dir():
             folders.append(rel)
+            counts[rel] = _count_children(entry, show_hidden)
         elif entry.is_file():
-            if entry.suffix.lower() == ".md":
+            ext = entry.suffix.lower()
+            if ext == ".md":
                 files.append(rel)
-            elif entry.suffix.lower() in IMAGE_EXTS:
+            elif ext in IMAGE_EXTS:
                 images.append(rel)
-    return {"path": rel_path or "", "folders": sorted(folders), "files": sorted(files), "images": sorted(images)}
+            else:
+                other.append(rel)
+    return {
+        "path": rel_path or "",
+        "folders": sorted(folders),
+        "files": sorted(files),
+        "images": sorted(images),
+        "other": sorted(other),
+        "counts": counts,
+    }
 
 
 def read_file(vault_path: str, rel_path: str) -> str:
@@ -106,6 +141,38 @@ def search_files(vault_path: str, q: str, max_results: int = 30) -> list[dict]:
         if len(results) >= max_results:
             break
     return results
+
+
+def query_frontmatter(vault_path: str, folder: str, typ: str | None = None,
+                      recursive: bool = False) -> list[dict]:
+    """Listet .md-Dateien in `folder` und parst deren Frontmatter zu Records.
+    Read-only. Optionaler Filter auf das Frontmatter-Feld `typ`. Returns eine Liste
+    von {rel_path, name, frontmatter}, alphabetisch nach Dateiname.
+    FileNotFoundError wenn der Ordner fehlt (z.B. Vault ohne CRM-Modul)."""
+    target = _safe_resolve(vault_path, folder)
+    if not target.exists():
+        raise FileNotFoundError(f"Ordner nicht gefunden: {folder}")
+    if not target.is_dir():
+        raise ValueError(f"Kein Ordner: {folder}")
+    root = resolve_dir(vault_path).resolve()
+    globber = target.rglob("*.md") if recursive else target.glob("*.md")
+    records: list[dict] = []
+    for md_file in sorted(globber):
+        if any(part in IGNORED_NAMES for part in md_file.parts):
+            continue
+        try:
+            text = md_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        meta = _frontmatter.parse_frontmatter(text)
+        if typ and str(meta.get("typ", "")).strip() != typ:
+            continue
+        try:
+            rel = str(md_file.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            continue
+        records.append({"rel_path": rel, "name": md_file.stem, "frontmatter": meta})
+    return records
 
 
 def backup_file(vault_path: str, rel_path: str) -> str | None:
@@ -148,6 +215,17 @@ def create_file(vault_path: str, rel_path: str, content: str = "") -> None:
         raise FileExistsError(f"Datei existiert bereits: {rel_path}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
+
+
+def create_folder(vault_path: str, rel_path: str) -> None:
+    """Legt einen neuen Ordner an — schlägt fehl wenn er bereits existiert.
+    Traversal-geschützt via _safe_resolve."""
+    if not rel_path or not rel_path.strip():
+        raise ValueError("Kein Ordnername angegeben")
+    p = _safe_resolve(vault_path, rel_path)
+    if p.exists():
+        raise FileExistsError(f"Existiert bereits: {rel_path}")
+    p.mkdir(parents=True, exist_ok=False)
 
 
 _ASSET_MIMES = {

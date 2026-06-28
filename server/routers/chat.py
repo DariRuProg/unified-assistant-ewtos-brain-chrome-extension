@@ -21,6 +21,7 @@ class ChatSendRequest(BaseModel):
     message: str
     page_context: str | None = None
     pinned_file: dict | None = None  # {"vault_id", "rel_path"} — Datei-Chat (schreibfähig)
+    tool_level: str = "full"  # "none" | "knowledge" | "full" — Chat-Modus-Schalter
 
 
 class PageChatRequest(BaseModel):
@@ -38,6 +39,7 @@ class SourceChatRequest(BaseModel):
     strict_source: bool = True
     include_tools: bool = False
     vault_id: str | None = None
+    tool_level: str | None = None  # "none" | "knowledge" | "full"; None → Fallback auf include_tools
 
 
 # Static routes declared before {vault_id} routes so "page"/"source" aren't matched as vault_id.
@@ -69,6 +71,7 @@ def chat_source_stream(req: SourceChatRequest) -> StreamingResponse:
             strict_source=req.strict_source,
             include_tools=req.include_tools,
             vault_id=req.vault_id,
+            tool_level=req.tool_level,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -89,10 +92,20 @@ def chat_clear(vault_id: str) -> dict[str, Any]:
 def chat_stream(vault_id: str, req: ChatSendRequest) -> StreamingResponse:
     """SSE stream of chat events: tool_start, tool_end, text_delta, done, error."""
     return StreamingResponse(
-        chat.send_stream(vault_id, req.message, page_context=req.page_context, pinned_file=req.pinned_file),
+        chat.send_stream(vault_id, req.message, page_context=req.page_context,
+                         pinned_file=req.pinned_file, tool_level=req.tool_level),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/tools/chat/{vault_id}/debug-context")
+def chat_debug_context(vault_id: str, tool_level: str = "full", pinned_rel: str = "") -> dict[str, Any]:
+    """Token-Breakdown für Debug-UI."""
+    try:
+        return chat.debug_context(vault_id, tool_level=tool_level, pinned_rel=pinned_rel)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
 
 
 @router.get("/tools/chat/{vault_id}")
@@ -106,7 +119,8 @@ def chat_load(vault_id: str) -> dict[str, Any]:
 @router.post("/tools/chat/{vault_id}")
 def chat_send(vault_id: str, req: ChatSendRequest) -> dict[str, Any]:
     try:
-        return chat.send(vault_id, req.message, page_context=req.page_context, pinned_file=req.pinned_file)
+        return chat.send(vault_id, req.message, page_context=req.page_context,
+                         pinned_file=req.pinned_file, tool_level=req.tool_level)
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:

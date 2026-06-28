@@ -36,6 +36,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "err.title_required": "Title required",
         "err.tts_text_missing": "text is missing",
         "err.search_query_empty": "Search query must not be empty",
+        "chat.search_hit_sensitive": "[sensitive — content only visible with the approved LLM]",
         "err.no_content": "No content found",
         "err.no_text_extractable": "No text could be extracted.",
         "err.content_too_short": "Content too short (< {min} chars)",
@@ -132,6 +133,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "bp.karpathy-lerner.name": "Karpathy Learner",
         "bp.karpathy-lerner.desc": "Focus on the learning pipeline: extends karpathy-para-base and adds CLAUDE.md routines (ingest/query/check/lint) plus playlist trending in the briefing.",
         "bp.karpathy-lerner.when": "For learning from videos: detailed ingest/query/check/lint routines and playlist trending in the morning briefing. Builds on the farming module.",
+        "bp.crm-base.name": "Agency CRM (Customers & Projects)",
+        "bp.crm-base.desc": "Agency CRM module for the vault: customer list as a .base table, customer cards with an activity log, project cards (linked to a customer via wikilink) and a project pipeline. The Claude-Code agent auto-appends project work to the linked customer's activity log (CLAUDE.md convention).",
+        "bp.crm-base.when": "For agencies/freelancers: customer roster, project pipeline and activity log inside the vault — with automatic log entries by the agent.",
         "bp.empty.name": "Empty (minimal)",
         "bp.empty.desc": "Minimal: just an inbox/ and an agents.md with a schema hint. Starting point for fully custom setups via the Setup Agent.",
         "bp.empty.when": "Only for pros who want to build everything themselves — empty skeleton without context profile/PARA.",
@@ -168,6 +172,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "err.title_required": "Titel erforderlich",
         "err.tts_text_missing": "text fehlt",
         "err.search_query_empty": "Suchbegriff darf nicht leer sein",
+        "chat.search_hit_sensitive": "[sensibel — Inhalt nur mit freigegebenem LLM sichtbar]",
         "err.no_content": "Kein Inhalt gefunden",
         "err.no_text_extractable": "Kein Text extrahierbar.",
         "err.content_too_short": "Inhalt zu kurz (< {min} Zeichen)",
@@ -264,6 +269,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "bp.karpathy-lerner.name": "Karpathy-Lerner",
         "bp.karpathy-lerner.desc": "Fokus auf Lern-Pipeline: erbt karpathy-para-base und ergänzt CLAUDE.md-Routinen (Ingest/Query/Check/Lint) sowie Playlist-Trending im Briefing.",
         "bp.karpathy-lerner.when": "Fürs Lernen aus Videos: ausführliche Ingest/Query/Check/Lint-Routinen und Playlist-Trending im Morgen-Briefing. Baut auf dem Farming-Modul auf.",
+        "bp.crm-base.name": "Agentur-CRM (Kunden & Projekte)",
+        "bp.crm-base.desc": "Agentur-CRM-Modul für den Vault: Kundenliste als .base-Tabelle, Kundenkarten mit Aktivitäts-Log, Projektkarten (per Wikilink mit einem Kunden verknüpft) und eine Projekt-Pipeline. Der Claude-Code-Agent trägt Projektarbeit automatisch ins Aktivitäts-Log der zugehörigen Kundenkarte ein (CLAUDE.md-Konvention).",
+        "bp.crm-base.when": "Für Agenturen/Freelancer: Kundenstamm, Projekt-Pipeline und Aktivitäts-Log direkt im Vault — mit automatischem Log-Eintrag durch den Agenten.",
         "bp.empty.name": "Leer (minimal)",
         "bp.empty.desc": "Minimal: nur eine inbox/ und eine agents.md mit Schema-Hinweis. Ausgangspunkt für komplett eigene Setups via Setup-Agent.",
         "bp.empty.when": "Nur für Profis, die alles selbst aufbauen wollen — leeres Skelett ohne Kontext-Profil/PARA.",
@@ -274,9 +282,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
 
 _LANG_NAMES = {
     "en": "English",
-    "de": "Deutsch",
-    "it": "Italiano",
-    "es": "Español",
+    "de": "German",
+    "it": "Italian",
+    "es": "Spanish",
+    "fr": "French",
 }
 
 

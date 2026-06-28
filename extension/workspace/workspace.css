@@ -153,6 +153,10 @@ body {
 }
 .ws-chat-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .ws-chat-log.hide-activity .chat-activity { display: none; }
+.ws-tool-path-link { color: inherit; text-decoration: underline; text-decoration-style: dotted; cursor: pointer; }
+.ws-tool-path-link:hover { opacity: 0.7; }
+code.ws-vault-code-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+code.ws-vault-code-link:hover { opacity: 0.7; }
 #ws-mic-btn.recording { color: #e74c3c; border-color: #e74c3c; }
 .ws-chat-log {
   flex: 1 1 auto;
@@ -280,7 +284,9 @@ body {
   border-left: 3px solid var(--ws-border);
   color: var(--ws-muted);
 }
-.ws-view a, .ws-chat-bubble a { color: var(--ws-accent); }
+.ws-view a { color: var(--ws-accent); }
+.ws-chat-bubble a { color: inherit; text-decoration: underline; }
+.ws-chat-bubble a:hover { opacity: 0.7; }
 .ws-view .fm-block { margin-bottom: 1em; }
 .ws-view .fm-table { font-size: 0.9em; }
 .ws-view .fm-table th { white-space: nowrap; padding-right: 14px; }

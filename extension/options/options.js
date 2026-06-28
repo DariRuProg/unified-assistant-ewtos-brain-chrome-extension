@@ -37,12 +37,14 @@ document.querySelectorAll(".theme-swatch").forEach((btn) => {
     });
   });
 });
-const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "ollamaBaseUrl", "openrouterBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel", "chatHeavyOpsMode", "elevenlabsVoiceId", "videoBrainSupabaseUrl", "videoBrainSupabaseUserId"];
+const SERVER_FIELDS = ["notesPath", "maxUserTurns", "llmProvider", "llmModel", "sensitiveLlmProvider", "sensitiveLlmModel", "ollamaBaseUrl", "openrouterBaseUrl", "imageGenModel", "setupAgentProvider", "setupAgentModel", "chatHeavyOpsMode", "elevenlabsVoiceId", "videoBrainSupabaseUrl", "videoBrainSupabaseUserId"];
 const SERVER_KEY_MAP = {
   notesPath: "notes_path",
   maxUserTurns: "max_user_turns",
   llmProvider: "llm_provider",
   llmModel: "llm_model",
+  sensitiveLlmProvider: "sensitive_llm_provider",
+  sensitiveLlmModel: "sensitive_llm_model",
   ollamaBaseUrl: "ollama_base_url",
   openrouterBaseUrl: "openrouter_base_url",
   imageGenModel: "image_gen_model",

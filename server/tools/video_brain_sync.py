@@ -247,7 +247,7 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
     else:
         raw_section = _extract_section(body, "Transkript") or _extract_section(body, "Transcript")
         if raw_section and raw_section.strip().startswith("Siehe "):
-            ref_path = raw_section.strip().removeprefix("Siehe ").strip()
+            ref_path = raw_section.strip().removeprefix("Siehe ").strip().strip("`")
             transcript_text = _read_transcript_file(vault_path, ref_path)
         else:
             transcript_text = raw_section
@@ -275,7 +275,7 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
         metadata["upload_date"] = upload
     description = fm.get("description")
     if description:
-        metadata["description"] = description[:2000]
+        metadata["description"] = description[:8000]
     channel_url = fm.get("channel_url")
     if channel_url:
         metadata["channel_url"] = channel_url
@@ -293,7 +293,7 @@ def _build_history_row(vault_path: str, video_data: dict, user_id: str) -> dict 
                 if not channel:
                     channel = live.get("channel") or channel
                 if not metadata.get("description") and live.get("description"):
-                    metadata["description"] = live["description"]
+                    metadata["description"] = live["description"][:8000]
                 if not metadata.get("channel_url") and live.get("channel_url"):
                     metadata["channel_url"] = live["channel_url"]
                 if not metadata.get("duration") and live.get("duration"):
@@ -337,6 +337,17 @@ def _upsert_history(cfg: dict, row: dict) -> None:
     )
     if resp.status_code not in (200, 201):
         raise RuntimeError(f"Supabase upsert fehlgeschlagen: HTTP {resp.status_code} — {resp.text[:300]}")
+
+
+def _upsert_playlist(cfg: dict, row: dict) -> None:
+    resp = httpx.post(
+        f"{cfg['url']}/rest/v1/playlists",
+        headers=_sb_headers(cfg["service_key"]),
+        json=row,
+        timeout=15.0,
+    )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Supabase playlist upsert fehlgeschlagen: HTTP {resp.status_code} — {resp.text[:300]}")
 
 
 # --- Öffentliche API ---------------------------------------------------------
@@ -409,18 +420,51 @@ def _collect_md_files(vault_path: Path) -> list[Path]:
             seen.add(rp)
             result.append(p)
 
-    # wiki/**/videos/ — findet Säulen UND PARA-Struktur in einem Durchgang
-    for f in sorted(vault_path.glob("wiki/**/videos/*.md")):
-        if f.stem != "index":
-            add(f)
-
-    # raw/youtube/ — rohe Transkript-Dateien
+    # raw/youtube/ zuerst — rohe Transkript-Dateien (geringere Priorität)
     raw_yt = vault_path / "raw" / "youtube"
     if raw_yt.exists():
         for f in sorted(raw_yt.glob("*.md")):
             add(f)
 
+    # wiki/**/videos/ zuletzt — kuratierte Wiki-Seiten gewinnen beim Upsert
+    for f in sorted(vault_path.glob("wiki/**/videos/*.md")):
+        if f.stem != "index":
+            add(f)
+
     return result
+
+
+def _collect_playlist_files(vault_path: Path) -> list[Path]:
+    """Sammelt alle Playlist-Markdown-Dateien aus wiki/resources/playlists/."""
+    d = vault_path / "wiki" / "resources" / "playlists"
+    if not d.exists():
+        return []
+    return [f for f in sorted(d.glob("*.md")) if f.stem != "index"]
+
+
+def _build_playlist_row(parsed: dict, user_id: str) -> dict | None:
+    """Mappt eine geparste Playlist-Datei auf das Supabase playlists-Schema.
+    Extrahiert Video-IDs aus YouTube-URLs in den H2-Blöcken (Reihenfolge beibehalten)."""
+    fm = parsed.get("frontmatter") or {}
+    body = parsed.get("body") or ""
+    video_order: list[str] = []
+    for line in body.splitlines():
+        m = _VIDEO_ID_RE.search(line)
+        if m:
+            vid = m.group(1)
+            if vid not in video_order:
+                video_order.append(vid)
+    return {
+        "slug": parsed["slug"],
+        "user_id": user_id,
+        "titel": fm.get("titel") or parsed["slug"],
+        "beschreibung": fm.get("beschreibung") or None,
+        "thema": fm.get("thema") or None,
+        "source_url": fm.get("quelle_url") or None,
+        "status": fm.get("status") or "aktiv",
+        "video_order": json.dumps(video_order, ensure_ascii=False) if video_order else None,
+        "last_synced": _now_iso(),
+    }
 
 
 def resync_all(vault_id: str) -> dict:
@@ -457,5 +501,21 @@ def resync_all(vault_id: str) -> dict:
             log.error("video_brain resync Fehler für %s: %s", slug, exc)
             failed.append({"slug": slug, "path": str(md_file), "reason": str(exc)})
 
-    log.info("video_brain resync_all: vault=%s synced=%d failed=%d", vault_id, synced, len(failed))
-    return {"ok": True, "synced": synced, "failed": failed}
+    # Playlists aus wiki/resources/playlists/*.md synken
+    playlist_files = _collect_playlist_files(vault_path)
+    pl_synced = 0
+    for pl_file in playlist_files:
+        try:
+            pl_data = _parse_md_file(pl_file)
+            pl_row = _build_playlist_row(pl_data, cfg["user_id"])
+            if pl_row:
+                _upsert_playlist(cfg, pl_row)
+                log.info("video_brain playlist sync OK: %s", pl_file.stem)
+                pl_synced += 1
+        except Exception as exc:
+            log.error("video_brain playlist sync Fehler für %s: %s", pl_file.stem, exc)
+            failed.append({"slug": pl_file.stem, "path": str(pl_file), "reason": str(exc)})
+
+    log.info("video_brain resync_all: vault=%s synced=%d playlists=%d failed=%d",
+             vault_id, synced, pl_synced, len(failed))
+    return {"ok": True, "synced": synced, "playlists_synced": pl_synced, "failed": failed}

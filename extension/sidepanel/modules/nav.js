@@ -14,8 +14,8 @@ export function getGroups() {
     icon: "📚",
     sub: t("nav.vault_sub"),
     tools: [
-      { id: "chat",            label: t("nav.chat_vault"),      hint: t("nav.chat_vault_hint"), icon: "💬" },
       { id: "vault_explorer",  label: t("nav.vault_explorer"),  hint: t("nav.vault_explorer_hint"), icon: "📚" },
+      { id: "crm",             label: t("nav.crm"),             hint: t("nav.crm_hint"), icon: "🤝" },
       { id: "ingest_document", label: t("nav.ingest_document"), hint: t("nav.ingest_document_hint"), icon: "📥" },
       { id: "vault_health",    label: t("nav.vault_health"),    hint: t("nav.vault_health_hint"), icon: "🩺" },
     ],
@@ -26,7 +26,6 @@ export function getGroups() {
     icon: "🌐",
     sub: t("nav.web_sub"),
     tools: [
-      { id: "chat_web",      label: t("nav.chat_page"),      hint: t("nav.chat_page_hint"), icon: "💬", openOptions: { startMode: "page" } },
       { id: "page_scrape",   label: t("nav.page_scrape"),    hint: t("nav.page_scrape_hint"), icon: "📄",
         actions: [
           { label: t("nav.scrape_content_only"), icon: "▸", action: "scrape_content" },
