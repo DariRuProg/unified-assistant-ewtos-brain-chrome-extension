@@ -5,7 +5,19 @@ import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../m
 import { captureHighlightedTabs, copyHighlightedTabUrls } from './playlists.js';
 import { t } from '../../i18n/i18n.js';
 
-let bookmarksState = { all: [], search: "", activeTag: null };
+let bookmarksState = { all: [], search: "", activeTag: null, view: "tiles", collapsed: {} };
+
+// Favicon über den Google-Favicon-Service (CSP erlaubt https:). Kein eigener Speicher.
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+  } catch { return null; }
+}
+
+function hostnameOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+}
 
 export async function renderBookmarksTool() {
   state.panelTitle.textContent = t("bookmarks.title");
@@ -30,9 +42,31 @@ export async function renderBookmarksTool() {
   const searchWrap = el("div", { className: "bookmark-search" });
   const searchInput = el("input", { type: "search", placeholder: t("bookmarks.search_placeholder"), value: bookmarksState.search });
   searchWrap.append(searchInput);
+
+  const viewSwitch = el("div", { className: "bookmark-viewswitch" });
+  const VIEW_MODES = [
+    ["tiles", t("bookmarks.view_tiles")],
+    ["list", t("bookmarks.view_list")],
+    ["groups", t("bookmarks.view_groups")],
+  ];
+  const viewBtns = {};
+  for (const [mode, label] of VIEW_MODES) {
+    const b = el("button", { type: "button", className: "bookmark-viewbtn", textContent: label });
+    viewBtns[mode] = b;
+    viewSwitch.append(b);
+  }
   const tagCloud = el("div", { className: "tag-cloud" });
   const listWrap = el("div", { className: "bookmark-list" });
-  state.panelBody.append(vaultHint, toolbar, searchWrap, tagCloud, status, listWrap);
+  state.panelBody.append(vaultHint, toolbar, searchWrap, viewSwitch, tagCloud, status, listWrap);
+
+  try {
+    const stored = await chrome.storage.local.get("bookmarkViewMode");
+    if (stored.bookmarkViewMode) bookmarksState.view = stored.bookmarkViewMode;
+  } catch (_) {}
+  function syncViewButtons() {
+    for (const [mode] of VIEW_MODES) viewBtns[mode].classList.toggle("active", bookmarksState.view === mode);
+  }
+  syncViewButtons();
 
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
@@ -74,7 +108,19 @@ export async function renderBookmarksTool() {
       if (bookmarksState.activeTag) {
         filtered = filtered.filter((b) => b.themen && b.themen.includes(bookmarksState.activeTag));
       }
-      renderBookmarksList(httpBase, vaultId, listWrap, filtered);
+      if (bookmarksState.view === "tiles") renderBookmarksTiles(httpBase, vaultId, listWrap, filtered);
+      else if (bookmarksState.view === "groups") renderBookmarksGroups(httpBase, vaultId, listWrap, filtered);
+      else renderBookmarksList(httpBase, vaultId, listWrap, filtered);
+    }
+
+    for (const [mode] of VIEW_MODES) {
+      viewBtns[mode].addEventListener("click", async () => {
+        if (bookmarksState.view === mode) return;
+        bookmarksState.view = mode;
+        syncViewButtons();
+        try { await chrome.storage.local.set({ bookmarkViewMode: mode }); } catch (_) {}
+        applyFilters();
+      });
     }
 
     // Tag-Wolke aufbauen aus allen items
@@ -154,6 +200,116 @@ function renderBookmarksList(httpBase, vaultId, target, items) {
     }
     target.append(section);
   }
+}
+
+// Gruppiert nach erstem Thema; untagged ans Ende.
+function groupByThema(items) {
+  const untaggedLabel = t("bookmarks.untagged");
+  const groups = {};
+  for (const b of items) {
+    const key = (b.themen && b.themen[0]) || untaggedLabel;
+    (groups[key] = groups[key] || []).push(b);
+  }
+  const keys = Object.keys(groups).sort((a, b) => {
+    if (a === untaggedLabel) return 1;
+    if (b === untaggedLabel) return -1;
+    return a.localeCompare(b);
+  });
+  return { groups, keys };
+}
+
+function renderBookmarksTiles(httpBase, vaultId, target, items) {
+  target.replaceChildren();
+  if (!items.length) {
+    target.append(el("div", { className: "empty", textContent: t("bookmarks.no_match") }));
+    return;
+  }
+  const grid = el("div", { className: "bookmark-grid" });
+  for (const b of items) grid.append(renderBookmarkTile(httpBase, vaultId, b));
+  target.append(grid);
+}
+
+function renderBookmarksGroups(httpBase, vaultId, target, items) {
+  target.replaceChildren();
+  if (!items.length) {
+    target.append(el("div", { className: "empty", textContent: t("bookmarks.no_match") }));
+    return;
+  }
+  const { groups, keys } = groupByThema(items);
+  for (const key of keys) {
+    const collapsed = bookmarksState.collapsed[key] !== false; // default: zusammengeklappt
+    const section = el("div", { className: "bookmark-accordion" + (collapsed ? " collapsed" : "") });
+    const header = el("button", {
+      type: "button",
+      className: "bookmark-accordion-head",
+      textContent: `${collapsed ? "▸" : "▾"} ${key} (${groups[key].length})`,
+    });
+    const grid = el("div", { className: "bookmark-grid" });
+    if (collapsed) grid.style.display = "none";
+    else for (const b of groups[key]) grid.append(renderBookmarkTile(httpBase, vaultId, b));
+    header.addEventListener("click", () => {
+      const now = !(bookmarksState.collapsed[key] !== false);
+      bookmarksState.collapsed[key] = now;
+      section.classList.toggle("collapsed", now);
+      header.textContent = `${now ? "▸" : "▾"} ${key} (${groups[key].length})`;
+      if (now) { grid.style.display = "none"; grid.replaceChildren(); }
+      else { grid.style.display = ""; for (const b of groups[key]) grid.append(renderBookmarkTile(httpBase, vaultId, b)); }
+    });
+    section.append(header, grid);
+    target.append(section);
+  }
+}
+
+function renderBookmarkTile(httpBase, vaultId, b) {
+  const tile = el("div", { className: "bookmark-tile" });
+  const link = el("a", { className: "bookmark-tile-link", href: b.url, target: "_blank" });
+  link.rel = "noopener noreferrer";
+
+  const thumbBox = el("div", { className: "bookmark-tile-thumb" });
+  const ytThumb = makeYouTubeThumb(b.url);
+  if (ytThumb) {
+    thumbBox.append(ytThumb);
+  } else {
+    const fav = faviconUrl(b.url);
+    if (fav) {
+      const img = el("img", { className: "bookmark-favicon", src: fav, alt: "", loading: "lazy" });
+      img.addEventListener("error", () => { img.style.display = "none"; });
+      thumbBox.append(img);
+    }
+  }
+  link.append(thumbBox);
+
+  const info = el("div", { className: "bookmark-tile-info" });
+  info.append(el("div", { className: "bookmark-tile-title", textContent: b.title || b.url }));
+  const sub = el("div", { className: "bookmark-tile-sub" });
+  sub.append(el("span", { className: "bookmark-tile-host", textContent: hostnameOf(b.url) }));
+  if (b.date) sub.append(el("span", { className: "bookmark-date", textContent: b.date }));
+  info.append(sub);
+  if (b.themen && b.themen.length) {
+    info.append(el("div", { className: "bookmark-tile-tags", textContent: b.themen.map((x) => `#${x}`).join(" ") }));
+  }
+  link.append(info);
+  tile.append(link);
+
+  const actions = el("div", { className: "bookmark-tile-actions" });
+  const editBtn = el("button", { type: "button", textContent: "✎", className: "small", title: t("bookmarks.edit_title") });
+  editBtn.addEventListener("click", () => showEditBookmarkDialog(httpBase, vaultId, b, () => renderBookmarksTool()));
+  const delBtn = el("button", { type: "button", textContent: "🗑", className: "small", title: t("bookmarks.delete") });
+  delBtn.addEventListener("click", () => deleteBookmark(httpBase, vaultId, b));
+  actions.append(editBtn, delBtn);
+  tile.append(actions);
+  return tile;
+}
+
+async function deleteBookmark(httpBase, vaultId, b) {
+  if (!confirm(t("bookmarks.delete_confirm", { title: b.title }))) return;
+  const r = await fetch(withVaultId(`${httpBase}/tools/bookmarks/delete`, vaultId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ match: b.url || b.title, date: b.date || null }),
+  });
+  if (r.ok) renderBookmarksTool();
+  else { const e = await r.json().catch(() => ({})); alert(t("bookmarks.error_delete", { status: r.status, detail: e.detail || "" })); }
 }
 
 function renderBookmarkCard(httpBase, vaultId, b) {

@@ -117,6 +117,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+// Login-Token oder Server-URL geändert → WS mit neuem Token/Ziel neu verbinden.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.authToken || changes.serverUrl) {
+    forceReconnect();
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "get_connection_status") {
     sendResponse({ connected: isOpen(socket) });
@@ -138,7 +146,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const MAX_FRAMES = 15;
     (async () => {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (!tab?.id) throw new Error("Kein aktiver Tab");
 
         const [{ result: dims }] = await chrome.scripting.executeScript({
@@ -198,7 +206,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "capture_region") {
     (async () => {
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (!tab?.id) throw new Error("Kein aktiver Tab");
 
         await chrome.scripting.executeScript({
@@ -305,8 +313,12 @@ function isOpen(ws) {
 }
 
 async function getServerUrl() {
-  const { serverUrl } = await chrome.storage.local.get("serverUrl");
-  return serverUrl || DEFAULT_SERVER_URL;
+  const { serverUrl, authToken } = await chrome.storage.local.get(["serverUrl", "authToken"]);
+  let url = serverUrl || DEFAULT_SERVER_URL;
+  if (authToken) {
+    url += (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(authToken);
+  }
+  return url;
 }
 
 async function connect() {
@@ -455,9 +467,12 @@ async function getHttpBase() {
 
 async function httpPost(path, body) {
   const base = await getHttpBase();
+  const { authToken } = await chrome.storage.local.get("authToken");
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
   const res = await fetch(base + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body || {}),
   });
   if (!res.ok) {
@@ -604,7 +619,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function writeToClipboard(text) {
   // MV3 SW kann navigator.clipboard nicht direkt nutzen; wir injecten in den
   // aktiven Tab als Fallback.
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id) return;
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },

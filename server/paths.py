@@ -72,6 +72,10 @@ def logs_dir() -> Path:
     return p
 
 
+def vault_snoozes_file() -> Path:
+    return data_dir() / "vault_snoozes.json"
+
+
 # --- Read-only Assets (bundle_dir) ----------------------------------------
 
 def schemas_dir() -> Path:
@@ -96,6 +100,11 @@ def commands_dir() -> Path:
 
 def trusted_keys_file() -> Path:
     return bundle_dir() / "blueprint_trusted_keys.json"
+
+
+def demo_vault_dir() -> Path:
+    """Gebündelter Beispiel-Vault für den Demo-Modus (read-only)."""
+    return bundle_dir() / "demo_vault"
 
 
 def scrape_dom_js() -> Path:

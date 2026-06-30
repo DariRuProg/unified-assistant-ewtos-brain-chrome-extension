@@ -2,7 +2,8 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
-import { renderMarkdown } from '../markdown.js';
+import { renderMarkdown, wireVaultImages } from '../markdown.js';
+import { openWorkspaceTab } from '../modules/workspace-tab.js';
 import { t } from '../../i18n/i18n.js';
 
 const TODO_LINE_RE = /^(\s*)- \[( |x|X)\] (.*)$/;
@@ -20,6 +21,9 @@ export async function renderNotesFile(kind, opts) {
 
   const viewToggle = el("button", { type: "button", textContent: t("notes.preview") });
   viewToggle.classList.add("secondary");
+  const openTabBtn = el("button", { type: "button", textContent: t("common.open_tab"), title: t("notes.open_tab_title") });
+  openTabBtn.classList.add("secondary");
+  openTabBtn.style.display = "none";
   const exportBtn = el("button", { textContent: t("notes.save_as") });
   const fallbackRow = el("div", { className: "export-row hidden" });
   const fallbackInput = el("input", {
@@ -102,7 +106,7 @@ export async function renderNotesFile(kind, opts) {
         let data = null;
         try { data = JSON.parse(text); } catch {}
         if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-        promoteHint.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+        promoteHint.textContent = t("notes.promote_saved", { path: data.data?.raw_path || "OK" });
         promoteHint.className = "tool-status success";
         promoteTitle.value = "";
         promoteDesc.value = "";
@@ -119,7 +123,7 @@ export async function renderNotesFile(kind, opts) {
   }
 
   const toolbar = el("div", { className: "todo-toolbar" });
-  toolbar.append(viewToggle, exportBtn);
+  toolbar.append(viewToggle, openTabBtn, exportBtn);
 
   state.panelBody.append(vaultHint, meta, textarea, rendered, status, toolbar, fallbackRow, ...(promoteSection ? [promoteSection] : []));
 
@@ -134,11 +138,17 @@ export async function renderNotesFile(kind, opts) {
   let saveTimer = null;
   let lastSaved = "";
   let started = null;
+  let currentRelPath = null;
   let viewMode = "edit"; // "edit" | "rendered"
 
   function refreshRendered() {
     rendered.innerHTML = renderMarkdown(textarea.value || "");
+    wireVaultImages(rendered, vaultId, httpBase);
   }
+
+  openTabBtn.addEventListener("click", () => {
+    if (vaultId && currentRelPath) openWorkspaceTab(vaultId, currentRelPath);
+  });
 
   viewToggle.addEventListener("click", () => {
     if (viewMode === "edit") {
@@ -280,6 +290,8 @@ export async function renderNotesFile(kind, opts) {
     try { data = JSON.parse(text); } catch {}
     if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
     started = data.started;
+    currentRelPath = data.rel_path || null;
+    if (currentRelPath) openTabBtn.style.display = "";
     textarea.value = data.content || "";
     lastSaved = textarea.value;
     setMeta();

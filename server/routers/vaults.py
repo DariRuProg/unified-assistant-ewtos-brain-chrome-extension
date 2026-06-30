@@ -5,11 +5,12 @@ import logging
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from tools import wiki_reader
 from tools import blueprint as blueprint_tool
+import auth
 import chat
 from i18n import t
 import settings
@@ -33,6 +34,7 @@ class VaultUpdate(BaseModel):
     system_prompt: str | None = None
     permissions: dict[str, bool] | None = None
     use_local_notes: bool | None = None
+    members: list[str] | None = None
 
 
 class GeneratePromptRequest(BaseModel):
@@ -50,12 +52,21 @@ def _enrich_vault(v: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/vaults")
-def vaults_list() -> dict[str, Any]:
-    return {"vaults": [_enrich_vault(v) for v in settings.get_vaults()]}
+def vaults_list(request: Request) -> dict[str, Any]:
+    uid = auth.current_user_id(request)
+    return {
+        "vaults": [
+            _enrich_vault(v)
+            for v in settings.get_vaults()
+            if settings.user_can_access_vault(uid, v["id"])
+        ]
+    }
 
 
 @router.post("/vaults")
-def vaults_create(req: VaultCreate) -> dict[str, Any]:
+def vaults_create(req: VaultCreate, request: Request) -> dict[str, Any]:
+    if not auth.is_admin(request):
+        raise HTTPException(403, "Admin erforderlich")
     if not req.name.strip():
         raise HTTPException(400, t("err.vault_name_empty"))
     if not req.path.strip():
@@ -120,7 +131,9 @@ def vaults_get(vault_id: str) -> dict[str, Any]:
 
 
 @router.post("/vaults/{vault_id}")
-def vaults_update(vault_id: str, req: VaultUpdate) -> dict[str, Any]:
+def vaults_update(vault_id: str, req: VaultUpdate, request: Request) -> dict[str, Any]:
+    if not auth.is_admin(request):
+        raise HTTPException(403, "Admin erforderlich")
     updated = settings.update_vault(vault_id, **req.model_dump(exclude_none=True))
     if not updated:
         raise HTTPException(404, t("err.vault_not_found", id=vault_id))
@@ -128,7 +141,9 @@ def vaults_update(vault_id: str, req: VaultUpdate) -> dict[str, Any]:
 
 
 @router.delete("/vaults/{vault_id}")
-def vaults_delete(vault_id: str) -> dict[str, Any]:
+def vaults_delete(vault_id: str, request: Request) -> dict[str, Any]:
+    if not auth.is_admin(request):
+        raise HTTPException(403, "Admin erforderlich")
     if not settings.remove_vault(vault_id):
         raise HTTPException(404, t("err.vault_not_found", id=vault_id))
     chat_file = chat.CHAT_DIR / f"chat-{vault_id}.json"

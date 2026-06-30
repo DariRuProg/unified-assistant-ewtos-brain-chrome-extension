@@ -43,14 +43,30 @@ export function buildNestedList(lines, ordered) {
   return `<${tag}>${buildGroup(items)}</${tag}>`;
 }
 
+// Frontmatter-Wert als Text rendern, aber [[wikilinks]] klickbar machen
+// (gleiches Anchor-Format wie Body-Wikilinks → selber Klick-Handler im Workspace).
+function frontmatterValue(raw) {
+  return escapeHtml(raw).replace(/\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_m, path, alias) => {
+    const display = (alias || path).trim();
+    const rel = path.trim().replace(/&quot;/g, "").replace(/"/g, "&quot;");
+    return `<a href="#" class="wiki-link" data-rel="${rel}">${display}</a>`;
+  });
+}
+
 export function renderMarkdown(text) {
+  // Safety-Net: text-emittierte Tool-Call-XML-Blöcke entfernen, falls ein Modell sie
+  // doch durchreicht (Server fängt sie normalerweise serverseitig ab).
+  text = text
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, "")
+    .replace(/<invoke\s+name="[^"]*"\s*>[\s\S]*?<\/invoke>/g, "");
+
   // Strip YAML frontmatter and render as a collapsible key-value table.
   let fmHtml = "";
   text = text.replace(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/, (_, yaml) => {
     const rows = yaml.trim().split("\n").map((line) => {
       const m = line.match(/^([\w][\w-]*):\s*(.*)/);
       if (!m) return "";
-      return `<tr><th>${escapeHtml(m[1])}</th><td>${escapeHtml(m[2].trim())}</td></tr>`;
+      return `<tr><th>${escapeHtml(m[1])}</th><td>${frontmatterValue(m[2].trim())}</td></tr>`;
     }).filter(Boolean);
     if (rows.length) {
       fmHtml = `<details class="fm-block" open><summary class="fm-toggle">Metadaten</summary><table class="fm-table"><tbody>${rows.join("")}</tbody></table></details>`;
@@ -81,7 +97,7 @@ export function renderMarkdown(text) {
       const level = h[1].length;
       const headingHtml = `<h${level}>${inlineMd(h[2])}</h${level}>`;
       if (lines.length === 1) return headingHtml;
-      return headingHtml + "<p>" + inlineMd(lines.slice(1).join(" ")) + "</p>";
+      return headingHtml + renderMarkdown(lines.slice(1).join("\n"));
     }
 
     // Horizontal rule
@@ -168,6 +184,20 @@ export function inlineMd(s) {
   // Restore code spans
   s = s.replace(/\x01CODE(\d+)\x01/g, (_, i) => codes[Number(i)]);
   return s;
+}
+
+// Lokale Vault-Bilder (data-vault-src) über den Asset-Endpoint laden. Zentrale
+// Stelle für Chat, Vault-Explorer und Note-Taker.
+export function wireVaultImages(root, vaultId, httpBase) {
+  if (!root || !vaultId || !httpBase) return;
+  root.querySelectorAll("img.md-image[data-vault-src]").forEach((img) => {
+    if (img.getAttribute("src")) return;
+    const rel = img.getAttribute("data-vault-src");
+    img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(vaultId)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
+    img.addEventListener("error", () => {
+      img.replaceWith(document.createTextNode(`[${rel}]`));
+    });
+  });
 }
 
 export function obsidianUri(vaultName, relPath) {

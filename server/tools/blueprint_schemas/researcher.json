@@ -8,6 +8,7 @@
   "description": "Researcher-Setup: erbt karpathy-para-base, fügt Themen/Papers/Fragen-Strukturen plus zwei .base-Views.",
   "tags": ["research", "papers", "karpathy"],
   "category": "addon",
+  "hidden": true,
   "when_to_use": "Für Forschung: eigene Strukturen für Themen, Papers und Fragen plus zwei Tabellen-Ansichten (.base). Baut auf dem Farming-Modul auf.",
   "extends": ["karpathy-para-base"],
   "folders": [

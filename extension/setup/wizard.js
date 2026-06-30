@@ -8,6 +8,8 @@ let selectedProvider = 'anthropic';
 let vaultMode = 'new';
 let savedVaultId = null;
 const selectedTemplates = new Set();
+let showAdvanced = false;
+let allBlueprints = [];
 
 const isAddVaultMode = new URLSearchParams(location.search).get('mode') === 'add-vault';
 
@@ -274,6 +276,7 @@ async function loadTemplates() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const blueprints = Array.isArray(data) ? data : (data.blueprints || []);
+    allBlueprints = blueprints;
     renderTemplates(blueprints);
 
     // Default-Auswahl: kontext-base (Kontext-Profil als gemeinsame Basis)
@@ -353,8 +356,12 @@ function renderTemplates(blueprints) {
   };
 
   const cat = (bp) => bp.category || ((bp.extends && bp.extends.length) ? 'addon' : 'base');
-  const bases = blueprints.filter((b) => cat(b) === 'base');
-  const addons = blueprints.filter((b) => cat(b) === 'addon');
+  // Versteckte (advanced/nischige) Module nur zeigen, wenn der Toggle aktiv ist
+  // ODER sie bereits ausgewählt sind (z.B. beim Bearbeiten eines Vaults).
+  const visible = blueprints.filter((b) => !b.hidden || showAdvanced || selectedTemplates.has(b.id));
+  const hiddenCount = blueprints.filter((b) => b.hidden && !selectedTemplates.has(b.id)).length;
+  const bases = visible.filter((b) => cat(b) === 'base');
+  const addons = visible.filter((b) => cat(b) === 'addon');
   const groupHeader = (text) => {
     const h = document.createElement('div');
     h.className = 'template-group-header';
@@ -369,6 +376,21 @@ function renderTemplates(blueprints) {
   if (addons.length) {
     groupHeader(t('wizard.group_addon'));
     for (const bp of addons) list.append(makeCard(bp));
+  }
+
+  if (hiddenCount || showAdvanced) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'template-advanced-toggle';
+    toggle.style.cssText = 'background:none;border:none;color:var(--accent,#6aa);cursor:pointer;font-size:12px;padding:8px 0;text-decoration:underline;';
+    toggle.textContent = showAdvanced
+      ? t('wizard.advanced_hide')
+      : t('wizard.advanced_show', { count: hiddenCount });
+    toggle.addEventListener('click', () => {
+      showAdvanced = !showAdvanced;
+      renderTemplates(allBlueprints);
+    });
+    list.append(toggle);
   }
 
   // Buttons-Row anhängen

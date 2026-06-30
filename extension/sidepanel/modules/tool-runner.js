@@ -7,10 +7,10 @@ import { renderYoutubeTranscript } from '../renderers/youtube.js';
 import { renderNotesFile, renderTodos } from '../renderers/notes.js';
 import { renderChat } from '../renderers/chat.js';
 import { renderVaultExplorer, renderVaultHealth } from '../renderers/vault.js';
-import { renderCrmTable } from '../renderers/crm.js';
+import { renderCrm } from '../renderers/crm.js';
 import { renderPlaylistsTool } from '../renderers/playlists.js';
 import { renderBookmarksTool } from '../renderers/bookmarks.js';
-import { renderPageScrape, renderSeoCheck, renderImageAnalyse, renderColorPicker, renderScreenshot, renderUrlExtractor, renderImageGenerator } from '../renderers/web-tools.js';
+import { renderScrapeChat, renderSeoCheck, renderImageAnalyse, renderColorPicker, renderScreenshot, renderUrlExtractor, renderImageGenerator } from '../renderers/web-tools.js';
 import { renderDocumentIngest } from '../renderers/briefing.js';
 
 export const TOOL_RENDERERS = {
@@ -24,10 +24,10 @@ export const TOOL_RENDERERS = {
   chat_web: renderChat,
   vault_explorer: renderVaultExplorer,
   vault_health: renderVaultHealth,
-  crm: renderCrmTable,
+  crm: renderCrm,
   playlists: renderPlaylistsTool,
   bookmarks: renderBookmarksTool,
-  page_scrape: renderPageScrape,
+  page_scrape: renderScrapeChat,
   seo_check: renderSeoCheck,
   image_analyse: renderImageAnalyse,
   color_picker: renderColorPicker,

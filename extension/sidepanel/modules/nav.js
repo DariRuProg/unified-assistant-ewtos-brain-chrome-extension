@@ -3,6 +3,7 @@ import { el } from '../dom.js';
 import { state } from '../state.js';
 import { content, quickActions, navSidebarMain, viewCrumb } from './dom-refs.js';
 import { openTool } from './tool-runner.js';
+import { openWorkspaceTab } from './workspace-tab.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
 import { t } from '../../i18n/i18n.js';
 
@@ -18,6 +19,8 @@ export function getGroups() {
       { id: "crm",             label: t("nav.crm"),             hint: t("nav.crm_hint"), icon: "🤝" },
       { id: "ingest_document", label: t("nav.ingest_document"), hint: t("nav.ingest_document_hint"), icon: "📥" },
       { id: "vault_health",    label: t("nav.vault_health"),    hint: t("nav.vault_health_hint"), icon: "🩺" },
+      { id: "scratchpad",      label: t("nav.scratchpad"),      hint: t("nav.scratchpad_hint"), icon: "📝" },
+      { id: "todos",           label: t("nav.todos"),           hint: t("nav.todos_hint"), icon: "✅" },
     ],
   },
   {
@@ -34,17 +37,7 @@ export function getGroups() {
       },
       { id: "seo_check",     label: t("nav.seo_check"),     hint: t("nav.seo_check_hint"), icon: "🔍" },
       { id: "url_extractor", label: t("nav.url_extractor"), hint: t("nav.url_extractor_hint"), icon: "🔗" },
-    ],
-  },
-  {
-    id: "notes",
-    label: t("nav.notes"),
-    icon: "📝",
-    sub: t("nav.notes_sub"),
-    tools: [
-      { id: "scratchpad", label: t("nav.scratchpad"), hint: t("nav.scratchpad_hint"), icon: "📝" },
-      { id: "todos",      label: t("nav.todos"),      hint: t("nav.todos_hint"), icon: "✅" },
-      { id: "bookmarks",  label: t("nav.bookmarks"),  hint: t("nav.bookmarks_hint"), icon: "🔖",
+      { id: "bookmarks",     label: t("nav.bookmarks"),     hint: t("nav.bookmarks_hint"), icon: "🔖",
         actions: [
           { label: t("nav.add_bookmark"), icon: "+", action: "add" },
           { label: t("nav.capture_tabs"), icon: "⇲", action: "capture_tabs" },
@@ -93,7 +86,9 @@ export function getQuickSpecial() {
   };
 }
 
-export const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"];
+// _briefing bewusst NICHT im Default — fürs MVP versteckt. Bleibt via getQuickSpecial()
+// manuell als Favorit hinzufügbar und per Eintrag hier sofort reaktivierbar.
+export const DEFAULT_QUICK_SLOTS = ["vault_explorer", "scratchpad", "todos", "_save_page"];
 
 function getQuickOption(id) {
   if (!id) return null;
@@ -267,6 +262,85 @@ export function updateCrumb() {
   viewCrumb.textContent = g ? " / " + g.label : "";
 }
 
+// Öffnet einen Workspace-Tab für Vault/Datei/Allgemein-Chat.
+// vault_id kommt aus chrome.storage (selectedVaultId); rel_path ist ein sinnvoller Fallback.
+async function openChatTab(chatMode) {
+  let vaultId = "";
+  let relPath = "inbox/scratchpad.md";
+  try {
+    const stored = await chrome.storage.local.get(["selectedVaultId", "chatScratchpadPath"]);
+    vaultId = stored.selectedVaultId || "";
+    if (stored.chatScratchpadPath) relPath = stored.chatScratchpadPath;
+  } catch (_) {}
+
+  if (!vaultId) {
+    // Kein Vault konfiguriert — zum Panel-Chat (zeigt "kein Vault" hint)
+    openTool("chat");
+    return;
+  }
+
+  openWorkspaceTab(vaultId, relPath, { chatMode });
+}
+
+// Chat-Chooser-Popover am 💬-Icon in der Nav-Rail.
+function openChatChooser(anchorBtn) {
+  // Schließe existierende Chooser
+  document.querySelectorAll(".chat-chooser").forEach((m) => m.remove());
+
+  const menu = el("div", { className: "chat-chooser" });
+
+  const options = [
+    { mode: "page",    icon: "🌐", label: t("nav.chat_page"),    hint: t("nav.chat_page_hint"),    where: "panel" },
+    { mode: "vault",   icon: "📚", label: t("nav.chat_vault"),   hint: t("nav.chat_vault_hint"),   where: "tab" },
+    { mode: "file",    icon: "📄", label: t("nav.chat_file"),    hint: t("nav.chat_file_hint"),    where: "tab" },
+    { mode: "general", icon: "✦",  label: t("nav.chat_general"), hint: t("nav.chat_general_hint"), where: "tab", isNew: true },
+  ];
+
+  for (const opt of options) {
+    const btn = el("button", { type: "button", className: "chat-chooser-item" });
+    const ico = el("span", { className: "cci-ico", textContent: opt.icon });
+    const txt = el("span", { className: "cci-txt" });
+    const lbl = el("span", { className: "cci-label" });
+    lbl.textContent = opt.label;
+    if (opt.isNew) {
+      const badge = el("span", { className: "cci-new", textContent: t("nav.chat_new_badge") });
+      lbl.append(badge);
+    }
+    const hint = el("span", { className: "cci-hint", textContent: opt.hint });
+    txt.append(lbl, hint);
+    const where = el("span", { className: `cci-where cci-where--${opt.where}`, textContent: opt.where === "panel" ? t("nav.chat_where_panel") : t("nav.chat_where_tab") });
+    btn.append(ico, txt, where);
+    btn.addEventListener("click", () => {
+      menu.remove();
+      if (opt.mode === "page") {
+        openTool("chat", { startMode: "page" });
+      } else if (opt.mode === "file") {
+        openTool("vault_explorer");
+      } else {
+        openChatTab(opt.mode);
+      }
+    });
+    menu.append(btn);
+  }
+
+  document.body.append(menu);
+
+  // Rail liegt rechts → Menu links vom Button positionieren, mit Viewport-Clamping
+  const rect = anchorBtn.getBoundingClientRect();
+  const menuW = menu.offsetWidth || 244;
+  const menuH = menu.offsetHeight || 160;
+  menu.style.left = `${Math.max(8, rect.left - menuW - 4)}px`;
+  menu.style.top  = `${Math.min(rect.top, window.innerHeight - menuH - 8)}px`;
+
+  // Schließen bei Klick außerhalb
+  const close = (e) => {
+    if (menu.contains(e.target) || e.target === anchorBtn) return;
+    menu.remove();
+    document.removeEventListener("click", close, true);
+  };
+  setTimeout(() => document.addEventListener("click", close, true), 0);
+}
+
 export function renderSidebar() {
   navSidebarMain.replaceChildren();
   const items = [{ id: "all", label: t("nav.all"), icon: "▦" }, ...getGroups()];
@@ -278,7 +352,7 @@ export function renderSidebar() {
       className: "nav-item" + (it.id === state.activeTab ? " active" : ""),
     });
     if (it.navOnly) {
-      b.addEventListener("click", () => { openTool("chat"); });
+      b.addEventListener("click", (e) => { e.stopPropagation(); openChatChooser(b); });
     } else {
       b.addEventListener("click", () => {
         state.activeTab = it.id;

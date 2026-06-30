@@ -132,7 +132,7 @@ def upsert_video(
     playlists-array and fills missing metadata fields if they were empty.
 
     Frontmatter folgt templates/video.md.j2 (kanal, upload_datum, aufrufe,
-    thumbnail_url, video_id, thema, analyse_datum)."""
+    thumbnail_url, video_id, thema)."""
     if not (url and url.strip()):
         raise ValueError("url darf nicht leer sein")
     if not (title and title.strip()):
@@ -192,7 +192,6 @@ def upsert_video(
         fm_lines.append(f"aufrufe: {views.strip()}")
     if likes:
         fm_lines.append(f"likes: {likes.strip()}")
-    fm_lines.append(f"analyse_datum: {today}")
     if thema and thema.strip():
         fm_lines.append(f"thema: {thema.strip()}")
     fm_lines.append("transcript: ")

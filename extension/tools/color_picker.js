@@ -1,7 +1,7 @@
 // ewtos.com
 
 export async function runColorPicker(_params = {}) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id) throw new Error("Kein aktiver Tab gefunden");
 
   const [result] = await chrome.scripting.executeScript({

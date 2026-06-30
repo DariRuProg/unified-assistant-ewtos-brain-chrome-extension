@@ -184,6 +184,36 @@ def vault_audit_repair(vault_id: str, req: VaultRepairRequest) -> dict[str, Any]
         raise HTTPException(400, str(e))
 
 
+class VaultSnoozeRequest(BaseModel):
+    category: str
+    path: str = ""
+    message: str = ""
+    days: int
+    scope: str = "finding"
+
+
+class VaultUnsnoozeRequest(BaseModel):
+    key: str
+
+
+@router.post("/tools/vault_audit/{vault_id}/snooze")
+def vault_audit_snooze(vault_id: str, req: VaultSnoozeRequest) -> dict[str, Any]:
+    """Blendet ein Finding (scope=finding) oder eine ganze Befund-Art
+    (scope=category) fuer req.days Tage aus. Read-only auf den Vault selbst —
+    der Snooze lebt im App-Datenverzeichnis, nicht im Vault."""
+    try:
+        return vault_audit_tool.snooze_finding(
+            vault_id, req.category, req.path, req.message, req.days, req.scope)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/tools/vault_audit/{vault_id}/unsnooze")
+def vault_audit_unsnooze(vault_id: str, req: VaultUnsnoozeRequest) -> dict[str, Any]:
+    """Hebt einen Snooze auf — das Finding ist beim naechsten Audit wieder sichtbar."""
+    return vault_audit_tool.unsnooze(vault_id, req.key)
+
+
 @router.get("/tools/vault_query/{vault_id}")
 def vault_query(vault_id: str, folder: str = "crm/kunden", typ: str | None = None,
                 recursive: bool = False) -> dict[str, Any]:

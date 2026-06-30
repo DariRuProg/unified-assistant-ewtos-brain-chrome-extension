@@ -56,6 +56,43 @@ def active_allowed_for_sensitive() -> bool:
     return True
 
 
+def get_backend_for(provider: str) -> LLMBackend:
+    """Instanziiert ein Backend für einen expliziten Provider (per-Request-Override).
+    API-Keys kommen weiterhin aus den Settings/Env."""
+    provider = (provider or "").strip().lower()
+
+    if provider == "anthropic":
+        api_key = settings.get("anthropic_api_key")
+        if not api_key:
+            raise ValueError("Kein Anthropic-API-Key in den Settings/Env")
+        return AnthropicBackend(api_key=api_key)
+
+    if provider == "openai":
+        api_key = settings.get("openai_api_key")
+        if not api_key:
+            raise ValueError("Kein OpenAI-API-Key in den Settings/Env")
+        return OpenAIBackend(api_key=api_key)
+
+    if provider == "ollama":
+        base_url = settings.get("ollama_base_url") or "http://localhost:11434"
+        return OllamaBackend(base_url=base_url)
+
+    if provider == "mistral":
+        api_key = settings.get("mistral_api_key")
+        if not api_key:
+            raise ValueError("Kein Mistral-API-Key in den Settings/Env")
+        return OpenAIBackend(api_key=api_key, base_url="https://api.mistral.ai/v1")
+
+    if provider == "openrouter":
+        api_key = settings.get("openrouter_api_key")
+        if not api_key:
+            raise ValueError("Kein OpenRouter-API-Key in den Settings/Env")
+        base_url = settings.get("openrouter_base_url") or "https://openrouter.ai/api/v1"
+        return OpenAIBackend(api_key=api_key, base_url=base_url, cache_control=True)
+
+    raise ValueError(f"Unbekannter Provider: '{provider}'")
+
+
 def get_backend() -> LLMBackend:
     """Instanziiert das aktive Backend. Wirft, wenn der nötige API-Key fehlt."""
     provider, _ = effective_llm_config()

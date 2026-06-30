@@ -17,7 +17,9 @@ import chat
 import config
 import settings
 import auth
+import users
 from bridge import bridge, SERVER_VERSION, _version_compatible
+from routers import auth as auth_router
 from routers import notes
 from routers import images
 from routers import playlists
@@ -38,18 +40,34 @@ log = logging.getLogger("ewtosbrain")
 
 
 
+def _ensure_demo_vault() -> None:
+    """Registriert im Demo-Modus den gebündelten Beispiel-Vault (read-only), falls
+    noch nicht vorhanden."""
+    import paths
+    demo_path = str(paths.demo_vault_dir())
+    for v in settings.get_vaults():
+        if str(v.get("path")) == demo_path:
+            return
+    vault = settings.add_vault("Demo-Vault", demo_path, use_local_notes=False)
+    log.info("Demo-Modus: Beispiel-Vault registriert id=%s path=%s", vault["id"], demo_path)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Server starting on %s:%s", config.HOST, config.PORT)
     legacy = settings.migrate_legacy_vault_path(chat.CHAT_DIR / "chat.json")
     if legacy:
         log.info("Migration: legacy vault_path -> vault id=%s name=%r", legacy["id"], legacy["name"])
+    if config.DEMO_MODE:
+        log.info("Demo-Modus AKTIV — read-only, Beispiel-Vault")
+        _ensure_demo_vault()
     yield
     log.info("Server shutting down")
 
 
 app = FastAPI(title="EwtosBrain", version=SERVER_VERSION, lifespan=lifespan)
-app.middleware("http")(auth.api_key_middleware)
+app.middleware("http")(auth.auth_middleware)
+app.include_router(auth_router.router)
 app.include_router(notes.router)
 app.include_router(images.router)
 app.include_router(playlists.router)
@@ -68,6 +86,10 @@ app.include_router(system.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
+    # Auth: bei aktivierten Usern Token als Query-Param ?token= verlangen.
+    if settings.user_count() > 0 and not users.decode_token(ws.query_params.get("token", "")):
+        await ws.close(code=1008)
+        return
     await ws.accept()
     await bridge.attach(ws)
     try:

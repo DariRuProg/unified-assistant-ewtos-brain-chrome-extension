@@ -4,7 +4,7 @@ export const state = {
   activeTool: null,
   panelTitle: null,
   panelBody: null,
-  quickSlots: ["vault_explorer", "scratchpad", "todos", "_briefing", "_save_page"],
+  quickSlots: ["vault_explorer", "scratchpad", "todos", "_save_page"],
   showQuickRow: false,
   searchQuery: "",
   lastFetchData: null,

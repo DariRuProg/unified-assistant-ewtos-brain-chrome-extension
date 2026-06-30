@@ -3,7 +3,7 @@
 export async function runUrlExtractor(params = {}) {
   const filterDomain = params.filter_domain !== false;
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id) throw new Error("Kein aktiver Tab");
 
   const [result] = await chrome.scripting.executeScript({

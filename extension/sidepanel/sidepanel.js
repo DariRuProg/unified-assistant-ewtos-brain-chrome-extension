@@ -8,6 +8,7 @@ import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLIN
 import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb, setToolViewMode } from './modules/nav.js';
 import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
 import { initI18n, localizeDom, t } from '../i18n/i18n.js';
+import { ensureAuth } from './modules/auth.js';
 
 // Keep the background Service Worker alive via a persistent port.
 // MV3 SWs are terminated after ~30s idle — an open port prevents that,
@@ -18,6 +19,7 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 (async () => {
+  await ensureAuth();
   await initI18n();
   localizeDom();
   const { theme = "neutral", darkMode = false } =
@@ -26,6 +28,16 @@ _keepalivePort.onDisconnect.addListener(() => { void chrome.runtime.lastError; }
   updateDarkToggleIcon(darkMode);
   const stored = (await chrome.storage.local.get("quickSlots")).quickSlots;
   if (Array.isArray(stored)) state.quickSlots = stored.filter(Boolean);
+  // Einmal-Migration: Briefing fürs MVP aus bestehenden Favoriten entfernen.
+  // Flag verhindert, dass ein späteres manuelles Wieder-Hinzufügen erneut gestrippt wird.
+  const { briefingSlotRemoved } = await chrome.storage.local.get("briefingSlotRemoved");
+  if (!briefingSlotRemoved) {
+    if (state.quickSlots.includes("_briefing")) {
+      state.quickSlots = state.quickSlots.filter((id) => id !== "_briefing");
+      await chrome.storage.local.set({ quickSlots: state.quickSlots });
+    }
+    await chrome.storage.local.set({ briefingSlotRemoved: true });
+  }
   state.showQuickRow = !!(await chrome.storage.local.get("showQuickRow")).showQuickRow;
   const { toolViewMode = "list" } = await chrome.storage.local.get("toolViewMode");
   state.toolViewMode = toolViewMode;
@@ -81,7 +93,7 @@ chrome.storage.onChanged.addListener((changes) => {
 
 
 
-setStatus(false, "verbinde...");
+setStatus(false, t("sidepanel.status_connecting"));
 renderSidebar();
 renderToolList();
 renderQuickActions();
@@ -123,10 +135,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "connection_status") {
     if (msg.incompatible) {
       if (offlineBannerText) {
-        offlineBannerText.textContent =
-          `Version-Konflikt: Server v${msg.serverVersion ?? "?"}, Extension v${chrome.runtime.getManifest().version}. Bitte beide aktualisieren.`;
+        offlineBannerText.textContent = t("sidepanel.version_conflict_banner", {
+          server: msg.serverVersion ?? "?",
+          ext: chrome.runtime.getManifest().version,
+        });
       }
-      setStatus(false, "Version-Konflikt");
+      setStatus(false, t("sidepanel.version_conflict"));
     } else {
       if (offlineBannerText) offlineBannerText.innerHTML = DEFAULT_OFFLINE_HTML;
       setStatus(!!msg.connected);
@@ -159,7 +173,7 @@ openOptions.addEventListener("click", () => {
 });
 
 reconnectBtn.addEventListener("click", () => {
-  setStatus(false, "verbinde...");
+  setStatus(false, t("sidepanel.status_connecting"));
   chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
   closeNavSidebar();
 });
@@ -190,7 +204,7 @@ async function syncPageChatBtn() {
     pageChatBtn?.classList.toggle("hidden", !chattable);
   } catch { pageChatBtn?.classList.add("hidden"); }
 }
-pageChatBtn?.addEventListener("click", () => openTool("chat", { startMode: "page" }));
+pageChatBtn?.addEventListener("click", () => openTool("page_scrape"));
 chrome.tabs.onActivated.addListener(() => syncPageChatBtn());
 chrome.tabs.onUpdated.addListener((_, info) => { if (info.status === "complete") syncPageChatBtn(); });
 
@@ -245,7 +259,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.getElementById("retry-connect")?.addEventListener("click", () => {
-  setStatus(false, "verbinde...");
+  setStatus(false, t("sidepanel.status_connecting"));
   chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});
 });
 

@@ -3,29 +3,109 @@ import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
 import { openTool } from '../modules/tool-runner.js';
+import { t } from '../../i18n/i18n.js';
+
+const YT_STORE_KEY = "ytLastResult";
+// Letztes gezogenes Transcript — überlebt Tool-Wechsel (Modul-Variable) und
+// Browser-Neustart (chrome.storage.local). Form: { url, title, data }.
+let lastResult = null;
 
 export function renderYoutubeTranscript() {
-  state.panelTitle.textContent = "YouTube-Transcript";
+  state.panelTitle.textContent = t("youtube.title");
 
   const urlRow = el("div");
   urlRow.style.cssText = "display:flex;gap:6px;align-items:stretch;";
-  const urlInput = el("input", { type: "url", placeholder: "https://www.youtube.com/watch?v=..." });
+  const urlInput = el("input", { type: "url", placeholder: t("youtube.url_placeholder") });
   urlInput.style.flex = "1";
   const refreshBtn = el("button", {
-    type: "button", textContent: "↻", title: "URL aus aktivem Tab übernehmen",
+    type: "button", textContent: "↻", title: t("youtube.refresh_hint"),
     className: "secondary",
   });
   refreshBtn.style.cssText = "padding:4px 10px;flex:0 0 auto;";
   urlRow.append(urlInput, refreshBtn);
 
+  const runBtn = el("button", { textContent: t("youtube.fetch"), className: "yt-fetch-btn" });
+  const status = el("div", { className: "tool-status" });
+  const sourceInfo = el("div", { className: "sc-source-info" });
+  const metaCard = el("div", { className: "yt-meta-card hidden" });
+
+  // Transcript-Accordion — eingeklappt, Inhalt erst auf Aufklappen
+  const transcriptWrap = el("div", { className: "scrape-preview-wrap" });
+  const transcriptToggle = el("button", { type: "button", className: "scrape-preview-toggle", textContent: "▸ " + t("youtube.show_transcript") });
+  transcriptToggle.style.display = "none";
+  const output = el("textarea", { placeholder: t("youtube.result_placeholder"), readOnly: true });
+  output.style.display = "none";
+  let transcriptExpanded = false;
+  function setTranscriptExpanded(expanded) {
+    transcriptExpanded = expanded;
+    output.style.display = expanded ? "" : "none";
+    transcriptToggle.textContent = (expanded ? "▾ " : "▸ ") + t(expanded ? "youtube.hide_transcript" : "youtube.show_transcript");
+  }
+  transcriptToggle.addEventListener("click", () => setTranscriptExpanded(!transcriptExpanded));
+  transcriptWrap.append(transcriptToggle, output);
+
+  // ── Quell-Info + Metadaten aus einer Fetch-Antwort aufbauen ─────────────────
+  function setSource(url, title) {
+    sourceInfo.replaceChildren(
+      el("span", { className: "sc-source-label", textContent: t("youtube.last_fetched") + ": " }),
+      el("span", { className: "sc-source-page", textContent: title || url }),
+    );
+    sourceInfo.title = url;
+  }
+
+  function populateMeta(data) {
+    metaCard.replaceChildren();
+    const rows = [
+      data?.title ? [t("youtube.meta_title"), el("b", { textContent: data.title })] : null,
+      data?.channel ? [t("youtube.meta_channel"), data.channel] : null,
+      (data?.duration || data?.views || data?.likes)
+        ? [t("youtube.meta_info"), [data?.duration, data?.views ? t("youtube.views", { count: data.views }) : null, data?.likes ? t("youtube.likes", { count: data.likes }) : null].filter(Boolean).join(" · ")]
+        : null,
+      data?.upload_date ? [t("youtube.meta_upload"), data.upload_date] : null,
+    ].filter(Boolean);
+    for (const [label, val] of rows) {
+      const row = el("div", { className: "yt-meta-row" });
+      row.append(el("span", { textContent: label + ":" }), " ");
+      row.append(val);
+      metaCard.append(row);
+    }
+    if (data?.description) {
+      const descRow = el("div", { className: "yt-meta-row yt-meta-desc" });
+      descRow.append(el("span", { textContent: t("youtube.meta_desc") + ":" }), el("div", { className: "yt-desc-text", textContent: data.description }));
+      metaCard.append(descRow);
+    }
+    metaCard.classList.toggle("hidden", rows.length === 0 && !data?.description);
+  }
+
+  // Ergebnis in die UI spiegeln. `expand` = Transcript-Accordion aufgeklappt zeigen.
+  function applyResult(data, url, expand) {
+    lastResult = { url, title: data?.title || "", data };
+    state.lastFetchData = data;
+    output.value = data?.transcript || "";
+    populateMeta(data);
+    setSource(url, data?.title || "");
+    if (output.value) {
+      transcriptToggle.style.display = "";
+      setTranscriptExpanded(!!expand);
+    } else {
+      transcriptToggle.style.display = "none";
+    }
+  }
+
+  // ── Aktiver-Tab-URL: Auto-Fill + needs-fetch-Highlight ──────────────────────
   let lastAutoUrl = "";
+  function updateFetchHint(activeUrl) {
+    const isWatch = /youtube\.com\/watch/.test(activeUrl || "");
+    const different = isWatch && (!lastResult || activeUrl !== lastResult.url);
+    runBtn.classList.toggle("needs-fetch", different);
+  }
   function loadFromActiveTab(force = false) {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       const u = tab?.url || "";
+      updateFetchHint(u);
       if (!/youtube\.com\/watch/.test(u)) return;
       // Auto-update nur wenn Feld leer ist, das letzte Auto-Loaded entspricht
-      // oder explizit ueber Refresh-Button getriggert — so wird kein manuell
-      // editierter URL ueberschrieben.
+      // oder explizit über Refresh-Button getriggert — kein manuell editierter URL.
       if (force || !urlInput.value.trim() || urlInput.value === lastAutoUrl) {
         urlInput.value = u;
         lastAutoUrl = u;
@@ -35,7 +115,22 @@ export function renderYoutubeTranscript() {
   loadFromActiveTab(true);
   refreshBtn.addEventListener("click", () => loadFromActiveTab(true));
 
-  // Auto-Detect Tab-Wechsel + URL-Aenderung im aktiven Tab
+  // Restore letztes Transcript (Modul-Variable oder persistenter Storage)
+  if (lastResult?.data) {
+    applyResult(lastResult.data, lastResult.url, false);
+    status.textContent = t("youtube.restored");
+  } else {
+    chrome.storage.local.get(YT_STORE_KEY).then((res) => {
+      const saved = res?.[YT_STORE_KEY];
+      if (saved?.data) {
+        applyResult(saved.data, saved.url, false);
+        status.textContent = t("youtube.restored");
+        loadFromActiveTab(false);
+      }
+    });
+  }
+
+  // Auto-Detect Tab-Wechsel + URL-Änderung im aktiven Tab
   const onActivated = () => loadFromActiveTab(false);
   const onUpdated = (tabId, changeInfo, tab) => {
     if (changeInfo.url && tab.active) loadFromActiveTab(false);
@@ -46,21 +141,17 @@ export function renderYoutubeTranscript() {
     chrome.tabs.onActivated.removeListener(onActivated);
     chrome.tabs.onUpdated.removeListener(onUpdated);
   };
-  const runBtn = el("button", { textContent: "Transcript holen" });
-  const status = el("div", { className: "tool-status" });
-  const metaCard = el("div", { className: "yt-meta-card hidden" });
-  const output = el("textarea", { placeholder: "Ergebnis erscheint hier...", readOnly: true });
 
   // Fallback-Row: erscheint nur, wenn Browser + Server-Fallback beide fail liefern
   const fallbackRow = el("div", { className: "tool-fallback hidden" });
   fallbackRow.style.cssText = "margin-top:8px;padding:10px;border:1px solid var(--border,#ddd);border-radius:6px;background:var(--bg-subtle,#f5f5f5);";
   const fallbackHint = el("div", { className: "tool-status" });
   fallbackHint.style.cssText = "margin-bottom:6px;font-size:12px;";
-  fallbackHint.textContent = "Beide Auto-Pfade fehlgeschlagen. Tab öffnen, Drei-Punkte-Menü → 'Transkript anzeigen', Liste markieren + kopieren, dann hier einfügen.";
-  const openTabBtn = el("button", { textContent: "Im YouTube-Tab öffnen", className: "secondary" });
-  const manualArea = el("textarea", { placeholder: "Manuell kopiertes Transcript hier einfügen..." });
+  fallbackHint.textContent = t("youtube.fallback_hint");
+  const openTabBtn = el("button", { textContent: t("youtube.fallback_open"), className: "secondary" });
+  const manualArea = el("textarea", { placeholder: t("youtube.fallback_paste") });
   manualArea.style.cssText = "margin-top:8px;min-height:80px;";
-  const useManualBtn = el("button", { textContent: "Übernehmen", className: "secondary" });
+  const useManualBtn = el("button", { textContent: t("youtube.fallback_use"), className: "secondary" });
   useManualBtn.style.marginTop = "6px";
   fallbackRow.append(fallbackHint, openTabBtn, manualArea, useManualBtn);
 
@@ -73,12 +164,13 @@ export function renderYoutubeTranscript() {
   useManualBtn.addEventListener("click", () => {
     const txt = manualArea.value.trim();
     if (!txt) {
-      status.textContent = "Bitte erst Transcript einfügen";
+      status.textContent = t("youtube.fallback_required");
       status.className = "tool-status error";
       return;
     }
-    output.value = txt;
-    status.textContent = "manuell übernommen";
+    applyResult({ transcript: txt }, urlInput.value.trim(), true);
+    chrome.storage.local.set({ [YT_STORE_KEY]: lastResult });
+    status.textContent = t("youtube.fallback_adopted");
     status.className = "tool-status success";
     fallbackRow.classList.add("hidden");
   });
@@ -86,14 +178,13 @@ export function renderYoutubeTranscript() {
   async function fetchTranscript() {
     const url = urlInput.value.trim();
     if (!url) {
-      status.textContent = "URL angeben";
+      status.textContent = t("youtube.url_required");
       status.className = "tool-status error";
       return null;
     }
     runBtn.disabled = true;
-    status.textContent = "läuft... (Server-API zuerst, Browser als Fallback)";
+    status.textContent = t("youtube.running");
     status.className = "tool-status";
-    output.value = "";
     fallbackRow.classList.add("hidden");
     try {
       const httpBase = await getHttpBase();
@@ -106,36 +197,13 @@ export function renderYoutubeTranscript() {
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
-      output.value = data?.transcript || "";
-      state.lastFetchData = data;
-      // Metadaten-Karte befüllen
-      metaCard.replaceChildren();
-      const rows = [
-        data?.title ? ["Titel", el("b", { textContent: data.title })] : null,
-        data?.channel ? ["Kanal", data.channel] : null,
-        (data?.duration || data?.views || data?.likes)
-          ? ["Info", [data?.duration, data?.views ? `${data.views} Aufrufe` : null, data?.likes ? `${data.likes} Likes` : null].filter(Boolean).join(" · ")]
-          : null,
-        data?.upload_date ? ["Upload", data.upload_date] : null,
-      ].filter(Boolean);
-      for (const [label, val] of rows) {
-        const row = el("div", { className: "yt-meta-row" });
-        const lspan = el("span", { textContent: label + ":" });
-        row.append(lspan, " ");
-        if (typeof val === "string") row.append(val);
-        else row.append(val);
-        metaCard.append(row);
-      }
-      if (data?.description) {
-        const descRow = el("div", { className: "yt-meta-row yt-meta-desc" });
-        descRow.append(el("span", { textContent: "Beschreibung:" }), el("div", { className: "yt-desc-text", textContent: data.description }));
-        metaCard.append(descRow);
-      }
-      metaCard.classList.remove("hidden");
+      applyResult(data, url, true);
+      chrome.storage.local.set({ [YT_STORE_KEY]: lastResult });
+      runBtn.classList.remove("needs-fetch");
       let src;
-      if (data?.source === "server_api") src = `fertig (Server-API${data?.lang ? ", " + data.lang : ""})`;
-      else if (data?.source === "extension") src = "fertig (Browser-Fallback)";
-      else src = "fertig";
+      if (data?.source === "server_api") src = t("youtube.done_api", { lang: data?.lang ? ", " + data.lang : "" });
+      else if (data?.source === "extension") src = t("youtube.done_browser");
+      else src = t("common.done");
       status.textContent = src;
       status.className = "tool-status success";
       return data;
@@ -151,45 +219,46 @@ export function renderYoutubeTranscript() {
 
   runBtn.addEventListener("click", fetchTranscript);
 
-  const chatBtn = el("button", { textContent: "💬 Chat mit Transcript", className: "secondary" });
+  const chatBtn = el("button", { textContent: t("youtube.chat"), className: "secondary" });
   chatBtn.style.marginLeft = "6px";
-  chatBtn.title = "Direkt mit dem geholten Transcript chatten (ohne ins Brain zu speichern)";
+  chatBtn.title = t("youtube.chat_hint");
   chatBtn.addEventListener("click", () => {
-    const transcript = (output.value || "").trim();
+    const transcript = (lastResult?.data?.transcript || output.value || "").trim();
     if (!transcript) {
-      status.textContent = "Erst Transcript holen";
+      status.textContent = t("youtube.transcript_required");
       status.className = "tool-status error";
       return;
     }
-    const url = urlInput.value.trim();
+    const url = lastResult?.url || urlInput.value.trim();
     openTool("chat", {
       sourceType: "page",
       sourceRef: { content: `URL: ${url}\n\n${transcript}`, title: url },
-      sourceTitle: "YouTube-Transcript",
+      sourceTitle: t("youtube.title"),
     });
   });
 
-  const tagsInput = el("input", { type: "text", placeholder: "Tags (kommagetrennt, optional)" });
+  const tagsInput = el("input", { type: "text", placeholder: t("youtube.tags_hint") });
   tagsInput.className = "yt-tags-input";
   const parseTags = (s) => (s || "").split(",").map(t => t.trim()).filter(Boolean);
 
-  const saveRawBtn = el("button", { textContent: "📥 In Raw speichern", className: "secondary" });
+  const saveRawBtn = el("button", { textContent: t("youtube.save_raw"), className: "secondary" });
   saveRawBtn.style.marginLeft = "6px";
-  saveRawBtn.title = "Transcript als Raw-Datei im aktiven Vault speichern";
+  saveRawBtn.title = t("youtube.save_raw_hint");
   saveRawBtn.addEventListener("click", async () => {
-    if (!state.lastFetchData || !urlInput.value.trim()) {
-      status.textContent = "Erst Transcript holen";
+    if (!lastResult?.data || !lastResult.url) {
+      status.textContent = t("youtube.transcript_required");
       status.className = "tool-status error";
       return;
     }
     const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
     if (!selectedVaultId) {
-      status.textContent = "Kein Vault ausgewählt — zuerst in den Einstellungen einen Vault verbinden";
+      status.textContent = t("youtube.no_vault");
       status.className = "tool-status error";
       return;
     }
+    const fd = lastResult.data;
     saveRawBtn.disabled = true;
-    status.textContent = "speichere...";
+    status.textContent = t("common.saving");
     status.className = "tool-status";
     try {
       const httpBase = await getHttpBase();
@@ -198,27 +267,27 @@ export function renderYoutubeTranscript() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vault_id: selectedVaultId,
-          url: urlInput.value.trim(),
-          title: state.lastFetchData.title || "",
-          transcript: state.lastFetchData.transcript || output.value || "",
-          channel: state.lastFetchData.channel || null,
-          duration: state.lastFetchData.duration || null,
-          views: state.lastFetchData.views || null,
-          likes: state.lastFetchData.likes || null,
-          upload_date: state.lastFetchData.upload_date || null,
-          thumbnail_url: state.lastFetchData.thumbnail_url || null,
-          description: state.lastFetchData.description || null,
+          url: lastResult.url,
+          title: fd.title || "",
+          transcript: fd.transcript || output.value || "",
+          channel: fd.channel || null,
+          duration: fd.duration || null,
+          views: fd.views || null,
+          likes: fd.likes || null,
+          upload_date: fd.upload_date || null,
+          thumbnail_url: fd.thumbnail_url || null,
+          description: fd.description || null,
           tags: parseTags(tagsInput.value),
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 403) {
-        status.textContent = "Kein Schreibrecht auf raw/ — in den Einstellungen aktivieren";
+        status.textContent = t("youtube.no_write_perm");
         status.className = "tool-status error";
       } else if (!res.ok) {
         throw new Error(data?.detail || `HTTP ${res.status}`);
       } else {
-        status.textContent = `In Raw gespeichert: ${data.raw_path || ""}`;
+        status.textContent = t("youtube.saved_raw", { path: data.raw_path || "" });
         status.className = "tool-status success";
       }
     } catch (err) {
@@ -229,14 +298,14 @@ export function renderYoutubeTranscript() {
     }
   });
 
-  const batchToggle = el("button", { textContent: "Batch", className: "secondary" });
+  const batchToggle = el("button", { textContent: t("youtube.batch"), className: "secondary" });
   batchToggle.style.marginLeft = "6px";
-  batchToggle.title = "Zwischen Einzel- und Batch-Modus umschalten";
+  batchToggle.title = t("youtube.batch_hint");
 
-  const batchArea = el("textarea", { placeholder: "Eine URL pro Zeile\nhttps://youtube.com/watch?v=..." });
+  const batchArea = el("textarea", { placeholder: t("youtube.batch_placeholder") });
   batchArea.style.cssText = "display:none;min-height:100px;resize:vertical;margin-top:8px;";
 
-  const farmAllBtn = el("button", { textContent: "Farm All" });
+  const farmAllBtn = el("button", { textContent: t("youtube.farm_all") });
   farmAllBtn.style.display = "none";
 
   const batchResults = el("div");
@@ -249,22 +318,22 @@ export function renderYoutubeTranscript() {
     runBtn.style.display = batchMode ? "none" : "";
     batchArea.style.display = batchMode ? "" : "none";
     farmAllBtn.style.display = batchMode ? "" : "none";
-    batchToggle.textContent = batchMode ? "Einzeln" : "Batch";
+    batchToggle.textContent = batchMode ? t("youtube.single") : t("youtube.batch");
     if (!batchMode) batchResults.replaceChildren();
   });
 
   farmAllBtn.addEventListener("click", async () => {
     const urls = batchArea.value.split("\n").map(u => u.trim()).filter(u => u.startsWith("http"));
-    if (!urls.length) { status.textContent = "Keine URLs"; status.className = "tool-status error"; return; }
+    if (!urls.length) { status.textContent = t("youtube.no_urls"); status.className = "tool-status error"; return; }
     const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
-    if (!selectedVaultId) { status.textContent = "Kein Vault gewählt"; status.className = "tool-status error"; return; }
+    if (!selectedVaultId) { status.textContent = t("youtube.no_vault_batch"); status.className = "tool-status error"; return; }
     const httpBase = await getHttpBase();
     const results = [];
     batchResults.replaceChildren();
     farmAllBtn.disabled = true;
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
-      status.textContent = `${i + 1}/${urls.length}: ziehe Transcript...`;
+      status.textContent = t("youtube.batch_progress", { i: i + 1, total: urls.length });
       status.className = "tool-status";
       try {
         const transcRes = await fetch(`${httpBase}/tools/youtube_transcript`, {
@@ -297,7 +366,7 @@ export function renderYoutubeTranscript() {
       }
     }
     const ok = results.filter(r => r.ok).length;
-    status.textContent = `${ok}/${urls.length} erfolgreich`;
+    status.textContent = t("youtube.batch_result", { ok, total: urls.length });
     status.className = ok === urls.length ? "tool-status success" : "tool-status";
     farmAllBtn.disabled = false;
   });
@@ -306,5 +375,5 @@ export function renderYoutubeTranscript() {
   btnRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;";
   btnRow.append(runBtn, chatBtn, saveRawBtn, batchToggle);
 
-  state.panelBody.append(urlRow, btnRow, status, metaCard, tagsInput, output, fallbackRow, batchArea, farmAllBtn, batchResults);
+  state.panelBody.append(urlRow, btnRow, status, sourceInfo, metaCard, tagsInput, transcriptWrap, fallbackRow, batchArea, farmAllBtn, batchResults);
 }

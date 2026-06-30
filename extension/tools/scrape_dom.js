@@ -15,8 +15,9 @@ export async function scrapePageContent(mode, skipInteractions = false) {
   try {
     const isFull = mode === "full";
 
-    // Scroll to trigger lazy loading
-    window.scrollTo(0, document.body.scrollHeight);
+    // Scroll to trigger lazy loading. behavior:"instant" überschreibt ein evtl.
+    // gesetztes CSS scroll-behavior:smooth, das sonst das Zurückscrollen sichtbar animiert.
+    window.scrollTo({ top: document.body.scrollHeight, left: 0, behavior: "instant" });
     await new Promise(r => setTimeout(r, 600));
 
     // --- Root selection (content mode only) ---
@@ -314,7 +315,7 @@ export async function scrapePageContent(mode, skipInteractions = false) {
       }
     }
 
-    window.scrollTo(_scrollX, _scrollY); // Nutzer-Scrollposition wiederherstellen
+    window.scrollTo({ top: _scrollY, left: _scrollX, behavior: "instant" }); // Nutzer-Scrollposition wiederherstellen
     return {
       markdown,
       url: document.URL,
@@ -323,7 +324,7 @@ export async function scrapePageContent(mode, skipInteractions = false) {
       mode,
     };
   } catch (err) {
-    try { window.scrollTo(_scrollX, _scrollY); } catch (_) {}
+    try { window.scrollTo({ top: _scrollY, left: _scrollX, behavior: "instant" }); } catch (_) {}
     return { error: err.toString() };
   }
 }

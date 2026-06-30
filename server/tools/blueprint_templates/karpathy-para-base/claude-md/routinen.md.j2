@@ -22,11 +22,4 @@ Eintrag-Format: `- [[wiki/resources/playlists/<slug>]] — <titel>`
 
 **Orphan** = eine Page die in `wiki/resources/playlists/` existiert, aber nicht in `playlists/index.md` verlinkt ist.
 
-EwtosBrain verhindert Orphans automatisch beim Anlegen über `create_playlist`. Falls du manuell eine Playlist-Datei anlegst, trage sie sofort in `playlists/index.md` ein.
-
-## Lint — konkrete Schritte
-
-1. `list_folder("wiki/resources/playlists")` → alle Slugs (ohne `index`) sammeln
-2. `read_file("wiki/resources/playlists/index.md")` → verlinkte Slugs aus `[[.../<slug>]]`-Mustern extrahieren
-3. Differenz = Orphans → fehlende Einträge in `index.md` unter `## Pages` nachtragen
-4. Für nicht-ingestierte `raw/`-Dateien: `list_folder("raw/<subfolder>")` → prüfe ob jede Datei als `quelle_url` oder `quellen`-Eintrag in einer Wiki-Page referenziert wird
+EwtosBrain verhindert Orphans automatisch beim Anlegen einer Playlist. Legst du manuell eine Playlist-Datei an, trage sie sofort in `playlists/index.md` ein. Für die Voll-Prüfung (Orphans, nicht-ingestierte `raw/`-Dateien) nutze `/lint`.

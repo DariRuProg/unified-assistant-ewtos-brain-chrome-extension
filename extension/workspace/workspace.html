@@ -62,6 +62,44 @@
     </aside>
   </div>
 
+  <!-- General Chat (chat_mode=general) — versteckt bis JS aktiviert -->
+  <div id="ws-general" style="display:none;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden">
+    <div class="ws-gen-toolbar" id="ws-gen-toolbar">
+      <span class="ws-gen-label" id="ws-gen-label">✦ Allgemeiner Chat</span>
+      <span class="ws-spacer"></span>
+      <button type="button" id="ws-gen-add-model" class="ws-btn">+ 2. Modell</button>
+      <button type="button" id="ws-gen-clear" class="ws-btn" title="Verlauf löschen">✕ Verlauf</button>
+    </div>
+    <div class="ws-gen-cols" id="ws-gen-cols">
+      <div class="ws-gen-col" id="ws-gen-col-1">
+        <div class="ws-gen-col-head">
+          <select class="ws-gen-provider" id="ws-gen-provider-1"></select>
+          <select class="ws-gen-model-sel" id="ws-gen-model-1"></select>
+          <input type="text" class="ws-gen-model-custom" id="ws-gen-model-custom-1" style="display:none" placeholder="Modell-Name eingeben…">
+        </div>
+        <div class="ws-chat-log" id="ws-gen-log-1"></div>
+        <div class="ws-chat-status" id="ws-gen-status-1"></div>
+      </div>
+      <div class="ws-gen-col" id="ws-gen-col-2" style="display:none">
+        <div class="ws-gen-col-head">
+          <select class="ws-gen-provider" id="ws-gen-provider-2"></select>
+          <select class="ws-gen-model-sel" id="ws-gen-model-2"></select>
+          <input type="text" class="ws-gen-model-custom" id="ws-gen-model-custom-2" style="display:none" placeholder="Modell-Name eingeben…">
+        </div>
+        <div class="ws-chat-log" id="ws-gen-log-2"></div>
+        <div class="ws-chat-status" id="ws-gen-status-2"></div>
+      </div>
+    </div>
+    <div class="ws-gen-input-row">
+      <div class="ws-gen-input-hint" id="ws-gen-input-hint"></div>
+      <div class="ws-chat-input-row" style="border-top:none;padding:0">
+        <textarea class="ws-chat-input" id="ws-gen-input" rows="2" placeholder="Frage oder Anweisung… (Enter = senden, Shift+Enter = Zeilenumbruch)"></textarea>
+        <button type="button" id="ws-gen-mic" class="ws-btn" title="Spracheingabe">🎙</button>
+        <button type="button" id="ws-gen-send" class="ws-btn ws-btn-primary">Senden</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="workspace.js"></script>
 </body>
 </html>

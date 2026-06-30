@@ -1,16 +1,25 @@
 // Vault-Explorer + Vault-Gesundheit Renderer. ewtos.com
+import { t } from '../../i18n/i18n.js';
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
-import { renderMarkdown, renderLineDiff, openInObsidian } from '../markdown.js';
+import { renderMarkdown, renderLineDiff, openInObsidian, wireVaultImages } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
+import { openWorkspaceTab as openWorkspaceTabShared } from '../modules/workspace-tab.js';
 import { renderBaseInto } from './base-view.js';
 
 const VH_SEVERITY = {
-  error: { icon: "🔴", label: "Fehler" },
-  warn: { icon: "🟡", label: "Warnung" },
-  info: { icon: "🔵", label: "Info" },
+  error: { icon: "🔴", labelKey: "vault_health.error_label" },
+  warn: { icon: "🟡", labelKey: "vault_health.warn_label" },
+  info: { icon: "🔵", labelKey: "vault_health.info_label" },
 };
+
+const VH_SNOOZE_PRESETS = [
+  { days: 1, labelKey: "vault_health.snooze_d1" },
+  { days: 7, labelKey: "vault_health.snooze_d7" },
+  { days: 30, labelKey: "vault_health.snooze_d30" },
+  { days: 180, labelKey: "vault_health.snooze_d180" },
+];
 
 // Schicht-Zuordnung nach Top-Level-Segment — färbt Ordner im Explorer.
 // Unterordner erben die Farbe des Top-Ordners (z.B. raw/youtube = raw).
@@ -51,22 +60,25 @@ function buildIngestPrompt(paths) {
   ].join("\n");
 }
 
-export async function renderVaultExplorer() {
-  state.panelTitle.textContent = "Vault-Explorer";
+export async function renderVaultExplorer(optsArg) {
+  state.panelTitle.textContent = t("vault.explorer_panel_title");
 
   // pendingToolOptions wird in openTool() direkt nach renderer()-Aufruf
   // auf null gesetzt — synchron lesen, bevor das erste await passiert.
-  const initialFile = state.pendingToolOptions?.initialFile || null;
-  const initialVaultId = state.pendingToolOptions?.vaultId || null;
+  // optsArg erlaubt direkten Aufruf (z.B. CRM-Kachel) ohne openTool-Umweg.
+  const opts = optsArg || state.pendingToolOptions || {};
+  const initialFile = opts.initialFile || null;
+  const initialFolder = opts.initialFolder || null;
+  const initialVaultId = opts.vaultId || null;
 
   const httpBase = await getHttpBase();
 
   const header = el("div", { className: "chat-header" });
   const vaultSelect = el("select", { className: "vault-picker" });
   const searchRow = el("div", { className: "vault-search-row" });
-  const searchInput = el("input", { type: "text", className: "vault-search-input", placeholder: "Vault durchsuchen..." });
-  const searchBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "Suchen" });
-  const guideBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "📖", title: "Anleitung öffnen" });
+  const searchInput = el("input", { type: "text", className: "vault-search-input", placeholder: t("vault_explorer.search_placeholder") });
+  const searchBtn = el("button", { type: "button", className: "vault-search-btn", textContent: t("vault_explorer.search_btn") });
+  const guideBtn = el("button", { type: "button", className: "vault-search-btn", textContent: "📖", title: t("vault.guide_open") });
   guideBtn.addEventListener("click", () => openFile("anleitung.md"));
   searchRow.append(searchInput, searchBtn, guideBtn);
   header.append(vaultSelect, searchRow);
@@ -83,7 +95,7 @@ export async function renderVaultExplorer() {
   const viewerBox = el("div", { className: "vault-viewer", style: "display:none" });
   const status = el("div", { className: "tool-status" });
 
-  const chatFab = el("button", { className: "vault-chat-fab", title: "Chat mit Vault", textContent: "💬" });
+  const chatFab = el("button", { className: "vault-chat-fab", title: t("vault.chat_fab_title"), textContent: "💬" });
   chatFab.addEventListener("click", () => openWorkspaceTab("notes/scratchpad.md", false, "vault"));
   state.panelBody.append(header, legend, breadcrumb, listBox, viewerBox, status, chatFab);
 
@@ -114,18 +126,18 @@ export async function renderVaultExplorer() {
   }
 
   function makeDeleteBtn(relPath, onDone) {
-    const b = el("span", { className: "vault-row-delete", textContent: "✕", title: "Löschen" });
+    const b = el("span", { className: "vault-row-delete", textContent: "✕", title: t("common.delete") });
     b.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (!confirm(`Löschen?\n\n${relPath}\n\nKann nicht rückgängig gemacht werden.`)) return;
+      if (!confirm(t("vault_explorer.delete_folder_confirm", { path: relPath }))) return;
       try {
         const r = await fetch(`${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(relPath)}`, { method: "DELETE" });
         if (!r.ok) { const er = await r.json().catch(() => ({})); throw new Error(er.detail || `HTTP ${r.status}`); }
         expandedPaths.delete(relPath);
-        setStatus("Gelöscht: " + relPath);
+        setStatus(t("vault_explorer.deleted", { path: relPath }));
         if (onDone) await onDone();
       } catch (err) {
-        setStatus("Löschen fehlgeschlagen: " + (err.message || err), "error");
+        setStatus(t("vault_explorer.delete_error", { error: err.message || err }), "error");
       }
     });
     return b;
@@ -168,10 +180,10 @@ export async function renderVaultExplorer() {
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${res.status}`); }
       const data = await res.json();
       sensitiveFolders = new Set(data.folders || []);
-      setStatus(makeSensitive ? `Ordner gesperrt: ${path}` : `Ordner entsperrt: ${path}`);
+      setStatus(makeSensitive ? t("vault.folder_locked", { path }) : t("vault.folder_unlocked", { path }));
       await renderView();
     } catch (err) {
-      setStatus("Ordner-Flag fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("vault.folder_flag_error", { error: err.message || err }), "error");
     }
   }
 
@@ -181,13 +193,13 @@ export async function renderVaultExplorer() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rel_path: path, sensitive: makeSensitive }),
       });
-      if (res.status === 403) { setStatus("Datei-Flag braucht Schreibrecht (write_files).", "error"); return; }
+      if (res.status === 403) { setStatus(t("vault.file_flag_no_write"), "error"); return; }
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `HTTP ${res.status}`); }
       if (makeSensitive) sensitiveFiles.add(path); else sensitiveFiles.delete(path);
-      setStatus(makeSensitive ? `Datei gesperrt: ${path}` : `Datei entsperrt: ${path}`);
+      setStatus(makeSensitive ? t("vault.file_locked", { path }) : t("vault.file_unlocked", { path }));
       await renderView();
     } catch (err) {
-      setStatus("Datei-Flag fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("vault.file_flag_error", { error: err.message || err }), "error");
     }
   }
 
@@ -198,11 +210,11 @@ export async function renderVaultExplorer() {
       textContent: st.locked ? "🔒" : "🔓",
     });
     if (st.inherited) {
-      b.title = "Gesperrt über übergeordneten Ordner";
+      b.title = t("vault.lock_inherited");
     } else {
       b.title = st.locked
-        ? (isFolder ? "Ordner ist sensibel — klicken zum Entsperren" : "Datei ist sensibel — klicken zum Entsperren")
-        : (isFolder ? "Ordner als sensibel markieren (DSGVO — nur freigegebenes LLM)" : "Datei als sensibel markieren");
+        ? (isFolder ? t("vault.folder_locked_title") : t("vault.file_locked_title"))
+        : (isFolder ? t("vault.folder_lock_title") : t("vault.file_lock_title"));
     }
     b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -217,11 +229,11 @@ export async function renderVaultExplorer() {
     breadcrumb.replaceChildren();
     if (searchActive) {
       const q = searchInput.value.trim();
-      breadcrumb.append(el("span", { className: "vault-crumb-current", textContent: `Suche: "${q}"` }));
+      breadcrumb.append(el("span", { className: "vault-crumb-current", textContent: t("vault_explorer.search_result", { query: q }) }));
       return;
     }
     if (currentFile) {
-      const back = el("a", { href: "#", textContent: "← zurück", className: "vault-back" });
+      const back = el("a", { href: "#", textContent: "← " + t("common.back"), className: "vault-back" });
       back.addEventListener("click", (e) => {
         e.preventDefault();
         if (currentFile) {
@@ -295,7 +307,7 @@ export async function renderVaultExplorer() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
     } catch (err) {
-      container.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
+      container.append(el("div", { className: "tool-status error", textContent: t("common.error_msg", { message: err.message || err }) }));
       return;
     }
     const folders = data.folders || [];
@@ -304,7 +316,7 @@ export async function renderVaultExplorer() {
     const others = data.other || [];
     const counts = data.counts || {};
     if (depth === 0 && !folders.length && !files.length && !images.length && !others.length) {
-      container.append(el("div", { className: "vault-empty", textContent: "Leerer Ordner." }));
+      container.append(el("div", { className: "vault-empty", textContent: t("vault_explorer.empty") }));
       return;
     }
     for (const f of folders) {
@@ -318,7 +330,7 @@ export async function renderVaultExplorer() {
       row.append(caret, el("span", { className: "vault-icon", textContent: "📁" }), el("span", { className: "vault-name", textContent: nameText }));
       row.append(makeLockBtn(f, true));
       if (canWrite) {
-        const addBtn = el("span", { className: "vault-row-add", textContent: "＋", title: "Neue Datei / Ordner hier anlegen" });
+        const addBtn = el("span", { className: "vault-row-add", textContent: "＋", title: t("vault.add_here_title") });
         addBtn.addEventListener("click", (e) => { e.stopPropagation(); showCreateMenu(e.clientX, e.clientY, f); });
         row.append(addBtn);
         row.addEventListener("contextmenu", (e) => { e.preventDefault(); showCreateMenu(e.clientX, e.clientY, f); });
@@ -519,31 +531,7 @@ export async function renderVaultExplorer() {
   // Default: bestehenden Workspace-Tab wiederverwenden (Tab fragt selbst nach,
   // falls dort ungespeicherte Änderungen offen sind). forceNew=true → neuer Tab.
   function openWorkspaceTab(relPath, forceNew = false, chatMode = "") {
-    if (!currentVaultId || !relPath) return;
-    const extra = chatMode ? `&chat_mode=${encodeURIComponent(chatMode)}` : "";
-    const url = chrome.runtime.getURL(
-      `workspace/workspace.html?vault_id=${encodeURIComponent(currentVaultId)}&rel_path=${encodeURIComponent(relPath)}${extra}`
-    );
-    if (forceNew) { chrome.tabs.create({ url }); return; }
-    const prefix = chrome.runtime.getURL("workspace/workspace.html");
-    chrome.tabs.query({}, (tabs) => {
-      const existing = (tabs || []).find((t) => t.url && t.url.startsWith(prefix));
-      if (!existing) { chrome.tabs.create({ url }); return; }
-      // Broadcast an Extension-Seiten (tabs.sendMessage erreicht nur Content-Scripts).
-      // targetTabId filtert auf den richtigen Workspace-Tab; der Tab navigiert selbst
-      // und fragt vorher bei ungespeicherten Änderungen nach.
-      chrome.runtime.sendMessage(
-        { type: "ws_open_file", targetTabId: existing.id, vault_id: currentVaultId, rel_path: relPath, chat_mode: chatMode },
-        (resp) => {
-          if (chrome.runtime.lastError || resp === undefined) {
-            // Kein Empfänger (Tab noch am Laden) → direkt auf die Datei setzen.
-            chrome.tabs.update(existing.id, { url, active: true }, () => { void chrome.runtime.lastError; });
-          } else {
-            chrome.tabs.update(existing.id, { active: true });
-          }
-        }
-      );
-    });
+    openWorkspaceTabShared(currentVaultId, relPath, { forceNew, chatMode });
   }
 
   // Mini-Kontextmenü für „In neuem Tab öffnen" (Rechtsklick auf eine Datei).
@@ -555,7 +543,7 @@ export async function renderVaultExplorer() {
   function showRowMenu(x, y, relPath) {
     closeRowMenu();
     rowMenuEl = el("div", { className: "vault-ctx-menu" });
-    const item = el("button", { type: "button", className: "vault-ctx-item", textContent: "In neuem Tab öffnen" });
+    const item = el("button", { type: "button", className: "vault-ctx-item", textContent: t("vault.open_new_tab") });
     item.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); openWorkspaceTab(relPath, true); });
     rowMenuEl.append(item);
     rowMenuEl.style.left = x + "px";
@@ -567,7 +555,7 @@ export async function renderVaultExplorer() {
   // Neue Datei/Ordner anlegen — IN dem uebergebenen Ordner (parentRel; "" = Vault-Root).
   async function createEntry(parentRel, kind) {
     const isFolder = kind === "folder";
-    const name = (prompt(isFolder ? "Name des neuen Ordners:" : "Name der neuen Datei (.md):", "") || "").trim();
+    const name = (prompt(isFolder ? t("vault.prompt_folder_name") : t("vault.prompt_file_name"), "") || "").trim();
     if (!name) return;
     const rel = parentRel ? `${parentRel}/${name}` : name;
     try {
@@ -577,7 +565,7 @@ export async function renderVaultExplorer() {
         if (parentRel) { let acc = ""; for (const seg of parentRel.split("/")) { acc = acc ? acc + "/" + seg : seg; expandedPaths.add(acc); } }
         expandedPaths.add(rel);
         revealPath = rel;
-        setStatus("Ordner angelegt: " + rel);
+        setStatus(t("vault.folder_created", { path: rel }));
         await renderView();
       } else {
         const fileRel = rel.endsWith(".md") ? rel : rel + ".md";
@@ -587,16 +575,16 @@ export async function renderVaultExplorer() {
         await openFile(fileRel);
       }
     } catch (err) {
-      setStatus("Anlegen fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("vault.create_error", { error: err.message || err }), "error");
     }
   }
 
   function showCreateMenu(x, y, parentRel) {
     closeRowMenu();
     rowMenuEl = el("div", { className: "vault-ctx-menu" });
-    const fileItem = el("button", { type: "button", className: "vault-ctx-item", textContent: "Neue Datei" });
+    const fileItem = el("button", { type: "button", className: "vault-ctx-item", textContent: t("vault.new_file_item") });
     fileItem.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); createEntry(parentRel, "file"); });
-    const folderItem = el("button", { type: "button", className: "vault-ctx-item", textContent: "Neuer Ordner" });
+    const folderItem = el("button", { type: "button", className: "vault-ctx-item", textContent: t("vault.new_folder_item") });
     folderItem.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); createEntry(parentRel, "folder"); });
     rowMenuEl.append(fileItem, folderItem);
     rowMenuEl.style.left = x + "px";
@@ -632,7 +620,7 @@ export async function renderVaultExplorer() {
     viewerBox.style.display = "none";
     listBox.replaceChildren();
     renderBreadcrumb();
-    setStatus("suche...");
+    setStatus(t("vault.searching"));
     try {
       const url = `${httpBase}/tools/vault_search/${encodeURIComponent(currentVaultId)}?q=${encodeURIComponent(q)}`;
       const res = await fetch(url);
@@ -640,7 +628,7 @@ export async function renderVaultExplorer() {
       const data = await res.json();
       const results = data.results || [];
       if (!results.length) {
-        listBox.append(el("div", { className: "vault-empty", textContent: `Keine Treffer für "${q}".` }));
+        listBox.append(el("div", { className: "vault-empty", textContent: t("vault_explorer.no_results", { query: q }) }));
       }
       for (const r of results) {
         const row = el("div", { className: "vault-entry vault-search-result" });
@@ -660,7 +648,7 @@ export async function renderVaultExplorer() {
       }
       setStatus("");
     } catch (err) {
-      setStatus("Suche fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("vault_explorer.search_error", { error: err.message || err }), "error");
     }
   }
 
@@ -679,7 +667,7 @@ export async function renderVaultExplorer() {
       listBox.style.display = "none";
       viewerBox.style.display = "";
       viewerBox.replaceChildren();
-      setStatus("lade Datei...");
+      setStatus(t("vault_explorer.loading_file"));
       try {
         const url = `${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`;
         const res = await fetch(url);
@@ -693,19 +681,14 @@ export async function renderVaultExplorer() {
           });
         } else {
         body.innerHTML = renderMarkdown(data.content || "");
-        // Lokale Vault-Bilder über den Asset-Endpoint laden
-        body.querySelectorAll("img.md-image[data-vault-src]").forEach((img) => {
-          const rel = img.getAttribute("data-vault-src");
-          img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(currentVaultId)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
-          img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[Bild nicht gefunden: ${rel}]`)); });
-        });
+        wireVaultImages(body, currentVaultId, httpBase);
         }
 
         // In-Datei-Suche (Strg+F): markiert alle Treffer gelb, springt durch.
         const findBar = el("div", { className: "vault-find-bar" });
-        const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: "In Datei suchen…" });
-        const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "‹", title: "Vorheriger Treffer" });
-        const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: "Nächster Treffer" });
+        const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: t("vault_explorer.find_in_file") });
+        const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "‹", title: t("vault_explorer.prev_hit") });
+        const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "›", title: t("vault_explorer.next_hit") });
         const findCount = el("span", { className: "vault-find-count" });
         findBar.append(findInput, findPrev, findNext, findCount);
         // Unter dem sticky .tool-header kleben (sonst verschwindet die Bar dahinter).
@@ -727,7 +710,7 @@ export async function renderVaultExplorer() {
           hits = applyFindHighlights(body, qf);
           currentHit = -1;
           if (!qf) { findCount.textContent = ""; return; }
-          findCount.textContent = hits.length ? `${hits.length} Treffer` : "kein Treffer";
+          findCount.textContent = hits.length ? t("vault.find_count", { count: hits.length }) : t("vault.find_none");
           if (hits.length) jumpTo(0);
         }
         findInput.addEventListener("input", runFind);
@@ -753,7 +736,7 @@ export async function renderVaultExplorer() {
         const chatBtn = el("button", {
           type: "button",
           className: "vault-file-chat-btn",
-          textContent: "💬 Mit dieser Datei chatten",
+          textContent: t("vault_explorer.chat_file"),
         });
         chatBtn.addEventListener("click", () => {
           openTool("chat", {
@@ -767,8 +750,8 @@ export async function renderVaultExplorer() {
         const obsidianBtn = el("button", {
           type: "button",
           className: "vault-obsidian-btn obsidian-button",
-          textContent: "✎ In Obsidian öffnen",
-          title: "Diese Datei in Obsidian öffnen (externe App)",
+          textContent: t("vault_explorer.open_obsidian"),
+          title: t("vault_explorer.open_obsidian_hint"),
         });
         obsidianBtn.addEventListener("click", () => {
           const v = vaultsById[currentVaultId];
@@ -777,15 +760,15 @@ export async function renderVaultExplorer() {
         });
         viewerActions.append(obsidianBtn);
         if (canWrite && currentFile && currentFile.toLowerCase().endsWith(".md")) {
-          const editBtn = el("button", { type: "button", className: "vault-edit-btn", textContent: "Bearbeiten" });
+          const editBtn = el("button", { type: "button", className: "vault-edit-btn", textContent: t("common.edit") });
           const rawContent = data.content || "";
           editBtn.addEventListener("click", () => showEditor(rawContent));
           viewerActions.append(editBtn);
         }
         if (canWrite && explorerAllowDelete) {
-          const delFileBtn = el("button", { type: "button", className: "vault-delete-btn", textContent: "🗑 Löschen" });
+          const delFileBtn = el("button", { type: "button", className: "vault-delete-btn", textContent: t("vault_explorer.delete_file") });
           delFileBtn.addEventListener("click", async () => {
-            if (!confirm(`Datei löschen?\n\n${currentFile}\n\nKann nicht rückgängig gemacht werden.`)) return;
+            if (!confirm(t("vault_explorer.delete_confirm", { path: currentFile }))) return;
             try {
               const r = await fetch(`${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`, { method: "DELETE" });
               if (!r.ok) { const er = await r.json().catch(() => ({})); throw new Error(er.detail || `HTTP ${r.status}`); }
@@ -793,7 +776,7 @@ export async function renderVaultExplorer() {
               currentFile = null;
               await renderView();
             } catch (err) {
-              setStatus("Löschen fehlgeschlagen: " + (err.message || err), "error");
+              setStatus(t("vault_explorer.delete_error", { error: err.message || err }), "error");
             }
           });
           viewerActions.append(delFileBtn);
@@ -806,8 +789,8 @@ export async function renderVaultExplorer() {
         }
         setStatus("");
       } catch (err) {
-        viewerBox.append(el("div", { className: "tool-status error", textContent: "Fehler: " + (err.message || err) }));
-        setStatus("Datei konnte nicht geladen werden", "error");
+        viewerBox.append(el("div", { className: "tool-status error", textContent: t("common.error_msg", { message: err.message || err }) }));
+        setStatus(t("vault_explorer.file_error"), "error");
       }
       return;
     }
@@ -816,13 +799,13 @@ export async function renderVaultExplorer() {
     listBox.replaceChildren();
     if (canWrite) {
       const toolbar = el("div", { className: "vault-toolbar" });
-      const newBtn = el("button", { type: "button", className: "vault-new-btn", textContent: "+ Neue Datei" });
-      const newFolderBtn = el("button", { type: "button", className: "vault-new-btn", textContent: "+ Ordner" });
+      const newBtn = el("button", { type: "button", className: "vault-new-btn", textContent: t("vault_explorer.new_file") });
+      const newFolderBtn = el("button", { type: "button", className: "vault-new-btn", textContent: t("vault.new_folder_btn") });
       newFolderBtn.addEventListener("click", () => createEntry("", "folder"));
       toolbar.append(newBtn, newFolderBtn);
       const newForm = el("div", { className: "vault-new-file-row", style: "display:none" });
-      const newInput = el("input", { type: "text", className: "vault-new-input", placeholder: "dateiname.md" });
-      const newConfirm = el("button", { type: "button", textContent: "Anlegen", className: "vault-new-confirm" });
+      const newInput = el("input", { type: "text", className: "vault-new-input", placeholder: t("vault_explorer.new_filename_placeholder") });
+      const newConfirm = el("button", { type: "button", textContent: t("vault_explorer.create"), className: "vault-new-confirm" });
       const newCancel = el("button", { type: "button", textContent: "×", className: "vault-new-cancel" });
       newForm.append(newInput, newConfirm, newCancel);
       newBtn.addEventListener("click", () => { newForm.style.display = ""; newInput.focus(); });
@@ -844,14 +827,14 @@ export async function renderVaultExplorer() {
           const finalRel = rel.endsWith(".md") ? rel : rel + ".md";
           await openFile(finalRel);
         } catch (err) {
-          setStatus("Fehler: " + (err.message || err), "error");
+          setStatus(t("common.error_msg", { message: err.message || err }), "error");
           newConfirm.disabled = false;
         }
       });
       newInput.addEventListener("keydown", (e) => { if (e.key === "Enter") newConfirm.click(); });
       listBox.append(toolbar, newForm);
     }
-    setStatus("lade Vault...");
+    setStatus(t("vault_explorer.loading"));
     const treeRoot = el("div", { className: "vault-tree" });
     listBox.append(treeRoot);
     await buildTreeInto(treeRoot, "", 0);
@@ -878,9 +861,9 @@ export async function renderVaultExplorer() {
     // daher Backdrop-Technik: deckungsgleiche Highlight-Ebene hinter dem (transparent
     // gemachten) Textarea, scroll-synchron.
     const findBar = el("div", { className: "vault-find-bar" });
-    const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: "In Datei suchen…" });
-    const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "↑", title: "Vorheriger Treffer (Shift+Enter)" });
-    const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "↓", title: "Nächster Treffer (Enter)" });
+    const findInput = el("input", { type: "text", className: "vault-find-input", placeholder: t("vault_explorer.find_in_file") });
+    const findPrev = el("button", { type: "button", className: "vault-find-nav", textContent: "↑", title: t("vault.prev_hit_kbd") });
+    const findNext = el("button", { type: "button", className: "vault-find-nav", textContent: "↓", title: t("vault.next_hit_kbd") });
     const findCount = el("span", { className: "vault-find-count" });
     findBar.append(findInput, findPrev, findNext, findCount);
     // Unter dem sticky .tool-header kleben (sonst verschwindet die Bar dahinter).
@@ -921,8 +904,8 @@ export async function renderVaultExplorer() {
       html += escHtml(text.slice(pos));
       backdrop.innerHTML = html + (text.endsWith("\n") ? " " : "");
       findCount.textContent = matches.length
-        ? (curMatch >= 0 ? `${curMatch + 1}/${matches.length}` : `${matches.length} Treffer`)
-        : "kein Treffer";
+        ? (curMatch >= 0 ? `${curMatch + 1}/${matches.length}` : t("vault.find_count", { count: matches.length }))
+        : t("vault.find_none");
     }
     function syncScroll() { backdrop.scrollTop = ta.scrollTop; backdrop.scrollLeft = ta.scrollLeft; }
     function jumpTo(i) {
@@ -959,14 +942,14 @@ export async function renderVaultExplorer() {
     document.addEventListener("keydown", onFindKey);
 
     const actionsEl = el("div", { className: "vault-editor-actions" });
-    const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "vault-save-btn" });
-    const cancelBtn = el("button", { type: "button", textContent: "Abbrechen" });
+    const saveBtn = el("button", { type: "button", textContent: t("common.save"), className: "vault-save-btn" });
+    const cancelBtn = el("button", { type: "button", textContent: t("common.cancel") });
     actionsEl.append(saveBtn, cancelBtn);
     viewerBox.append(findBar, wrap, actionsEl);
     ta.focus();
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;
-      saveBtn.textContent = "Speichere...";
+      saveBtn.textContent = t("common.saving");
       try {
         const r = await fetch(
           `${httpBase}/tools/vault_file/${encodeURIComponent(currentVaultId)}?rel_path=${encodeURIComponent(currentFile)}`,
@@ -976,13 +959,13 @@ export async function renderVaultExplorer() {
           const err = await r.json().catch(() => ({}));
           throw new Error(err.detail || `HTTP ${r.status}`);
         }
-        setStatus("Gespeichert.");
+        setStatus(t("vault.saved"));
         setTimeout(() => setStatus(""), 2000);
         await openFile(currentFile);
       } catch (err) {
-        setStatus("Fehler: " + (err.message || err), "error");
+        setStatus(t("common.error_msg", { message: err.message || err }), "error");
         saveBtn.disabled = false;
-        saveBtn.textContent = "Speichern";
+        saveBtn.textContent = t("common.save");
       }
     });
     cancelBtn.addEventListener("click", () => openFile(currentFile));
@@ -1018,8 +1001,8 @@ export async function renderVaultExplorer() {
     if (!vaults.length) {
       state.panelBody.replaceChildren();
       const wrap = el("div", { className: "chat-empty-state" });
-      wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
-      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      wrap.append(el("p", { textContent: t("vault_explorer.no_vault") }));
+      const btn = el("button", { type: "button", textContent: t("common.open_settings") });
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
       state.panelBody.append(wrap);
@@ -1040,23 +1023,26 @@ export async function renderVaultExplorer() {
       const parentIdx = initialFile.lastIndexOf("/");
       currentPath = parentIdx === -1 ? "" : initialFile.slice(0, parentIdx);
       currentFile = initialFile;
+    } else if (initialFolder) {
+      currentPath = initialFolder;
+      currentFile = null;
     }
     await loadSensitiveState();
     await renderView();
-    if (!initialFile) await syncToActiveTab();  // beim Öffnen direkt den aktiven Tab spiegeln
+    if (!initialFile && !initialFolder) await syncToActiveTab();  // beim Öffnen direkt den aktiven Tab spiegeln
   } catch (err) {
-    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+    setStatus(t("vault.vault_list_error", { error: err.message || err }), "error");
   }
 }
 
 export async function renderVaultHealth() {
-  state.panelTitle.textContent = "Vault-Gesundheit";
+  state.panelTitle.textContent = t("vault_health.title");
   const initialVaultId = state.pendingToolOptions?.vaultId || null;
   const httpBase = await getHttpBase();
 
   const header = el("div", { className: "chat-header" });
   const vaultSelect = el("select", { className: "vault-picker" });
-  const runBtn = el("button", { type: "button", className: "secondary", textContent: "Neu prüfen" });
+  const runBtn = el("button", { type: "button", className: "secondary", textContent: t("vault_health.check") });
   header.append(vaultSelect, runBtn);
 
   const summary = el("div", { className: "vh-summary" });
@@ -1078,14 +1064,14 @@ export async function renderVaultHealth() {
     listBox.replaceChildren();
     upgradeBox.replaceChildren();
     upgradeBox.style.display = "none";
-    setStatus("Prüfe Vault...");
+    setStatus(t("vault_health.checking"));
     try {
       const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       renderReport(await res.json());
       setStatus("");
     } catch (err) {
-      setStatus("Audit fehlgeschlagen: " + (err.message || err), "error");
+      setStatus(t("vault_health.check_error", { error: err.message || err }), "error");
     }
   }
 
@@ -1094,40 +1080,49 @@ export async function renderVaultHealth() {
     const sev = s.by_severity || {};
     summary.append(el("div", {
       className: "vh-summary-line",
-      textContent: `${s.total || 0} Befunde · 🔴 ${sev.error || 0} · 🟡 ${sev.warn || 0} · 🔵 ${sev.info || 0} · ${s.files_scanned || 0} Dateien gescannt`,
+      textContent: t("vault_health.summary", {
+        total: s.total || 0,
+        error: sev.error || 0,
+        warn: sev.warn || 0,
+        info: sev.info || 0,
+        scanned: s.files_scanned || 0,
+      }),
     }));
 
     const findings = data.findings || [];
     if (!findings.length) {
-      listBox.append(el("div", { className: "vh-empty", textContent: "Keine Befunde — der Vault ist sauber. 🎉" }));
+      listBox.append(el("div", { className: "vh-empty", textContent: t("vault_health.empty") }));
       return;
     }
 
-    if (findings.some((f) => f.category === "claude_md_drift")) {
+    const active = findings.filter((f) => !f.snoozed_until);
+    const snoozed = findings.filter((f) => f.snoozed_until);
+
+    if (active.some((f) => f.category === "claude_md_drift")) {
       renderUpgradeAffordance();
     }
 
-    const uningested = findings.filter((f) => f.category === "raw_uningested" && f.path);
+    const uningested = active.filter((f) => f.category === "raw_uningested" && f.path);
     if (uningested.length) {
       const box = el("div", { className: "vh-ingest-box" });
       box.append(el("div", {
         className: "vh-ingest-title",
-        textContent: `📥 ${uningested.length} Roh-Quelle(n) noch nicht ingested`,
+        textContent: t("vault_health.uningested", { count: uningested.length }),
       }));
       const btn = el("button", {
         type: "button",
         className: "vh-ingest-btn",
-        textContent: "Ingest-Prompt kopieren",
-        title: "Prompt mit allen uningesteten Quellen in die Zwischenablage — in beliebiges LLM (Subscription) einfügen",
+        textContent: t("vault_health.copy_prompt"),
+        title: t("vault_health.copy_prompt_hint"),
       });
       btn.addEventListener("click", async () => {
         const prompt = buildIngestPrompt(uningested.map((f) => f.path));
         try {
           await navigator.clipboard.writeText(prompt);
-          btn.textContent = "✓ Kopiert";
-          setTimeout(() => { btn.textContent = "Ingest-Prompt kopieren"; }, 2000);
+          btn.textContent = t("vault_health.copied");
+          setTimeout(() => { btn.textContent = t("vault_health.copy_prompt"); }, 2000);
         } catch (_) {
-          setStatus("Clipboard nicht verfügbar — Prompt im Status unten.", "error");
+          setStatus(t("vault_health.clipboard_error"), "error");
           setStatus(prompt);
         }
       });
@@ -1135,11 +1130,15 @@ export async function renderVaultHealth() {
       listBox.append(box);
     }
 
+    if (!active.length) {
+      listBox.append(el("div", { className: "vh-empty", textContent: t("vault_health.empty") }));
+    }
+
     for (const sevKey of ["error", "warn", "info"]) {
-      const group = findings.filter((f) => f.severity === sevKey);
+      const group = active.filter((f) => f.severity === sevKey);
       if (!group.length) continue;
       const meta = VH_SEVERITY[sevKey];
-      listBox.append(el("div", { className: "vh-group-title", textContent: `${meta.icon} ${meta.label} (${group.length})` }));
+      listBox.append(el("div", { className: "vh-group-title", textContent: `${meta.icon} ${t(meta.labelKey)} (${group.length})` }));
       for (const f of group) {
         const row = el("div", { className: "vh-finding vh-sev-" + sevKey });
         const head = el("div", { className: "vh-finding-head" });
@@ -1149,7 +1148,7 @@ export async function renderVaultHealth() {
           // Datei-Pfade (nicht Ordner) anklickbar → im Vault-Explorer öffnen.
           if (!f.path.endsWith("/")) {
             pathEl.classList.add("clickable");
-            pathEl.title = "Im Vault-Explorer öffnen";
+            pathEl.title = t("vault.open_in_explorer");
             pathEl.addEventListener("click", () =>
               openTool("vault_explorer", { initialFile: f.path, vaultId: currentVaultId }));
           }
@@ -1158,19 +1157,95 @@ export async function renderVaultHealth() {
         row.append(head);
         row.append(el("div", { className: "vh-msg", textContent: f.message }));
         if (f.recommendation) row.append(el("div", { className: "vh-rec", textContent: "→ " + f.recommendation }));
+        const actions = el("div", { className: "vh-finding-actions" });
         if (f.repairable) {
-          const fixBtn = el("button", { type: "button", className: "vh-fix-btn", textContent: "Reparieren" });
+          const fixBtn = el("button", { type: "button", className: "vh-fix-btn", textContent: t("vault_health.repair") });
           fixBtn.addEventListener("click", () => repairFinding(f, fixBtn));
-          row.append(fixBtn);
+          actions.append(fixBtn);
         }
+        const menu = buildSnoozeMenu(f);
+        const snoozeBtn = el("button", { type: "button", className: "vh-snooze-btn", textContent: t("vault_health.snooze") });
+        snoozeBtn.addEventListener("click", () => { menu.hidden = !menu.hidden; });
+        actions.append(snoozeBtn);
+        row.append(actions);
+        row.append(menu);
         listBox.append(row);
       }
+    }
+
+    if (snoozed.length) renderSnoozedSection(snoozed);
+  }
+
+  function buildSnoozeMenu(f) {
+    const menu = el("div", { className: "vh-snooze-menu", hidden: true });
+    const addRow = (labelText, scope) => {
+      const r = el("div", { className: "vh-snooze-row" });
+      r.append(el("span", { className: "vh-snooze-label", textContent: labelText }));
+      for (const p of VH_SNOOZE_PRESETS) {
+        const b = el("button", { type: "button", className: "vh-snooze-preset", textContent: t(p.labelKey) });
+        b.addEventListener("click", () => snoozeFinding(f, p.days, scope));
+        r.append(b);
+      }
+      menu.append(r);
+    };
+    addRow(t("vault_health.snooze_finding_label"), "finding");
+    addRow(t("vault_health.snooze_category_label", { category: f.category }), "category");
+    return menu;
+  }
+
+  function renderSnoozedSection(snoozed) {
+    const details = el("details", { className: "vh-snoozed-section" });
+    details.append(el("summary", { textContent: t("vault_health.snoozed_section", { count: snoozed.length }) }));
+    for (const f of snoozed) {
+      const row = el("div", { className: "vh-finding vh-snoozed" });
+      const head = el("div", { className: "vh-finding-head" });
+      head.append(el("span", { className: "vh-badge", textContent: f.category }));
+      if (f.path) head.append(el("code", { className: "vh-path", textContent: f.path }));
+      head.append(el("span", { className: "vh-snooze-until", textContent: t("vault_health.snoozed_until", { date: f.snoozed_until }) }));
+      row.append(head);
+      row.append(el("div", { className: "vh-msg", textContent: f.message }));
+      const btn = el("button", { type: "button", className: "vh-fix-btn", textContent: t("vault_health.unsnooze") });
+      btn.addEventListener("click", () => unsnoozeFinding(f));
+      row.append(btn);
+      details.append(row);
+    }
+    listBox.append(details);
+  }
+
+  async function snoozeFinding(f, days, scope) {
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/snooze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: f.category, path: f.path || "", message: f.message || "", days, scope }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setStatus(t("vault_health.snoozed_ok", { until: data.until }));
+      await runAudit();
+    } catch (err) {
+      setStatus(t("vault_health.snooze_error", { error: err.message || err }), "error");
+    }
+  }
+
+  async function unsnoozeFinding(f) {
+    try {
+      const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/unsnooze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: f.key }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus(t("vault_health.unsnoozed_ok"));
+      await runAudit();
+    } catch (err) {
+      setStatus(t("vault_health.snooze_error", { error: err.message || err }), "error");
     }
   }
 
   async function repairFinding(f, btn) {
     btn.disabled = true;
-    btn.textContent = "Repariere…";
+    btn.textContent = t("vault.repairing");
     try {
       const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/repair`, {
         method: "POST",
@@ -1179,31 +1254,33 @@ export async function renderVaultHealth() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setStatus(data.repaired ? "Repariert: " + (data.line || data.path || f.path) : "Nichts zu tun: " + (data.reason || "bereits behoben"));
+      setStatus(data.repaired
+        ? t("vault_health.repaired", { line: data.line || data.path || f.path })
+        : t("vault_health.nothing_repair", { reason: data.reason || t("vault.already_fixed") }));
       await runAudit();
     } catch (err) {
       btn.disabled = false;
-      btn.textContent = "Reparieren";
-      setStatus("Reparatur fehlgeschlagen: " + (err.message || err), "error");
+      btn.textContent = t("vault_health.repair");
+      setStatus(t("vault_health.repair_error", { error: err.message || err }), "error");
     }
   }
 
   function renderUpgradeAffordance() {
     upgradeBox.style.display = "";
     upgradeBox.replaceChildren();
-    upgradeBox.append(el("div", { className: "vh-upgrade-title", textContent: "🩹 CLAUDE.md kann aktualisiert werden" }));
+    upgradeBox.append(el("div", { className: "vh-upgrade-title", textContent: t("vault_health.upgrade") }));
     upgradeBox.append(el("div", {
       className: "vh-upgrade-hint",
-      textContent: "Verwaltete Sektionen werden non-destruktiv aktualisiert — dein eigener Text außerhalb der Marker bleibt erhalten.",
+      textContent: t("vault_health.upgrade_hint"),
     }));
-    const previewBtn = el("button", { type: "button", textContent: "Diff ansehen" });
+    const previewBtn = el("button", { type: "button", textContent: t("vault_health.preview") });
     upgradeBox.append(previewBtn);
     previewBtn.addEventListener("click", () => showPreview(previewBtn));
   }
 
   async function showPreview(previewBtn) {
     previewBtn.disabled = true;
-    setStatus("Lade Diff...");
+    setStatus(t("vault_health.loading_diff"));
     try {
       const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/claude_md_preview`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1212,13 +1289,13 @@ export async function renderVaultHealth() {
       const box = el("div", { className: "vh-diff-box" });
       box.append(el("div", {
         className: "vh-diff-label",
-        textContent: data.changed ? `Sektionen: ${(data.sections || []).join(", ")}` : "Bereits aktuell — kein Diff.",
+        textContent: data.changed ? t("vault_health.diff_sections", { sections: (data.sections || []).join(", ") }) : t("vault_health.already_current"),
       }));
       if (data.changed) {
         const pre = el("pre", { className: "vh-diff" });
         pre.append(renderLineDiff(data.existing || "", data.merged || ""));
         box.append(pre);
-        const applyBtn = el("button", { type: "button", className: "vault-save-btn", textContent: "Anwenden" });
+        const applyBtn = el("button", { type: "button", className: "vault-save-btn", textContent: t("vault_health.apply") });
         applyBtn.addEventListener("click", () => applyUpgrade(applyBtn));
         box.append(applyBtn);
       }
@@ -1226,22 +1303,22 @@ export async function renderVaultHealth() {
       previewBtn.style.display = "none";
     } catch (err) {
       previewBtn.disabled = false;
-      setStatus("Diff konnte nicht geladen werden: " + (err.message || err), "error");
+      setStatus(t("vault_health.diff_error", { error: err.message || err }), "error");
     }
   }
 
   async function applyUpgrade(applyBtn) {
     applyBtn.disabled = true;
-    applyBtn.textContent = "Wende an...";
+    applyBtn.textContent = t("vault_health.applying");
     try {
       const res = await fetch(`${httpBase}/tools/vault_audit/${encodeURIComponent(currentVaultId)}/claude_md_apply`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setStatus("CLAUDE.md aktualisiert.");
+      setStatus(t("vault_health.updated"));
       await runAudit();
     } catch (err) {
       applyBtn.disabled = false;
-      applyBtn.textContent = "Anwenden";
-      setStatus("Fehler beim Anwenden: " + (err.message || err), "error");
+      applyBtn.textContent = t("vault_health.apply");
+      setStatus(t("vault_health.apply_error", { error: err.message || err }), "error");
     }
   }
 
@@ -1259,8 +1336,8 @@ export async function renderVaultHealth() {
     if (!vaults.length) {
       state.panelBody.replaceChildren();
       const wrap = el("div", { className: "chat-empty-state" });
-      wrap.append(el("p", { textContent: "Noch kein Vault verbunden. Lege in den Einstellungen einen an." }));
-      const btn = el("button", { type: "button", textContent: "Einstellungen öffnen" });
+      wrap.append(el("p", { textContent: t("vault_explorer.no_vault") }));
+      const btn = el("button", { type: "button", textContent: t("common.open_settings") });
       btn.addEventListener("click", () => chrome.runtime.openOptionsPage());
       wrap.append(btn);
       state.panelBody.append(wrap);
@@ -1275,6 +1352,6 @@ export async function renderVaultHealth() {
     vaultSelect.value = currentVaultId;
     await runAudit();
   } catch (err) {
-    setStatus("Vault-Liste konnte nicht geladen werden: " + (err.message || err), "error");
+    setStatus(t("vault.vault_list_error", { error: err.message || err }), "error");
   }
 }

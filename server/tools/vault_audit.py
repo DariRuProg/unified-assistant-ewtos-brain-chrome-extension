@@ -10,14 +10,17 @@ Frontmatter-Parsing und blueprint (Soll-Struktur + CLAUDE.md-Upgrade-Preview).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
 
+import paths
 import settings
-from tools import blueprint, wiki_reader
+from tools import blueprint, claude_md_merger, wiki_reader
 
 IGNORED_NAMES = wiki_reader.IGNORED_NAMES
 REQUIRED_FRONTMATTER = ("typ", "titel", "status", "zuletzt")
@@ -189,10 +192,17 @@ def _check_frontmatter(root: Path, md_files: list[Path], bp: dict | None) -> lis
     return out
 
 
+# Ordner-Kinds, die NICHT als Struktur-Drift gemeldet werden, wenn sie fehlen:
+# raw/-Unterordner sind Staging-Bereiche, die erst beim ersten Schreiben entstehen
+# (leere Ordner trackt weder Git noch Obsidian). Ihr Fehlen ist kein Defekt.
+_OPTIONAL_FOLDER_KINDS = {"raw"}
+
+
 def _check_structure(vault_id: str, root: Path) -> list[dict]:
     """Prueft nur die im Blueprint EXPLIZIT gelisteten folders[]. Automatisch
     erzeugte Index-Hubs (wiki/<bucket>, wiki/<bucket>/<thema>) sind nicht in
-    folders[] — die deckt der separate `missing_hub`-Check ab."""
+    folders[] — die deckt der separate `missing_hub`-Check ab. Optionale
+    Staging-Ordner (_OPTIONAL_FOLDER_KINDS) werden nicht gemeldet."""
     bp = blueprint.export_vault_blueprint(vault_id)
     if not bp:
         return [_finding(
@@ -202,6 +212,8 @@ def _check_structure(vault_id: str, root: Path) -> list[dict]:
         )]
     out: list[dict] = []
     for folder in bp.get("folders") or []:
+        if folder.get("kind") in _OPTIONAL_FOLDER_KINDS:
+            continue
         rel = folder.get("path")
         if rel and not (root / rel).exists():
             out.append(_finding(
@@ -213,27 +225,35 @@ def _check_structure(vault_id: str, root: Path) -> list[dict]:
 
 
 def _check_claude_md(vault_id: str) -> list[dict]:
-    # Fremd-Vault (kein Blueprint-Snapshot, keine ewtosbrain-Marker): KEIN Apply
-    # anbieten — das Default-Blueprint passt i.d.R. nicht und würde widersprüchliche
-    # Sektionen reinmergen. Nur eine Empfehlung (extend-Mode liest die echte Struktur).
+    # Leitprinzip: die CLAUDE.md gehört dem User. Wir funken nur dann mit einem
+    # Drift-Warn dazwischen, wenn die Datei TATSÄCHLICH verwaltete ewtosbrain-Marker
+    # enthält — dann hat der User Management bewusst gewählt und ein Upgrade ist legitim.
+    # Eine handgeschriebene (marker-lose) CLAUDE.md wird nie als "veraltet" gemeldet
+    # und bekommt keinen Apply-Button aufgedrängt.
     vault = settings.get_vault(vault_id)
     existing = ""
     if vault:
         cm = Path(vault["path"]) / "CLAUDE.md"
         if cm.exists():
             existing = _read(cm)
-    managed = (
-        blueprint.export_vault_blueprint(vault_id) is not None
-        or "ewtosbrain:section" in existing
-    )
-    if not managed:
-        return [_finding(
-            "claude_md_advice", "info", "CLAUDE.md",
-            "Fremd-Vault ohne EwtosBrain-Blueprint — kein automatischer CLAUDE.md-Abgleich.",
-            "Optional: im Setup-Wizard 'Bestehenden verbinden' (extend-Modus) wählen — "
-            "der Setup-Agent liest die vorhandene Struktur und erweitert sie passend, "
-            "statt das Standard-Blueprint aufzudrücken.",
-        )]
+
+    has_markers = bool(claude_md_merger.parse_sections(existing))
+
+    if not has_markers:
+        if existing.strip():
+            return [_finding(
+                "claude_md_unmanaged", "info", "CLAUDE.md",
+                "CLAUDE.md ist handgeschrieben / nicht von EwtosBrain verwaltet — wird nicht angetastet.",
+                "Optional: 'CLAUDE.md von KI prüfen lassen' für Verbesserungs-Tipps (schreibt nichts).",
+            )]
+        if blueprint.export_vault_blueprint(vault_id) is not None:
+            return [_finding(
+                "claude_md_missing", "info", "CLAUDE.md",
+                "Keine CLAUDE.md vorhanden, aber ein Blueprint ist verbunden.",
+                "Optional: im Health-Panel eine CLAUDE.md aus dem Blueprint generieren.",
+            )]
+        return []
+
     try:
         prev = blueprint.preview_claude_md_upgrade(vault_id)
     except Exception as e:
@@ -243,8 +263,9 @@ def _check_claude_md(vault_id: str) -> list[dict]:
         return []
     return [_finding(
         "claude_md_drift", "warn", "CLAUDE.md",
-        "Verwaltete CLAUDE.md-Sektionen sind veraltet oder fehlen.",
-        "Upgrade verfügbar — Diff prüfen und 'CLAUDE.md aktualisieren' (non-destruktiv).",
+        "Verwaltete CLAUDE.md-Sektionen (mit ewtosbrain-Markern) sind veraltet.",
+        "Upgrade verfügbar — Diff prüfen und 'CLAUDE.md aktualisieren' (non-destruktiv, "
+        "nur die Marker-Blöcke, dein restlicher Text bleibt).",
     )]
 
 
@@ -421,6 +442,107 @@ def repair_finding(vault_id: str, category: str, path: str) -> dict:
     )
 
 
+# --- Snooze (Befunde temporaer ausblenden) --------------------------------
+# Findings werden bei jedem Lauf neu berechnet (keine persistente ID). Snooze =
+# Ausblenden mit Verfallsdatum: ein stabiler Key (category+path+message) bekommt
+# ein `until`-Datum. Aendert sich der Befund inhaltlich, verfaellt der Snooze
+# automatisch (fail-open). Scope "category" blendet eine ganze Befund-Art aus.
+
+SNOOZE_PRESET_DAYS = (1, 7, 30, 180)
+
+
+def _finding_key(category: str, path: str, message: str) -> str:
+    raw = f"{category}\x00{path}\x00{message}".encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:16]
+
+
+def _category_key(category: str) -> str:
+    return "cat:" + category
+
+
+def _load_snoozes() -> dict:
+    f = paths.vault_snoozes_file()
+    if not f.exists():
+        return {}
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def _save_snoozes(data: dict) -> None:
+    f = paths.vault_snoozes_file()
+    tmp = f.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(f)
+
+
+def snooze_finding(vault_id: str, category: str, path: str, message: str,
+                   days: int, scope: str = "finding") -> dict:
+    """Blendet ein Finding (scope='finding') oder eine ganze Kategorie
+    (scope='category') fuer `days` Tage aus. Liefert {key, until}."""
+    if days <= 0:
+        raise ValueError("days muss > 0 sein")
+    if scope not in ("finding", "category"):
+        raise ValueError(f"Unbekannter scope: {scope}")
+    until = (date.today() + timedelta(days=days)).isoformat()
+    key = _category_key(category) if scope == "category" else _finding_key(category, path, message)
+    data = _load_snoozes()
+    vault = data.setdefault(vault_id, {})
+    vault[key] = {"until": until, "scope": scope, "category": category,
+                  "path": path, "message": message}
+    _save_snoozes(data)
+    return {"key": key, "until": until}
+
+
+def unsnooze(vault_id: str, key: str) -> dict:
+    """Hebt einen Snooze wieder auf (Finding sofort wieder sichtbar)."""
+    data = _load_snoozes()
+    vault = data.get(vault_id) or {}
+    removed = vault.pop(key, None) is not None
+    if removed:
+        _save_snoozes(data)
+    return {"ok": True, "removed": removed}
+
+
+def _apply_snoozes(vault_id: str, findings: list[dict]) -> int:
+    """Markiert snoozed Findings mit `snoozed_until` + setzt `key`. Raeumt dabei
+    abgelaufene und verwaiste (Finding behoben) Finding-Snoozes weg. Liefert die
+    Zahl der aktuell ausgeblendeten Findings."""
+    data = _load_snoozes()
+    vault = data.get(vault_id) or {}
+    today = date.today().isoformat()
+
+    live_keys: set[str] = set()
+    for f in findings:
+        k = _finding_key(f["category"], f["path"], f["message"])
+        f["key"] = k
+        live_keys.add(k)
+
+    # Cleanup: abgelaufene Snoozes + Finding-Snoozes ohne passendes Live-Finding.
+    # Kategorie-Snoozes bleiben bis zum Ablauf (auch wenn gerade 0 Findings).
+    pruned = {
+        key: entry for key, entry in vault.items()
+        if entry.get("until", "") > today
+        and (entry.get("scope") == "category" or key in live_keys)
+    }
+    if pruned != vault:
+        if pruned:
+            data[vault_id] = pruned
+        else:
+            data.pop(vault_id, None)
+        _save_snoozes(data)
+
+    snoozed = 0
+    for f in findings:
+        cat_entry = pruned.get(_category_key(f["category"]))
+        entry = cat_entry or pruned.get(f["key"])
+        f["snoozed_until"] = entry["until"] if entry else None
+        if entry:
+            snoozed += 1
+    return snoozed
+
+
 def audit_vault(vault_id: str) -> dict:
     """Read-only Health-Check. Liefert {vault_id, findings, summary}."""
     vault = settings.get_vault(vault_id)
@@ -447,10 +569,16 @@ def audit_vault(vault_id: str) -> dict:
         except Exception as e:
             findings.append(_finding("audit_error", "info", "", f"Check fehlgeschlagen: {e}", ""))
 
+    snoozed_count = _apply_snoozes(vault_id, findings)
+
     by_severity = {"error": 0, "warn": 0, "info": 0}
     by_category: dict[str, int] = {}
+    active = 0
     for f in findings:
         f["repairable"] = f["category"] in REPAIRABLE_CATEGORIES and bool(f["path"])
+        if f["snoozed_until"]:
+            continue  # ausgeblendet → nicht in den aktiven Zaehlern
+        active += 1
         by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
         by_category[f["category"]] = by_category.get(f["category"], 0) + 1
 
@@ -459,7 +587,8 @@ def audit_vault(vault_id: str) -> dict:
         "vault_name": vault.get("name"),
         "findings": findings,
         "summary": {
-            "total": len(findings),
+            "total": active,
+            "snoozed": snoozed_count,
             "files_scanned": len(md_files),
             "by_severity": by_severity,
             "by_category": by_category,

@@ -42,7 +42,14 @@ class SourceChatRequest(BaseModel):
     tool_level: str | None = None  # "none" | "knowledge" | "full"; None → Fallback auf include_tools
 
 
-# Static routes declared before {vault_id} routes so "page"/"source" aren't matched as vault_id.
+class GeneralChatRequest(BaseModel):
+    message: str
+    history: list[dict] = []
+    provider: str | None = None  # per-Request-Override; None → aktive Settings
+    model: str | None = None     # per-Request-Override; None → aktive Settings / Default
+
+
+# Static routes declared before {vault_id} routes so "page"/"source"/"general" aren't matched as vault_id.
 @router.post("/tools/chat/page/stream")
 def chat_page_stream(req: PageChatRequest) -> StreamingResponse:
     """SSE stream: chat about a scraped page — no vault needed. (Legacy, delegates to source-stream.)"""
@@ -54,6 +61,16 @@ def chat_page_stream(req: PageChatRequest) -> StreamingResponse:
             req.history,
             strict_source=req.strict_page,
         ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/tools/chat/general/stream")
+def chat_general_stream(req: GeneralChatRequest) -> StreamingResponse:
+    """SSE stream: vault-freier Allgemein-Chat mit optionalem per-Request Provider/Modell."""
+    return StreamingResponse(
+        chat.send_general_stream(req.message, req.history, provider=req.provider, model=req.model),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

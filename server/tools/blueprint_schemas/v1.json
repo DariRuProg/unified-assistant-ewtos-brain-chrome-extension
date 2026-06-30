@@ -51,6 +51,10 @@
       "type": "string",
       "description": "One short sentence describing what this blueprint/module is good for — shown in the setup picker and the vault module panel."
     },
+    "hidden": {
+      "type": "boolean",
+      "description": "If true, the module is not shown in the default setup picker (advanced/niche). Still selectable via the 'show advanced' toggle and fully applicable. Non-destructive way to declutter the wizard."
+    },
     "extends": {
       "type": "array",
       "items": {"type": "string"},

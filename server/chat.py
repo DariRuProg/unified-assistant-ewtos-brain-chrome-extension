@@ -21,7 +21,7 @@ import config
 import i18n
 import paths
 import settings
-from llm_client import active_allowed_for_sensitive, effective_llm_config, get_backend
+from llm_client import active_allowed_for_sensitive, effective_llm_config, get_backend, get_backend_for
 from tools import blueprint, bookmarks, notes_file, playlists, raw_promoter, sensitive, vault_audit, videos, wiki_reader
 
 log = logging.getLogger("ewtosbrain.chat")
@@ -479,23 +479,43 @@ SAVE_RAW_DEF = next(t for t in TOOL_DEFS if t["name"] == "save_to_raw")
 TOOL_LEVELS = ("none", "knowledge", "full")
 
 
+# Demo-Modus: nur reine Lese-Tools (kein Schreiben, keine Browser-Bridge, keine
+# kostenpflichtigen Media-/Image-Tools) — passend für eine öffentliche read-only-Instanz.
+_DEMO_ALLOWED_TOOL_NAMES = {
+    "list_folder", "read_file", "audit_vault", "search_vault",
+    "list_todos", "read_scratchpad", "list_bookmarks", "list_playlists",
+}
+
+
 def _active_tools(mode: str, tool_level: str, search_on: bool) -> list[dict]:
     """Modus-bewusster Tool-Satz. mode: 'vault' | 'file' | 'page'.
-    tool_level vom UI-Schalter: 'none' (kein Tool), sonst der modus-spezifische Satz;
-    'full' schaltet im Vault-Chat zusätzlich das volle Arsenal frei."""
+    tool_level vom UI-Schalter: 'none' (kein Tool), 'knowledge' (modus-spezifischer
+    Schlank-Satz), 'full' ('alle Tools' → volles Arsenal). 'full' gilt für Vault-
+    UND Datei-Chat: nur so sind Wiki-Schreiben (write_wiki_page) und die Bild-/Web-
+    Tools auch beim Arbeiten an einer Datei verfügbar."""
     if tool_level == "none":
         return []
+    if config.DEMO_MODE:
+        seen: set[str] = set()
+        out: list[dict] = []
+        for t in TOOL_DEFS + [SEARCH_TOOL_DEF]:
+            if t["name"] in _DEMO_ALLOWED_TOOL_NAMES and t["name"] not in seen:
+                seen.add(t["name"])
+                out.append(t)
+        return out
     search = [SEARCH_TOOL_DEF] if search_on else []
     expanded = tool_level == "full"
+    # 'Alle Tools' = komplettes Arsenal, unabhängig davon ob Vault- oder Datei-Chat.
+    if expanded and mode in ("vault", "file"):
+        return TOOL_DEFS + search
     if mode == "page":
         # 'merken'-Modus: Notizen + Konversation in raw/ festhalten. Keine Vault-Navigation.
         return NOTES_TOOL_DEFS + [SAVE_RAW_DEF]
     if mode == "file":
-        # Datei-Chat mit Tools: lesen, suchen, Notizen, die OFFENE Datei bearbeiten.
+        # Datei-Chat (Schlank-Satz): lesen, suchen, Notizen, die OFFENE Datei bearbeiten.
         return READONLY_TOOL_DEFS + NOTES_TOOL_DEFS + FILE_EDIT_TOOL_DEFS + search
-    # vault: Default schlank (lesen + suchen + Notizen); 'alle' → volles Arsenal.
-    base = READONLY_TOOL_DEFS + NOTES_TOOL_DEFS + search
-    return (TOOL_DEFS + search) if expanded else base
+    # vault (Schlank-Satz): lesen + suchen + Notizen.
+    return READONLY_TOOL_DEFS + NOTES_TOOL_DEFS + search
 
 
 def _norm_tool_level(value: str | None, default: str = "full") -> str:
@@ -1409,6 +1429,90 @@ def resolve_source(source_type: str, source_ref: dict) -> tuple[str, str]:
     raise ValueError(f"Unbekannter source_type: {source_type}")
 
 
+# ---------------------------------------------------------------------------
+# Text-emittierte Tool-Calls (Modelle ohne sauberes natives Function-Calling)
+# ---------------------------------------------------------------------------
+# Manche Backends (OpenRouter/Ollama/Mistral oder GPT-Modelle) schreiben Tool-Calls
+# als XML in den Text-Stream statt ins native tool_calls-Feld. Wir fangen das ab,
+# damit kein Roh-XML in der Antwort leakt und die Tools trotzdem ausgeführt werden.
+
+_TOOL_MARKERS = ("<function_calls", "<invoke")
+_INVOKE_RE = re.compile(r'<invoke\s+name="([^"]+)"\s*>(.*?)</invoke>', re.DOTALL)
+_PARAM_RE = re.compile(r'<parameter\s+name="([^"]+)"\s*>(.*?)</parameter>', re.DOTALL)
+
+
+def _extract_text_tool_calls(text: str) -> list[dict]:
+    """Parst <invoke name="X"><parameter name="p">v</parameter></invoke>-Blöcke.
+    Liefert [{"name", "input"}]. Parameter-Werte werden als JSON interpretiert
+    (Zahlen/Booleans), sonst als String belassen."""
+    calls: list[dict] = []
+    for m in _INVOKE_RE.finditer(text):
+        params: dict = {}
+        for pm in _PARAM_RE.finditer(m.group(2)):
+            raw = pm.group(2).strip()
+            try:
+                val = json.loads(raw)
+            except Exception:
+                val = raw
+            params[pm.group(1).strip()] = val
+        calls.append({"name": m.group(1).strip(), "input": params})
+    return calls
+
+
+def _first_marker_index(s: str) -> int:
+    found = [i for i in (s.find(m) for m in _TOOL_MARKERS) if i != -1]
+    return min(found) if found else -1
+
+
+def _longest_partial_marker_suffix(s: str) -> int:
+    """Länge des Endstücks von s, das Präfix eines Tool-Markers sein könnte —
+    damit ein über Chunk-Grenzen zerrissener Marker nicht sichtbar durchrutscht."""
+    best = 0
+    for marker in _TOOL_MARKERS:
+        for k in range(min(len(s), len(marker) - 1), 0, -1):
+            if s.endswith(marker[:k]):
+                best = max(best, k)
+                break
+    return best
+
+
+class _ToolTextFilter:
+    """Hält Tool-Call-XML aus dem sichtbaren Text-Stream zurück. Sobald ein Marker
+    auftaucht, landet ab da alles im Capture-Puffer (für die Auswertung am Ende)."""
+
+    def __init__(self):
+        self._pending = ""
+        self._captured: list[str] = []
+        self._capturing = False
+
+    def feed(self, chunk: str) -> str:
+        if self._capturing:
+            self._captured.append(chunk)
+            return ""
+        self._pending += chunk
+        idx = _first_marker_index(self._pending)
+        if idx != -1:
+            safe = self._pending[:idx]
+            self._captured.append(self._pending[idx:])
+            self._pending = ""
+            self._capturing = True
+            return safe
+        hold = _longest_partial_marker_suffix(self._pending)
+        if hold:
+            safe, self._pending = self._pending[:-hold], self._pending[-hold:]
+        else:
+            safe, self._pending = self._pending, ""
+        return safe
+
+    def flush(self) -> str:
+        safe, self._pending = self._pending, ""
+        return safe
+
+    @property
+    def captured_text(self) -> str:
+        return "".join(self._captured)
+
+
 def send_source_stream(
     source_type: str,
     source_ref: dict,
@@ -1502,9 +1606,19 @@ def send_source_stream(
                 tools=active_tools,
                 messages=api_messages,
             )
+            tf = _ToolTextFilter()
+            round_parts: list[str] = []
             for chunk in stream:
-                accumulated.append(chunk)
-                yield _sse("text_delta", {"text": chunk})
+                safe = tf.feed(chunk)
+                if safe:
+                    round_parts.append(safe)
+                    accumulated.append(safe)
+                    yield _sse("text_delta", {"text": safe})
+            safe = tf.flush()
+            if safe:
+                round_parts.append(safe)
+                accumulated.append(safe)
+                yield _sse("text_delta", {"text": safe})
 
             final = stream.get_final_result()
             usage["input_tokens"] += final.usage.input_tokens
@@ -1512,9 +1626,15 @@ def send_source_stream(
             usage["cache_read_input_tokens"] += getattr(final.usage, "cache_read_input_tokens", 0) or 0
             usage["cache_creation_input_tokens"] += getattr(final.usage, "cache_creation_input_tokens", 0) or 0
 
-            api_messages.append({"role": "assistant", "content": [_block_to_input(b) for b in final.content]})
+            # Text-emittierte Tool-Calls (nur, wenn die Tools auch aktiv sind)
+            active_names = {t["name"] for t in active_tools}
+            text_calls = (
+                [c for c in _extract_text_tool_calls(tf.captured_text) if c["name"] in active_names]
+                if (active_names and tf.captured_text and final.stop_reason != "tool_use")
+                else []
+            )
 
-            if final.stop_reason != "tool_use":
+            if final.stop_reason != "tool_use" and not text_calls:
                 final_text = "".join(accumulated).strip() or "(keine Textantwort)"
                 new_history = list(history) + [
                     {"role": "user", "content": user_message},
@@ -1525,6 +1645,28 @@ def send_source_stream(
 
             tool_iterations += 1
             tool_results = []
+            if text_calls:
+                assistant_blocks: list[dict] = []
+                round_text = "".join(round_parts).strip()
+                if round_text:
+                    assistant_blocks.append({"type": "text", "text": round_text})
+                for i, call in enumerate(text_calls):
+                    tuid = f"texttool_{tool_iterations}_{i}"
+                    assistant_blocks.append({"type": "tool_use", "id": tuid, "name": call["name"], "input": call["input"]})
+                    yield _sse("tool_start", {"tool": call["name"], "input": call["input"]})
+                    content, is_error = _execute_tool(call["name"], call["input"], vault_path, vault_id)
+                    yield _sse("tool_end", {"tool": call["name"], "ok": not is_error})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tuid,
+                        "content": content,
+                        "is_error": is_error,
+                    })
+                api_messages.append({"role": "assistant", "content": assistant_blocks})
+                api_messages.append({"role": "user", "content": tool_results})
+                continue
+
+            api_messages.append({"role": "assistant", "content": [_block_to_input(b) for b in final.content]})
             for block in final.content:
                 if block.type == "tool_use":
                     yield _sse("tool_start", {"tool": block.name, "input": block.input})
@@ -1551,6 +1693,79 @@ def send_page_stream(page_content: str, user_message: str, history: list[dict], 
         history,
         strict_source=strict_page,
     )
+
+
+def send_general_stream(
+    user_message: str,
+    history: list[dict],
+    provider: str | None = None,
+    model: str | None = None,
+) -> Iterator[str]:
+    """SSE stream: vault-freier Allgemein-Chat.
+
+    Ephemer (keine Persistenz), History kommt vom Client.
+    provider/model: optionaler per-Request-Override; ohne Override → aktive Settings.
+    """
+    try:
+        user_message = (user_message or "").strip()
+        if not user_message:
+            yield _sse("error", {"message": "Empty message"})
+            return
+
+        if provider:
+            try:
+                backend = get_backend_for(provider)
+            except ValueError as e:
+                yield _sse("error", {"message": str(e)})
+                return
+            use_model = (model or "").strip() or DEFAULT_MODEL
+        else:
+            backend = get_backend()
+            _, cfg_model = effective_llm_config()
+            use_model = (model or cfg_model or "").strip() or DEFAULT_MODEL
+
+        system_prompt = (
+            f"You are a helpful AI assistant."
+            f"\n\nRespond to the user in {i18n.lang_name()} by default."
+            " Only respond in a different language if the user explicitly requests it."
+            + _date_suffix()
+        )
+
+        api_messages = list(history) + [{"role": "user", "content": user_message}]
+        accumulated: list[str] = []
+        usage = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        }
+
+        stream = backend.stream_complete(
+            model=use_model,
+            max_tokens=MAX_TOKENS_RESPONSE,
+            system=[{"type": "text", "text": system_prompt}],
+            tools=[],
+            messages=api_messages,
+        )
+        for chunk in stream:
+            accumulated.append(chunk)
+            yield _sse("text_delta", {"text": chunk})
+
+        final_message = stream.get_final_result()
+        usage["input_tokens"] = final_message.usage.input_tokens
+        usage["output_tokens"] = final_message.usage.output_tokens
+        usage["cache_read_input_tokens"] = getattr(final_message.usage, "cache_read_input_tokens", 0) or 0
+
+        final_text = "".join(accumulated).strip() or "(keine Textantwort)"
+        new_history = list(history) + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": final_text},
+        ]
+        yield _sse("done", {"messages": new_history, "usage": usage})
+
+    except Exception as e:
+        log.exception("General chat error")
+        yield _sse("error", {"message": str(e)})
 
 
 def send_stream(vault_id: str, user_message: str, page_context: str | None = None,
@@ -1636,9 +1851,19 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
                 tools=active_tools,
                 messages=api_messages,
             )
+            tf = _ToolTextFilter()
+            round_parts: list[str] = []
             for chunk in stream:
-                accumulated_text.append(chunk)
-                yield _sse("text_delta", {"text": chunk})
+                safe = tf.feed(chunk)
+                if safe:
+                    round_parts.append(safe)
+                    accumulated_text.append(safe)
+                    yield _sse("text_delta", {"text": safe})
+            safe = tf.flush()
+            if safe:
+                round_parts.append(safe)
+                accumulated_text.append(safe)
+                yield _sse("text_delta", {"text": safe})
 
             final_message = stream.get_final_result()
 
@@ -1647,9 +1872,15 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
             usage_total["cache_read_input_tokens"] += getattr(final_message.usage, "cache_read_input_tokens", 0) or 0
             usage_total["cache_creation_input_tokens"] += getattr(final_message.usage, "cache_creation_input_tokens", 0) or 0
 
-            api_messages.append({"role": "assistant", "content": [_block_to_input(b) for b in final_message.content]})
+            # Text-emittierte Tool-Calls (Modelle ohne natives Function-Calling)
+            active_names = {t["name"] for t in active_tools}
+            text_calls = (
+                [c for c in _extract_text_tool_calls(tf.captured_text) if c["name"] in active_names]
+                if (active_names and tf.captured_text and final_message.stop_reason != "tool_use")
+                else []
+            )
 
-            if final_message.stop_reason != "tool_use":
+            if final_message.stop_reason != "tool_use" and not text_calls:
                 # End of conversation turn — persist and signal done
                 final_text = "".join(accumulated_text).strip() or "(keine Textantwort)"
 
@@ -1671,6 +1902,30 @@ def send_stream(vault_id: str, user_message: str, page_context: str | None = Non
             # Execute tool calls and emit tool_start/tool_end events
             tool_iterations += 1
             tool_results = []
+            if text_calls:
+                assistant_blocks: list[dict] = []
+                round_text = "".join(round_parts).strip()
+                if round_text:
+                    assistant_blocks.append({"type": "text", "text": round_text})
+                for i, call in enumerate(text_calls):
+                    tuid = f"texttool_{tool_iterations}_{i}"
+                    if call["name"] == "read_file":
+                        consulted.append(call["input"].get("path", "?"))
+                    assistant_blocks.append({"type": "tool_use", "id": tuid, "name": call["name"], "input": call["input"]})
+                    yield _sse("tool_start", {"tool": call["name"], "input": call["input"]})
+                    content, is_error = _execute_tool(call["name"], call["input"], vault_path, vault_id, pinned_rel=pinned_rel)
+                    yield _sse("tool_end", {"tool": call["name"], "ok": not is_error})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tuid,
+                        "content": content,
+                        "is_error": is_error,
+                    })
+                api_messages.append({"role": "assistant", "content": assistant_blocks})
+                api_messages.append({"role": "user", "content": tool_results})
+                continue
+
+            api_messages.append({"role": "assistant", "content": [_block_to_input(b) for b in final_message.content]})
             for block in final_message.content:
                 if block.type == "tool_use":
                     if block.name == "read_file":

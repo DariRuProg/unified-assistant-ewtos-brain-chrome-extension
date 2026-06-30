@@ -111,6 +111,7 @@ def _meta(bp: dict, bid: str, source: str, trusted: bool) -> dict:
         "category": category,
         "tags": bp.get("tags", []),
         "extends": extends,
+        "hidden": bool(bp.get("hidden", False)),
     }
 
 
@@ -693,7 +694,15 @@ def commit(vault_id: str, blueprint: dict) -> dict:
         copied_commands.append(cmd_name)
 
     # 6. Snapshot + settings.blueprint_ref
-    snap_path = _commit_snapshot(vault_path, resolved)
+    # Snapshot akkumuliert: ein Setup-Lauf bringt nur SEINE Bausteine mit, der Vault
+    # kann aber aus mehreren Sessions zusammengesetzt sein (applied_blueprints). Wir
+    # mergen daher die aktuelle Resolution in den bestehenden Snapshot (aktuelle
+    # Session gewinnt bei id/path-Kollision), statt ihn zu ueberschreiben — sonst
+    # spiegelt der Snapshot nur die letzte Session und Audit/CLAUDE.md-Abgleich
+    # laufen gegen eine unvollstaendige Soll-Struktur.
+    prior = export_vault_blueprint(vault_id)
+    snapshot = _merge_blueprints(prior, resolved) if prior else resolved
+    snap_path = _commit_snapshot(vault_path, snapshot)
     bid = resolved.get("blueprint_id")
     if bid:
         settings.update_vault(vault_id, blueprint_ref=bid)
@@ -729,6 +738,41 @@ def rebuild_vault_indexes(vault_id: str) -> dict:
     updated: list[str] = []
     _rebuild_wiki_mocs(vault_path, updated)
     return {"ok": True, "created_hubs": created, "pruned_hubs": pruned, "mocs_updated": updated}
+
+
+def rebuild_snapshot(vault_id: str) -> dict:
+    """Baut den .ewtosbrain/blueprint.json-Snapshot aus allen `applied_blueprints`
+    des Vaults neu auf (Union, in applied-Reihenfolge). Repariert Vaults, deren
+    Snapshot noch von der alten "letzte-Session-gewinnt"-Logik stammt und daher
+    unvollstaendig ist. Schreibt NICHT in den Vault-Content — nur den Snapshot."""
+    v = settings.get_vault(vault_id)
+    if not v:
+        raise BlueprintError(f"Vault nicht gefunden: {vault_id}")
+    vault_path = Path(v["path"])
+    if not vault_path.exists():
+        raise BlueprintError(f"Vault-Pfad existiert nicht: {vault_path}")
+    applied = list(v.get("applied_blueprints") or [])
+    if not applied:
+        # Kein Blueprint je angewandt (z.B. Fremd-Vault) — KEINEN Snapshot fabrizieren,
+        # sonst gilt der Vault faelschlich als verwaltet.
+        raise BlueprintError(
+            f"Vault {vault_id} hat keine applied_blueprints — Rebuild uebersprungen "
+            f"(Fremd-Vault). Erst per Setup-Wizard einen Blueprint verbinden."
+        )
+    acc: dict | None = None
+    used: list[str] = []
+    for bid in applied:
+        try:
+            resolved = resolve_extends(_lookup_blueprint(bid))
+        except BlueprintError:
+            continue  # entfernter/umbenannter Blueprint — ueberspringen, Rest baut weiter
+        acc = resolved if acc is None else _merge_blueprints(acc, resolved)
+        used.append(bid)
+    if acc is None:
+        raise BlueprintError(f"Kein aufloesbarer Blueprint fuer Vault {vault_id} (applied: {applied})")
+    snap_path = _commit_snapshot(vault_path, acc)
+    return {"ok": True, "rebuilt_from": used, "snapshot": str(snap_path),
+            "claude_md_sections": [s.get("id") for s in acc.get("claude_md_sections") or []]}
 
 
 def export_vault_blueprint(vault_id: str) -> dict | None:

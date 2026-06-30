@@ -160,6 +160,19 @@ async function getHttpBase() {
   return httpBaseFromWs(serverUrl);
 }
 
+// Optionale Host-Permission für beliebige Seiten (Page-Tools) + Remote-Server.
+// localhost/127.0.0.1 sind Pflicht-Permissions (Manifest) und brauchen keinen Grant.
+// Muss aus einer User-Geste heraus laufen (Klick im Options-Formular).
+async function ensureHostPermission() {
+  const origins = ["<all_urls>"];
+  try {
+    if (await chrome.permissions.contains({ origins })) return true;
+    return await chrome.permissions.request({ origins });
+  } catch {
+    return false;
+  }
+}
+
 async function jfetch(path, opts = {}) {
   const base = await getHttpBase();
   const res = await fetch(`${base}${path}`, opts);
@@ -367,7 +380,8 @@ function renderVaultCard(vault) {
       return row;
     };
     for (const b of catalog.filter((x) => x.category === "base" && x.id !== "empty")) moduleList.append(mkRow(b, true));
-    const addons = catalog.filter((x) => x.category === "addon");
+    // Versteckte (advanced/nischige) Addons nur zeigen, wenn im Vault bereits aktiv.
+    const addons = catalog.filter((x) => x.category === "addon" && (!x.hidden || active.has(x.id)));
     if (addons.length) moduleList.append(el("div", { textContent: t("options.vault_addons_label"), style: "margin-top:10px;font-weight:600;opacity:0.7;font-size:12px;" }));
     for (const b of addons) moduleList.append(mkRow(b, false));
   }
@@ -810,6 +824,35 @@ document.getElementById("briefing-save-new")?.addEventListener("click", async ()
   loadBriefingProfiles();
 });
 
+// ----- Dirty tracking for the sticky save bar -----
+
+// Felder, die der globale Speichern-Button persistiert (server- bzw. clientseitig).
+// Reine UI-Prefs (Theme, Sprache, Skalierung) speichern automatisch und zählen nicht.
+const SAVEBAR_FIELD_IDS = [
+  ...CLIENT_FIELDS, ...SERVER_FIELDS,
+  "anthropicApiKey", "openaiApiKey", "mistralApiKey", "openrouterApiKey",
+  "geminiApiKey", "youtubeApiKey", "elevenlabsApiKey",
+  "videoBrainSupabaseAnonKey", "videoBrainSupabaseServiceKey", "videoBrainLicenseKey",
+  "chatTtsEnabled", "chatShowSources",
+];
+
+function setSettingsDirty(dirty) {
+  const bar = document.getElementById("savebarStatus");
+  if (!bar) return;
+  bar.textContent = dirty ? t("options.unsaved") : t("options.all_saved");
+  bar.className = "savebar-status" + (dirty ? " dirty" : "");
+}
+
+function setupDirtyTracking() {
+  for (const id of SAVEBAR_FIELD_IDS) {
+    const e = document.getElementById(id);
+    if (!e) continue;
+    const evt = (e.type === "checkbox" || e.tagName === "SELECT") ? "change" : "input";
+    e.addEventListener(evt, () => setSettingsDirty(true));
+  }
+  setSettingsDirty(false);
+}
+
 // ----- Settings Tabs -----
 
 function setupSettingsTabs() {
@@ -927,6 +970,8 @@ function setupSettingsTabs() {
   await refreshVaults();
   await loadBriefingProfiles();
   await refreshBlueprints();
+
+  setupDirtyTracking();
 })();
 
 // ----- Blueprints -----
@@ -1056,6 +1101,9 @@ document.getElementById("save").addEventListener("click", async () => {
   }
   await chrome.storage.local.set(clientPayload);
   const serverUrlChanged = (previous.serverUrl || "") !== (clientPayload.serverUrl || "");
+  // Page-Tools (beliebige Seiten) + Remote-Server brauchen die optionale <all_urls>-
+  // Permission. Beim Speichern aus der User-Geste heraus anfordern.
+  await ensureHostPermission();
 
   const serverPayload = {};
   for (const fieldId of SERVER_FIELDS) {
@@ -1111,6 +1159,7 @@ document.getElementById("save").addEventListener("click", async () => {
   saved.textContent = serverError ? t("options.saved_local_error", { error: serverError }) : t("common.saved");
   saved.style.color = serverError ? "#ef4444" : "#22c55e";
   setTimeout(() => (saved.hidden = true), serverError ? 4000 : 1500);
+  if (!serverError) setSettingsDirty(false);
 
   if (serverUrlChanged) {
     chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {});

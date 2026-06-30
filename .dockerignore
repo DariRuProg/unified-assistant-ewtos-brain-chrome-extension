@@ -1,0 +1,18 @@
+# Nur server/ wird ins Image kopiert — der Rest ist Build-Kontext-Ballast.
+.git/
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+# Lokale Geheimnisse/State nie ins Image (Env-Variablen kommen aus Coolify)
+server/.env
+server/settings.json
+server/settings.json.tmp
+# Desktop-Build-Artefakte
+dist/
+build/
+installer/
+# Nicht für das Server-Image nötig
+extension/
+docs/
+*.md

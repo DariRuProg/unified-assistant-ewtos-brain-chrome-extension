@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { getHttpBase, getActiveVault, getActiveVaultId, withVaultId } from '../modules/api.js';
 import { renderMarkdown } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
+import { t } from '../../i18n/i18n.js';
 
 export async function checkPendingPlaylistPick() {
   const { playlistPick } = await chrome.storage.local.get("playlistPick");
@@ -36,7 +37,7 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
     playlists = data.items || [];
   } catch (err) {
     if (err?.message?.includes("403") || String(err).includes("403")) {
-      alert("Playlists-Permission ist im Vault nicht aktiviert. In den Optionen freischalten.");
+      alert(t("playlists.permission_error"));
     }
     chrome.storage.local.remove("playlistPick");
     return;
@@ -44,7 +45,7 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
 
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
-  const titleEl = el("h3", { textContent: "Zu Playlist hinzufügen" });
+  const titleEl = el("h3", { textContent: t("playlists.add_to") });
   const meta = el("div", { className: "playlist-picker-meta" });
   const metaParts = [title || url];
   if (channel) metaParts.push(`· ${channel}`);
@@ -58,12 +59,12 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
   const pullLabel = el("label", { className: "checkbox-row" });
   const pullCheckbox = el("input", { type: "checkbox" });
   pullCheckbox.checked = true;  // default on — User wollte das ja explizit
-  const pullText = el("span", { textContent: "Transcript ziehen + Summary erstellen" });
+  const pullText = el("span", { textContent: t("playlists.auto_pull") });
   pullLabel.append(pullCheckbox, pullText);
   const tsLabel = el("label", { className: "checkbox-row" });
   const tsCheckbox = el("input", { type: "checkbox" });
   tsCheckbox.checked = false;  // default: Transcript ohne Zeitstempel
-  const tsText = el("span", { textContent: "mit Zeitstempeln" });
+  const tsText = el("span", { textContent: t("playlists.timestamps") });
   tsLabel.append(tsCheckbox, tsText);
   optsRow.append(pullLabel, tsLabel);
 
@@ -71,9 +72,9 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
 
   if (!playlists.length) {
     const empty = el("div", { className: "playlist-picker-empty" });
-    empty.textContent = "Noch keine Playlists. Lege eine an:";
-    const newName = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
-    const createBtn = el("button", { textContent: "Anlegen + hinzufügen" });
+    empty.textContent = t("playlists.create_first");
+    const newName = el("input", { type: "text", placeholder: t("playlists.name_hint") });
+    const createBtn = el("button", { textContent: t("playlists.create_add") });
     createBtn.addEventListener("click", async () => {
       const name = newName.value.trim();
       if (!name) return;
@@ -88,7 +89,7 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
         await addAndMaybePull(httpBase, vaultId, name, meta, opts);
         cleanup(true);
       } catch (err) {
-        alert("Fehler: " + err.message);
+        alert(t("common.error_msg", { message: err.message || err }));
       }
     });
     empty.append(newName, createBtn);
@@ -104,15 +105,15 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
           await addAndMaybePull(httpBase, vaultId, p.name, meta, opts);
           cleanup(true);
         } catch (err) {
-          alert("Fehler: " + err.message);
+          alert(t("common.error_msg", { message: err.message || err }));
         }
       });
       list.append(btn);
     }
     // Plus: neue Playlist gleich anlegen
-    const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neu:" });
-    const newName = el("input", { type: "text", placeholder: "neuer Playlist-Name" });
-    const createBtn = el("button", { textContent: "Anlegen + hinzufügen" });
+    const sep = el("div", { className: "playlist-picker-sep", textContent: t("playlists.or_new") });
+    const newName = el("input", { type: "text", placeholder: t("playlists.new_name_placeholder") });
+    const createBtn = el("button", { textContent: t("playlists.create_add") });
     createBtn.addEventListener("click", async () => {
       const name = newName.value.trim();
       if (!name) return;
@@ -127,13 +128,13 @@ async function showPlaylistPicker({ url, title, channel, duration, views, publis
         await addAndMaybePull(httpBase, vaultId, name, meta, opts);
         cleanup(true);
       } catch (err) {
-        alert("Fehler: " + err.message);
+        alert(t("common.error_msg", { message: err.message || err }));
       }
     });
     list.append(sep, newName, createBtn);
   }
 
-  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: "Abbrechen" });
+  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: t("common.cancel") });
   cancelBtn.addEventListener("click", () => cleanup(false));
 
   dialog.append(titleEl, meta, optsRow, list, cancelBtn);
@@ -175,8 +176,8 @@ async function addAndMaybePull(httpBase, vaultId, name, meta, opts) {
   const addData = await addRes.json();
   if (addData.added === false) {
     const reason = addData.reason === "duplicate"
-      ? `'${title}' ist bereits in '${name}'.`
-      : `Nicht hinzugefügt: ${addData.reason || "unbekannt"}`;
+      ? t("playlists.already_in", { title, name })
+      : t("playlists.not_added", { reason: addData.reason || t("playlists.unknown") });
     alert(reason);
     return addData;
   }
@@ -195,16 +196,16 @@ async function addAndMaybePull(httpBase, vaultId, name, meta, opts) {
 }
 
 export async function renderPlaylistsTool() {
-  state.panelTitle.textContent = "Playlists";
+  state.panelTitle.textContent = t("playlists.title");
   state.panelBody.replaceChildren();
 
   const status = el("div", { className: "tool-status" });
   const toolbar = el("div", { className: "playlist-toolbar" });
-  const newBtn = el("button", { textContent: "+ Neue Playlist", type: "button" });
+  const newBtn = el("button", { textContent: t("playlists.new"), type: "button" });
   const captureYtBtn = el("button", {
-    textContent: "📑 Markierte YT-Tabs",
+    textContent: t("playlists.capture_yt"),
     type: "button",
-    title: "Alle markierten YouTube-Tabs zu einer Playlist hinzufügen",
+    title: t("playlists.capture_hint"),
   });
   captureYtBtn.addEventListener("click", () => captureHighlightedYoutubeTabs());
   toolbar.append(newBtn, captureYtBtn);
@@ -214,19 +215,19 @@ export async function renderPlaylistsTool() {
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
   if (!vaultId) {
-    status.textContent = "Kein Vault konfiguriert. In den Einstellungen anlegen.";
+    status.textContent = t("playlists.no_vault_config");
     status.className = "tool-status error";
     return;
   }
 
   newBtn.addEventListener("click", () => showCreatePlaylistDialog(httpBase, vaultId, () => renderPlaylistsTool()));
 
-  status.textContent = "lade...";
+  status.textContent = t("common.loading");
   try {
     const res = await fetch(`${httpBase}/tools/playlists/${vaultId}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+      status.textContent = t("common.error_status", { status: res.status, detail: err.detail || "" });
       status.className = "tool-status error";
       return;
     }
@@ -234,13 +235,13 @@ export async function renderPlaylistsTool() {
     const items = data.items || [];
     status.textContent = "";
     if (!items.length) {
-      listWrap.append(el("div", { className: "empty", textContent: "Noch keine Playlists. Mit '+ Neue Playlist' anlegen." }));
+      listWrap.append(el("div", { className: "empty", textContent: t("playlists.empty") }));
       return;
     }
     // Group by thema (freies Frontmatter-Feld; PARA-Ordner sind flach)
     const groups = {};
     for (const p of items) {
-      const k = p.thema || "(ohne Thema)";
+      const k = p.thema || t("playlists.no_thema");
       if (!groups[k]) groups[k] = [];
       groups[k].push(p);
     }
@@ -252,7 +253,7 @@ export async function renderPlaylistsTool() {
         const li = el("li", { className: "playlist-item" });
         const main = el("div", { className: "playlist-item-main" });
         main.append(el("span", { className: "playlist-name", textContent: p.name }));
-        main.append(el("span", { className: "playlist-count", textContent: `${p.item_count} Items` }));
+        main.append(el("span", { className: "playlist-count", textContent: t("playlists.item_count", { count: p.item_count }) }));
         li.append(main);
         li.addEventListener("click", () => renderPlaylistDetail(p.name));
         ul.append(li);
@@ -261,7 +262,7 @@ export async function renderPlaylistsTool() {
       listWrap.append(section);
     }
   } catch (err) {
-    status.textContent = `Fehler: ${err.message || err}`;
+    status.textContent = t("common.error_msg", { message: err.message || err });
     status.className = "tool-status error";
   }
 }
@@ -269,14 +270,14 @@ export async function renderPlaylistsTool() {
 function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
-  dialog.append(el("h3", { textContent: "Neue Playlist anlegen" }));
+  dialog.append(el("h3", { textContent: t("playlists.create_title") }));
 
-  const nameInput = el("input", { type: "text", placeholder: "Playlist-Name (z.B. KI Tutorials)" });
-  const themaInput = el("input", { type: "text", placeholder: "Thema (frei, optional — z.B. ai, marketing, health)" });
+  const nameInput = el("input", { type: "text", placeholder: t("playlists.name_hint") });
+  const themaInput = el("input", { type: "text", placeholder: t("playlists.thema_placeholder") });
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "playlist-picker-actions" });
-  const cancel = el("button", { type: "button", textContent: "Abbrechen" });
-  const ok = el("button", { type: "button", textContent: "Anlegen", className: "primary" });
+  const cancel = el("button", { type: "button", textContent: t("common.cancel") });
+  const ok = el("button", { type: "button", textContent: t("playlists.create_btn"), className: "primary" });
   actions.append(cancel, ok);
 
   dialog.append(nameInput, themaInput, status, actions);
@@ -286,15 +287,15 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
   cancel.addEventListener("click", () => overlay.remove());
   ok.addEventListener("click", async () => {
     const name = nameInput.value.trim();
-    if (!name) { status.textContent = "Name ist Pflicht"; status.className = "tool-status error"; return; }
+    if (!name) { status.textContent = t("playlists.name_required"); status.className = "tool-status error"; return; }
     const body = { name, thema: themaInput.value.trim() || null };
-    ok.disabled = true; status.textContent = "lege an...";
+    ok.disabled = true; status.textContent = t("playlists.creating");
     try {
       const url = `${httpBase}/tools/playlists/${vaultId}`;
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+        status.textContent = t("common.error_status", { status: res.status, detail: err.detail || "" });
         status.className = "tool-status error";
         ok.disabled = false;
         return;
@@ -302,7 +303,7 @@ function showCreatePlaylistDialog(httpBase, vaultId, onCreated) {
       overlay.remove();
       onCreated && onCreated();
     } catch (err) {
-      status.textContent = `Fehler: ${err.message || err}`;
+      status.textContent = t("common.error_msg", { message: err.message || err });
       status.className = "tool-status error";
       ok.disabled = false;
     }
@@ -315,14 +316,14 @@ async function renderPlaylistDetail(name) {
   state.panelBody.replaceChildren();
 
   const toolbar = el("div", { className: "playlist-toolbar" });
-  const backBtn = el("button", { type: "button", textContent: "← zurück" });
+  const backBtn = el("button", { type: "button", textContent: t("common.back") });
   backBtn.addEventListener("click", () => renderPlaylistsTool());
-  const pullBtn = el("button", { type: "button", textContent: "⏬ Alle Pending ziehen", title: "Alle Videos ohne Transcript automatisch abrufen" });
+  const pullBtn = el("button", { type: "button", textContent: t("playlists.pull_pending"), title: t("playlists.pull_pending_hint") });
   const infoBtn = el("button", {
     type: "button",
     textContent: "ⓘ",
     className: "info-btn",
-    title: "Summary-Workflow erklären",
+    title: t("playlists.summary_workflow_hint"),
   });
   infoBtn.addEventListener("click", () => showSummaryWorkflowInfo(name));
   toolbar.append(backBtn, pullBtn, infoBtn);
@@ -333,7 +334,7 @@ async function renderPlaylistDetail(name) {
 
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
-  if (!vault) { status.textContent = "Kein Vault."; return; }
+  if (!vault) { status.textContent = t("playlists.no_vault"); return; }
   const vaultId = vault.id;
 
   pullBtn.addEventListener("click", () => runPullPending({
@@ -342,13 +343,13 @@ async function renderPlaylistDetail(name) {
     onDone: () => renderPlaylistDetail(name),
   }));
 
-  status.textContent = "lade...";
+  status.textContent = t("common.loading");
   try {
     const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(name)}`;
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      status.textContent = `Fehler ${res.status}: ${err.detail || ""}`;
+      status.textContent = t("common.error_status", { status: res.status, detail: err.detail || "" });
       status.className = "tool-status error";
       return;
     }
@@ -356,14 +357,14 @@ async function renderPlaylistDetail(name) {
     const items = data.items || [];
     status.textContent = "";
     if (!items.length) {
-      itemsWrap.append(el("div", { className: "empty", textContent: "Noch keine Videos. Auf YouTube Rechtsklick → 'In Playlist speichern' oder per YouTube-Transcript-Tool aus dem aktiven Tab pullen." }));
+      itemsWrap.append(el("div", { className: "empty", textContent: t("playlists.no_videos") }));
       return;
     }
     for (const it of items) {
       itemsWrap.append(renderVideoCard(httpBase, vaultId, name, it));
     }
   } catch (err) {
-    status.textContent = `Fehler: ${err.message || err}`;
+    status.textContent = t("common.error_msg", { message: err.message || err });
     status.className = "tool-status error";
   }
 }
@@ -389,12 +390,12 @@ function renderVideoCard(httpBase, vaultId, playlistName, it) {
     links.append(a);
   }
 
-  const detailsBtn = el("button", { type: "button", textContent: "▼ Details", className: "small details-toggle" });
+  const detailsBtn = el("button", { type: "button", textContent: t("playlists.details_show"), className: "small details-toggle" });
   links.append(detailsBtn);
 
   if (it.page) {
     const slug = it.page.split("/").pop();
-    const chatBtn = el("button", { type: "button", textContent: "💬 Chat", className: "small" });
+    const chatBtn = el("button", { type: "button", textContent: t("playlists.chat_btn"), className: "small" });
     chatBtn.addEventListener("click", () => openTool("chat", {
       sourceType: "video",
       sourceRef: { vault_id: vaultId, slug },
@@ -402,12 +403,12 @@ function renderVideoCard(httpBase, vaultId, playlistName, it) {
     }));
     links.append(chatBtn);
 
-    const explorerBtn = el("button", { type: "button", textContent: "📂 Explorer", className: "small" });
+    const explorerBtn = el("button", { type: "button", textContent: t("playlists.explorer_btn"), className: "small" });
     explorerBtn.addEventListener("click", () => openTool("vault_explorer", { initialFile: it.page + ".md", vaultId }));
     links.append(explorerBtn);
   }
 
-  const removeBtn = el("button", { type: "button", textContent: "Entfernen", className: "small" });
+  const removeBtn = el("button", { type: "button", textContent: t("playlists.remove"), className: "small" });
   removeBtn.addEventListener("click", () => showRemoveDialog({
     httpBase, vaultId, playlistName, item: it,
     onDone: () => renderPlaylistDetail(playlistName),
@@ -423,15 +424,15 @@ function renderVideoCard(httpBase, vaultId, playlistName, it) {
     const isHidden = details.classList.contains("hidden");
     if (isHidden) {
       details.classList.remove("hidden");
-      detailsBtn.textContent = "▲ Details";
+      detailsBtn.textContent = t("playlists.details_hide");
       if (!loaded && it.page) {
-        details.textContent = "lade...";
+        details.textContent = t("common.loading");
         try {
           const fileUrl = `${httpBase}/tools/vault_file/${vaultId}?rel_path=${encodeURIComponent(it.page + ".md")}`;
           const res = await fetch(fileUrl);
           if (!res.ok) {
             const e = await res.json().catch(() => ({}));
-            details.textContent = `Fehler beim Laden: ${e.detail || res.status}`;
+            details.textContent = t("playlists.load_error", { detail: e.detail || res.status });
             return;
           }
           const data = await res.json();
@@ -439,12 +440,12 @@ function renderVideoCard(httpBase, vaultId, playlistName, it) {
           renderMasterPagePreview(details, data.content || "", httpBase, vaultId);
           loaded = true;
         } catch (err) {
-          details.textContent = `Fehler: ${err.message || err}`;
+          details.textContent = t("common.error_msg", { message: err.message || err });
         }
       }
     } else {
       details.classList.add("hidden");
-      detailsBtn.textContent = "▼ Details";
+      detailsBtn.textContent = t("playlists.details_show");
     }
   });
   return card;
@@ -476,25 +477,25 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId) {
   const transcript = sections["Transkript"];
 
   if (beschreibung) {
-    target.append(el("h5", { className: "preview-h", textContent: "Beschreibung" }));
+    target.append(el("h5", { className: "preview-h", textContent: t("playlists.section_description") }));
     const div = el("div", { className: "preview-md" });
     div.innerHTML = renderMarkdown(beschreibung);
     target.append(div);
   }
   if (summary) {
-    target.append(el("h5", { className: "preview-h", textContent: "Zusammenfassung" }));
+    target.append(el("h5", { className: "preview-h", textContent: t("playlists.section_summary") }));
     const div = el("div", { className: "preview-md" });
     div.innerHTML = renderMarkdown(summary);
     target.append(div);
   }
   if (transcript) {
-    target.append(el("h5", { className: "preview-h", textContent: "Transkript" }));
+    target.append(el("h5", { className: "preview-h", textContent: t("playlists.section_transcript") }));
     // Transcript-Sektion ist meist nur ein Wikilink — extract und mache Vault-File-Read-Link
     const wl = transcript.match(/\[\[([^\]]+)\]\]/);
     if (wl) {
       const transcriptPath = wl[1] + ".md";
       const a = el("a", {
-        textContent: "Transcript anzeigen",
+        textContent: t("playlists.show_transcript"),
         href: "#",
         className: "obsidian-link",
       });
@@ -503,7 +504,7 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId) {
         const existing = target.querySelector(".transcript-content");
         if (existing) { existing.remove(); return; }
         const wrap = el("div", { className: "transcript-content" });
-        wrap.textContent = "lade...";
+        wrap.textContent = t("common.loading");
         target.append(wrap);
         try {
           const url = `${httpBase}/tools/vault_file/${vaultId}?rel_path=${encodeURIComponent(transcriptPath)}`;
@@ -518,13 +519,13 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId) {
           const pre = el("pre", { className: "transcript-text", textContent: txt });
           wrap.append(pre);
         } catch (err) {
-          wrap.textContent = `Fehler: ${err.message || err}`;
+          wrap.textContent = t("common.error_msg", { message: err.message || err });
         }
       });
       target.append(a);
       const explorerA = el("button", {
         type: "button",
-        textContent: "  •  im Explorer öffnen",
+        textContent: t("playlists.open_in_explorer"),
         className: "obsidian-link-btn",
       });
       explorerA.addEventListener("click", () => openTool("vault_explorer", { initialFile: transcriptPath, vaultId }));
@@ -536,7 +537,7 @@ function renderMasterPagePreview(target, mdContent, httpBase, vaultId) {
     }
   }
   if (!beschreibung && !summary && !transcript) {
-    target.append(el("div", { className: "empty", textContent: "Noch keine Beschreibung, Summary oder Transkript. Werden automatisch ergänzt sobald du das Video pullst oder im Wiki-Workflow ergänzt." }));
+    target.append(el("div", { className: "empty", textContent: t("playlists.no_content_yet") }));
   }
 }
 
@@ -548,8 +549,8 @@ async function runPullPending({ httpBase, vaultId, playlistName, statusEl, butto
   button.disabled = true;
   statusEl.classList.remove("hidden");
   statusEl.classList.remove("error");
-  const summarizeNote = summarize ? " + Auto-Summary (API-Token!)" : "";
-  statusEl.textContent = `Starte Orchestrierung${summarizeNote} — bitte Extension geöffnet halten und Browser nicht schließen…`;
+  const summarizeNote = summarize ? t("playlists.with_auto_summary") : "";
+  statusEl.textContent = t("playlists.orchestration_start", { note: summarizeNote });
 
   try {
     const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/pull_pending`;
@@ -560,7 +561,7 @@ async function runPullPending({ httpBase, vaultId, playlistName, statusEl, butto
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
-      statusEl.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+      statusEl.textContent = t("common.error_status", { status: r.status, detail: e.detail || "" });
       statusEl.classList.add("error");
       button.disabled = false;
       return;
@@ -570,7 +571,7 @@ async function runPullPending({ httpBase, vaultId, playlistName, statusEl, butto
     button.disabled = false;
     onDone && onDone();
   } catch (err) {
-    statusEl.textContent = `Fehler: ${err.message || err}`;
+    statusEl.textContent = t("common.error_msg", { message: err.message || err });
     statusEl.classList.add("error");
     button.disabled = false;
   }
@@ -579,18 +580,12 @@ async function runPullPending({ httpBase, vaultId, playlistName, statusEl, butto
 function showSummaryWorkflowInfo(playlistName) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker" });
-  dialog.append(el("h3", { textContent: "Summary-Workflow" }));
+  dialog.append(el("h3", { textContent: t("playlists.summary_workflow_title") }));
   const body = el("div", { className: "summary-hint" });
-  body.innerHTML = `
-    <p style="margin:0 0 6px;">Zwei Pfade, beide schreiben Insights + Zusammenfassung in die Master-Pages.</p>
-    <ul>
-      <li><strong>Subscription</strong> (kein API-Token): in Claude Code tippen<br><code>/wiki-summaries ${playlistName}</code><br>oder ohne Argument für alle pending im Vault.</li>
-      <li><strong>API-Key</strong> (EwtosBrain-Anthropic-Key): unten <strong>⏬ Alle Pending ziehen</strong> → Häkchen <em>"+ Summary"</em>. Kostet Anthropic-Tokens.</li>
-    </ul>
-  `;
+  body.innerHTML = t("playlists.summary_workflow_body", { playlist: playlistName });
   dialog.append(body);
   const actions = el("div", { className: "playlist-picker-actions" });
-  const ok = el("button", { type: "button", textContent: "Verstanden", className: "primary" });
+  const ok = el("button", { type: "button", textContent: t("playlists.understood"), className: "primary" });
   ok.addEventListener("click", () => overlay.remove());
   actions.append(ok);
   dialog.append(actions);
@@ -602,24 +597,24 @@ function showPullPendingDialog(playlistName) {
   return new Promise((resolve) => {
     const overlay = el("div", { className: "playlist-picker-overlay" });
     const dialog = el("div", { className: "playlist-picker" });
-    dialog.append(el("h3", { textContent: `Pending Transcripts ziehen` }));
+    dialog.append(el("h3", { textContent: t("playlists.pull_pending_title") }));
     dialog.append(el("div", {
       className: "remove-dialog-info",
-      textContent: `'${playlistName}' — pro Video ~10-15s, öffnet jeweils ein Hidden-Window in Chrome.`,
+      textContent: t("playlists.pull_pending_info", { playlist: playlistName }),
     }));
 
     const summaryRow = el("label", { className: "summary-checkbox-row" });
     const summaryCb = el("input", { type: "checkbox" });
-    summaryRow.append(summaryCb, document.createTextNode(" + Summary über EwtosBrain-API-Key (kostet Anthropic-Tokens)"));
+    summaryRow.append(summaryCb, document.createTextNode(t("playlists.summary_checkbox")));
     dialog.append(summaryRow);
 
     const hint = el("div", { className: "summary-hint-inline" });
-    hint.innerHTML = `Tipp: für Summary auf <strong>Subscription</strong> stattdessen <code>/wiki-summaries ${playlistName}</code> in Claude Code.`;
+    hint.innerHTML = t("playlists.summary_subscription_hint", { playlist: playlistName });
     dialog.append(hint);
 
     const actions = el("div", { className: "playlist-picker-actions" });
-    const cancel = el("button", { type: "button", textContent: "Abbrechen" });
-    const ok = el("button", { type: "button", textContent: "Ziehen", className: "primary" });
+    const cancel = el("button", { type: "button", textContent: t("common.cancel") });
+    const ok = el("button", { type: "button", textContent: t("playlists.pull_btn"), className: "primary" });
     actions.append(cancel, ok);
     dialog.append(actions);
     overlay.append(dialog);
@@ -633,16 +628,16 @@ function showPullPendingDialog(playlistName) {
 function formatOrchestrationResult(r) {
   const lines = [];
   if (r.aborted) {
-    lines.push(`⚠ Abgebrochen: ${r.abort_reason || "unbekannt"}`);
+    lines.push(t("playlists.result_aborted", { reason: r.abort_reason || t("playlists.unknown") }));
   }
-  lines.push(`✓ Fertig: ${r.transcribed}/${r.total} transkribiert`);
-  if (r.skipped_already_done) lines.push(`  (${r.skipped_already_done} hatten schon Transcript)`);
+  lines.push(t("playlists.result_done", { transcribed: r.transcribed, total: r.total }));
+  if (r.skipped_already_done) lines.push(t("playlists.result_skipped", { count: r.skipped_already_done }));
   if (r.failed && r.failed.length) {
-    lines.push(`✗ ${r.failed.length} fehlgeschlagen:`);
+    lines.push(t("playlists.result_failed", { count: r.failed.length }));
     for (const f of r.failed.slice(0, 5)) {
       lines.push(`   • ${f.title}: ${f.error}`);
     }
-    if (r.failed.length > 5) lines.push(`   …+${r.failed.length - 5} weitere`);
+    if (r.failed.length > 5) lines.push(t("playlists.result_more", { count: r.failed.length - 5 }));
   }
   return lines.join("\n");
 }
@@ -650,17 +645,17 @@ function formatOrchestrationResult(r) {
 function showRemoveDialog({ httpBase, vaultId, playlistName, item, onDone }) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker remove-dialog" });
-  dialog.append(el("h3", { textContent: `'${item.title}' entfernen?` }));
+  dialog.append(el("h3", { textContent: t("playlists.remove_title", { title: item.title }) }));
   dialog.append(el("div", {
     className: "remove-dialog-info",
-    textContent: "Wähle, was passieren soll:",
+    textContent: t("playlists.remove_info"),
   }));
 
   const status = el("div", { className: "tool-status" });
   const actions = el("div", { className: "remove-dialog-actions" });
-  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen" });
-  const justPlaylistBtn = el("button", { type: "button", textContent: "Nur aus Playlist", className: "primary" });
-  const fullDeleteBtn = el("button", { type: "button", textContent: "Auch Master-Page + Transcript löschen", className: "danger" });
+  const cancelBtn = el("button", { type: "button", textContent: t("common.cancel") });
+  const justPlaylistBtn = el("button", { type: "button", textContent: t("playlists.remove_playlist_only"), className: "primary" });
+  const fullDeleteBtn = el("button", { type: "button", textContent: t("playlists.remove_full"), className: "danger" });
   actions.append(cancelBtn, justPlaylistBtn, fullDeleteBtn);
   dialog.append(status, actions);
   overlay.append(dialog);
@@ -672,7 +667,7 @@ function showRemoveDialog({ httpBase, vaultId, playlistName, item, onDone }) {
   async function doRemove(alsoDeleteMaster) {
     justPlaylistBtn.disabled = true;
     fullDeleteBtn.disabled = true;
-    status.textContent = "läuft...";
+    status.textContent = t("playlists.running");
     try {
       const matchValue = item.url || item.title;
       const url = `${httpBase}/tools/playlists/${vaultId}/${encodeURIComponent(playlistName)}/items/delete`;
@@ -683,7 +678,7 @@ function showRemoveDialog({ httpBase, vaultId, playlistName, item, onDone }) {
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
-        status.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+        status.textContent = t("common.error_status", { status: r.status, detail: e.detail || "" });
         status.className = "tool-status error";
         justPlaylistBtn.disabled = false;
         fullDeleteBtn.disabled = false;
@@ -693,14 +688,16 @@ function showRemoveDialog({ httpBase, vaultId, playlistName, item, onDone }) {
       close();
       if (alsoDeleteMaster) {
         if (result.master_deleted) {
-          alert(`Komplett gelöscht. Transcript: ${result.transcript_deleted ? "auch gelöscht" : "kein Transcript vorhanden"}.`);
+          alert(t("playlists.deleted_full", {
+            transcript: result.transcript_deleted ? t("playlists.transcript_also_deleted") : t("playlists.transcript_none"),
+          }));
         } else if (!result.became_orphan) {
-          alert("Aus Playlist entfernt — Master-Page bleibt, weil das Video noch in einer anderen Playlist ist.");
+          alert(t("playlists.master_kept"));
         }
       }
       onDone && onDone();
     } catch (err) {
-      status.textContent = `Fehler: ${err.message || err}`;
+      status.textContent = t("common.error_msg", { message: err.message || err });
       status.className = "tool-status error";
       justPlaylistBtn.disabled = false;
       fullDeleteBtn.disabled = false;
@@ -741,17 +738,17 @@ async function captureHighlightedYoutubeTabs() {
   try {
     tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
   } catch (err) {
-    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    alert(t("playlists.tabs_read_error", { message: err.message || err }));
     return;
   }
   const ytTabs = tabs.filter((t) => t.url && /^https?:\/\/(www\.)?youtube\.com\/watch/.test(t.url));
   if (!ytTabs.length) {
-    alert("Keine markierten YouTube-Tabs. Tipp: Strg+Klick im Tab-Strip auf YouTube-Watch-Tabs, dann hier klicken.");
+    alert(t("playlists.no_yt_tabs"));
     return;
   }
   const httpBase = await getHttpBase();
   const vault = await getActiveVault(httpBase);
-  if (!vault) { alert("Kein Vault konfiguriert."); return; }
+  if (!vault) { alert(t("playlists.no_vault_config")); return; }
   // Meta parallel scrapen (Channel/Title/Duration), POSTs danach seriell.
   const items = await Promise.all(ytTabs.map(async (t) => {
     let meta = { title: t.title || t.url, channel: "", duration: "" };
@@ -769,7 +766,7 @@ async function captureHighlightedYoutubeTabs() {
 function showMultiYoutubePicker(httpBase, vault, items) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "playlist-picker multi-yt-picker" });
-  dialog.append(el("h3", { textContent: `${items.length} markierte YouTube-Tabs` }));
+  dialog.append(el("h3", { textContent: t("playlists.marked_yt_tabs", { count: items.length }) }));
 
   const itemList = el("ul", { className: "multi-yt-items" });
   for (const it of items) {
@@ -787,23 +784,23 @@ function showMultiYoutubePicker(httpBase, vault, items) {
   if (channels.length === 1 && channels[0]) {
     autoPlaylistName = channels[0];
     const hint = el("div", { className: "multi-yt-hint" });
-    hint.textContent = `Alle vom Kanal: ${channels[0]} — Playlist mit diesem Namen anlegen?`;
+    hint.textContent = t("playlists.same_channel_hint", { channel: channels[0] });
     dialog.append(hint);
   }
 
   const status = el("div", { className: "tool-status" });
   const playlistList = el("div", { className: "playlist-picker-list" });
-  dialog.append(el("div", { className: "playlist-picker-sep", textContent: "Bestehende Playlist:" }));
+  dialog.append(el("div", { className: "playlist-picker-sep", textContent: t("playlists.existing_playlist") }));
   dialog.append(playlistList, status);
 
   // Neue Playlist Section
-  const sep = el("div", { className: "playlist-picker-sep", textContent: "oder neue Playlist anlegen:" });
-  const newName = el("input", { type: "text", placeholder: "Name (z.B. Karpathy-Videos)", value: autoPlaylistName });
-  const newThema = el("input", { type: "text", placeholder: "Thema (frei, optional — z.B. ai)" });
-  const createBtn = el("button", { type: "button", textContent: "Anlegen + alle hinzufügen", className: "primary" });
+  const sep = el("div", { className: "playlist-picker-sep", textContent: t("playlists.or_new_playlist") });
+  const newName = el("input", { type: "text", placeholder: t("playlists.name_placeholder_short"), value: autoPlaylistName });
+  const newThema = el("input", { type: "text", placeholder: t("playlists.thema_placeholder_short") });
+  const createBtn = el("button", { type: "button", textContent: t("playlists.create_add_all"), className: "primary" });
   dialog.append(sep, newName, newThema, createBtn);
 
-  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: "Abbrechen" });
+  const cancelBtn = el("button", { type: "button", className: "secondary", textContent: t("common.cancel") });
   dialog.append(cancelBtn);
   cancelBtn.addEventListener("click", () => overlay.remove());
 
@@ -817,7 +814,7 @@ function showMultiYoutubePicker(httpBase, vault, items) {
       const data = await r.json();
       const playlists = data.items || [];
       if (!playlists.length) {
-        playlistList.append(el("div", { className: "empty", textContent: "(keine bestehenden Playlists)" }));
+        playlistList.append(el("div", { className: "empty", textContent: t("playlists.no_existing") }));
         return;
       }
       for (const p of playlists) {
@@ -827,16 +824,16 @@ function showMultiYoutubePicker(httpBase, vault, items) {
         playlistList.append(btn);
       }
     } catch (err) {
-      playlistList.append(el("div", { className: "empty", textContent: `Fehler: ${err.message || err}` }));
+      playlistList.append(el("div", { className: "empty", textContent: t("common.error_msg", { message: err.message || err }) }));
     }
   })();
 
   createBtn.addEventListener("click", async () => {
     const name = newName.value.trim();
     const thema = newThema.value.trim() || null;
-    if (!name) { status.textContent = "Name fehlt"; status.className = "tool-status error"; return; }
+    if (!name) { status.textContent = t("playlists.name_missing"); status.className = "tool-status error"; return; }
     createBtn.disabled = true;
-    status.textContent = "lege Playlist an…";
+    status.textContent = t("playlists.creating");
     try {
       const r = await fetch(`${httpBase}/tools/playlists/${vault.id}`, {
         method: "POST",
@@ -845,13 +842,13 @@ function showMultiYoutubePicker(httpBase, vault, items) {
       });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
-        status.textContent = `Fehler ${r.status}: ${e.detail || ""}`;
+        status.textContent = t("common.error_status", { status: r.status, detail: e.detail || "" });
         status.className = "tool-status error";
         createBtn.disabled = false;
         return;
       }
     } catch (err) {
-      status.textContent = `Fehler: ${err.message || err}`;
+      status.textContent = t("common.error_msg", { message: err.message || err });
       status.className = "tool-status error";
       createBtn.disabled = false;
       return;
@@ -861,7 +858,7 @@ function showMultiYoutubePicker(httpBase, vault, items) {
 }
 
 async function bulkAddToPlaylist(httpBase, vaultId, playlistName, items, statusEl, onDone) {
-  statusEl.textContent = `füge 0/${items.length} hinzu…`;
+  statusEl.textContent = t("playlists.adding_progress", { i: 0, total: items.length });
   statusEl.className = "tool-status";
   let added = 0, duplicate = 0;
   const failed = [];
@@ -886,11 +883,11 @@ async function bulkAddToPlaylist(httpBase, vaultId, playlistName, items, statusE
     } catch (err) {
       failed.push(it.title);
     }
-    statusEl.textContent = `füge ${i + 1}/${items.length} hinzu…`;
+    statusEl.textContent = t("playlists.adding_progress", { i: i + 1, total: items.length });
   }
-  let msg = `✓ ${added} hinzugefügt`;
-  if (duplicate) msg += ` · ${duplicate} schon drin`;
-  if (failed.length) msg += ` · ${failed.length} fehlgeschlagen`;
+  let msg = t("playlists.bulk_added", { count: added });
+  if (duplicate) msg += t("playlists.bulk_duplicate", { count: duplicate });
+  if (failed.length) msg += t("playlists.bulk_failed", { count: failed.length });
   alert(msg);
   onDone && onDone();
   // Liste refreshen falls in der Detail-View
@@ -905,23 +902,20 @@ export async function captureHighlightedTabs(httpBase, vaultId, button, onDone) 
   try {
     tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
   } catch (err) {
-    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    alert(t("playlists.tabs_read_error", { message: err.message || err }));
     return;
   }
   const httpTabs = tabs.filter((t) => t.url && /^https?:/.test(t.url));
   if (!httpTabs.length) {
-    alert("Keine markierten Tabs mit http(s)-URL. Tipp: Strg+Klick im Tab-Strip mehrere Tabs markieren, dann hier klicken.");
+    alert(t("playlists.no_http_tabs"));
     return;
   }
   if (httpTabs.length === 1) {
-    if (!confirm(
-      "Nur 1 Tab markiert. Trotzdem als Bookmark speichern?\n\n" +
-      "Tipp: Strg+Klick im Tab-Strip auf weitere Tabs markieren, dann hier klicken."
-    )) return;
+    if (!confirm(t("playlists.single_tab_confirm"))) return;
   }
   button.disabled = true;
   const original = button.textContent;
-  button.textContent = "läuft…";
+  button.textContent = t("playlists.running");
   let saved = 0;
   const failed = [];
   for (const t of httpTabs) {
@@ -943,8 +937,8 @@ export async function captureHighlightedTabs(httpBase, vaultId, button, onDone) 
   }
   button.disabled = false;
   button.textContent = original;
-  let msg = `${saved} Tab${saved === 1 ? "" : "s"} als Bookmark gespeichert.`;
-  if (failed.length) msg += `\n${failed.length} fehlgeschlagen:\n  ${failed.slice(0, 5).join("\n  ")}`;
+  let msg = t("playlists.tabs_saved", { count: saved });
+  if (failed.length) msg += t("playlists.tabs_failed", { count: failed.length, list: failed.slice(0, 5).join("\n  ") });
   alert(msg);
   onDone && onDone();
 }
@@ -954,23 +948,23 @@ export async function copyHighlightedTabUrls(button) {
   try {
     tabs = await chrome.tabs.query({ highlighted: true, currentWindow: true });
   } catch (err) {
-    alert("Konnte Tabs nicht lesen: " + (err.message || err));
+    alert(t("playlists.tabs_read_error", { message: err.message || err }));
     return;
   }
   const httpTabs = tabs.filter((t) => t.url && /^https?:/.test(t.url));
   if (!httpTabs.length) {
-    alert("Keine markierten Tabs mit http(s)-URL. Tipp: Strg+Klick im Tab-Strip mehrere Tabs markieren, dann hier klicken.");
+    alert(t("playlists.no_http_tabs"));
     return;
   }
   const text = httpTabs.map((t) => t.url).join("\n");
   try {
     await navigator.clipboard.writeText(text);
   } catch (err) {
-    alert("Clipboard-Fehler: " + (err.message || err));
+    alert(t("playlists.clipboard_error", { message: err.message || err }));
     return;
   }
   const original = button.textContent;
-  button.textContent = `✓ ${httpTabs.length} URL${httpTabs.length === 1 ? "" : "s"} kopiert`;
+  button.textContent = t("playlists.urls_copied", { count: httpTabs.length });
   button.disabled = true;
   setTimeout(() => {
     button.textContent = original;

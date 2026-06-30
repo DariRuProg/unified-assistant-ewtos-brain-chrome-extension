@@ -8,6 +8,7 @@
   "description": "Fokus auf Lern-Pipeline: erbt karpathy-para-base und ergänzt CLAUDE.md-Routinen (Ingest/Query/Check/Lint) sowie Playlist-Trending im Briefing.",
   "tags": ["karpathy", "lerner", "video"],
   "category": "addon",
+  "hidden": true,
   "when_to_use": "Fürs Lernen aus Videos: ausführliche Ingest/Query/Check/Lint-Routinen und Playlist-Trending im Morgen-Briefing. Baut auf dem Farming-Modul auf.",
   "extends": ["karpathy-para-base"],
   "folders": [],

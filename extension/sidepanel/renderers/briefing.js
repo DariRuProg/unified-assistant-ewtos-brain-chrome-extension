@@ -3,30 +3,31 @@ import { el, makeYouTubeThumb } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase, getActiveVaultId } from '../modules/api.js';
 import { renderMarkdown } from '../markdown.js';
+import { t } from '../../i18n/i18n.js';
 
 const BRIEFING_SOURCE_TOOLTIPS = {
-  youtube_trending: "Trending-Videos der letzten 7 Tage in deiner Nische",
-  competitor_videos: "Neue Videos deiner Konkurrenz-Channels",
-  playlist_trending: "Top-Videos aus deinen Vault-Playlists (nach Views)",
-  recommendations: "LLM-generierte 'What to do'-Vorschläge aus deinem Vault-Kontext",
-  vertrags_fristen: "Kundenverträge die in den nächsten 60 Tagen auslaufen",
-  kampagnen_kickoffs: "Kampagnen-Kickoffs in den nächsten 14 Tagen",
+  youtube_trending: "briefing.tooltip_youtube_trending",
+  competitor_videos: "briefing.tooltip_competitor_videos",
+  playlist_trending: "briefing.tooltip_playlist_trending",
+  recommendations: "briefing.tooltip_recommendations",
+  vertrags_fristen: "briefing.tooltip_vertrags_fristen",
+  kampagnen_kickoffs: "briefing.tooltip_kampagnen_kickoffs",
 };
 
 const BRIEFING_SOURCE_TITLES = {
-  youtube_trending: "YouTube-Trending",
-  competitor_videos: "Konkurrenz-Videos",
-  playlist_trending: "Playlist-Trending",
-  recommendations: "Empfehlungen",
-  vertrags_fristen: "Vertrags-Fristen",
-  kampagnen_kickoffs: "Kampagnen-Kickoffs",
-  recent_videos: "Neueste Videos",
-  recent_pages: "Zuletzt geändert",
-  active_projects: "Aktive Projekte",
-  scratchpad: "Scratchpad",
-  last_journal: "Letztes Journal",
-  workshops: "Workshops",
-  anniversaries: "Jahrestage",
+  youtube_trending: "options.briefing_source_youtube_trending",
+  competitor_videos: "options.briefing_source_competitor_videos",
+  playlist_trending: "options.briefing_source_playlist_trending",
+  recommendations: "options.briefing_source_recommendations",
+  vertrags_fristen: "options.briefing_source_vertrags_fristen",
+  kampagnen_kickoffs: "options.briefing_source_kampagnen_kickoffs",
+  recent_videos: "options.briefing_source_recent_videos",
+  recent_pages: "options.briefing_source_recent_pages",
+  active_projects: "options.briefing_source_active_projects",
+  scratchpad: "options.briefing_source_scratchpad",
+  last_journal: "options.briefing_source_last_journal",
+  workshops: "options.briefing_source_workshops",
+  anniversaries: "options.briefing_source_anniversaries",
 };
 
 const BRIEFING_SOURCE_ICONS = {
@@ -62,17 +63,16 @@ function briefingRelativeTime(isoDate) {
   if (isNaN(then.getTime())) return "";
   const diffMs = Date.now() - then.getTime();
   const days = Math.floor(diffMs / 86400000);
-  if (days < 0) return "in der Zukunft";
+  if (days < 0) return t("briefing.future");
   if (days === 0) {
     const hours = Math.floor(diffMs / 3600000);
-    if (hours <= 0) return "gerade eben";
-    return `vor ${hours} Std`;
+    if (hours <= 0) return t("briefing.just_now");
+    return t("briefing.hours_ago", { hours });
   }
-  if (days === 1) return "vor 1 Tag";
-  if (days < 30) return `vor ${days} Tagen`;
+  if (days === 1) return t("briefing.days_ago", { days: 1 });
+  if (days < 30) return t("briefing.days_ago", { days });
   const months = Math.floor(days / 30);
-  if (months === 1) return "vor 1 Monat";
-  return `vor ${months} Monaten`;
+  return t("briefing.months_ago", { months });
 }
 
 export async function showBriefingPanel() {
@@ -81,30 +81,52 @@ export async function showBriefingPanel() {
 
   const panel = el("div", { className: "briefing-panel" });
   const header = el("div", { className: "briefing-header" });
-  header.append(el("strong", { textContent: "Guten Morgen" }));
+  header.append(el("strong", { textContent: t("briefing.morning") }));
   const now = new Date();
   const dateStr = now.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   header.append(el("div", { className: "briefing-datetime", textContent: `${dateStr} · ${timeStr}` }));
 
-  const profileSelect = el("select", { className: "briefing-profile-select", title: "Briefing-Profil" });
+  const profileSelect = el("select", { className: "briefing-profile-select", title: t("briefing.profile_title") });
   header.append(profileSelect);
 
   const lookbackBtn = el("button", {
     type: "button",
     className: "briefing-lookback-btn",
     id: "btn-briefing-lookback",
-    textContent: "📅 Was war vor… Tagen?",
+    textContent: t("briefing.lookback_btn"),
   });
   header.append(lookbackBtn);
+
+  const saveBtn = el("button", {
+    type: "button",
+    className: "briefing-save-btn",
+    id: "btn-briefing-save",
+    textContent: t("briefing.save_journal"),
+    title: t("briefing.save_journal_hint"),
+  });
+  header.append(saveBtn);
 
   const closeBtn = el("button", { type: "button", textContent: "×", className: "briefing-close" });
   closeBtn.addEventListener("click", () => panel.remove());
   header.append(closeBtn);
   panel.append(header);
 
+  // In-App-Hilfe: einklappbar, erklärt was das Briefing tut + dass nur "Speichern" schreibt.
+  const helpToggle = el("button", {
+    type: "button",
+    className: "briefing-help-toggle",
+    textContent: t("briefing.help_toggle"),
+  });
+  const helpBody = el("div", { className: "briefing-help-body", style: "display:none" });
+  helpBody.innerHTML = renderMarkdown(t("briefing.help_body"));
+  helpToggle.addEventListener("click", () => {
+    helpBody.style.display = helpBody.style.display === "none" ? "" : "none";
+  });
+  panel.append(helpToggle, helpBody);
+
   const body = el("div", { className: "briefing-body" });
-  body.textContent = "laden...";
+  body.textContent = t("briefing.loading");
   panel.append(body);
   document.body.append(panel);
 
@@ -134,7 +156,7 @@ export async function showBriefingPanel() {
 
   async function loadCurrentBriefing() {
     body.replaceChildren();
-    body.textContent = "laden...";
+    body.textContent = t("briefing.loading");
     body.className = "briefing-body";
     try {
       const httpBase = await getHttpBase();
@@ -150,7 +172,7 @@ export async function showBriefingPanel() {
       body.replaceChildren();
       renderBriefingSections(body, briefingData, currentProfile);
     } catch (err) {
-      body.textContent = "Fehler: " + (err.message || err);
+      body.textContent = t("common.error_msg", { message: err.message || err });
       body.className = "briefing-body error";
     }
   }
@@ -163,6 +185,24 @@ export async function showBriefingPanel() {
 
   lookbackBtn.addEventListener("click", () => openBriefingLookback(body, loadCurrentBriefing, currentVaultId));
 
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    const orig = saveBtn.textContent;
+    saveBtn.textContent = t("briefing.saving");
+    try {
+      const httpBase = await getHttpBase();
+      const vaultParam = currentVaultId ? `&vault_id=${encodeURIComponent(currentVaultId)}` : "";
+      const res = await fetch(`${httpBase}/tools/briefing?profile=${encodeURIComponent(selectedProfileId)}${vaultParam}&archive=true`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || `HTTP ${res.status}`);
+      saveBtn.textContent = t("briefing.saved");
+    } catch (err) {
+      saveBtn.textContent = t("common.error_msg", { message: err.message || err });
+    } finally {
+      setTimeout(() => { saveBtn.textContent = orig; saveBtn.disabled = false; }, 2000);
+    }
+  });
+
   await loadProfiles();
   await loadCurrentBriefing();
 }
@@ -170,15 +210,15 @@ export async function showBriefingPanel() {
 export async function showQuickSavePage() {
   const panel = el("div", { className: "tool-panel" });
   const header = el("div", { className: "tool-header" });
-  const title = el("h2", { textContent: "Seite ins Vault" });
+  const title = el("h2", { textContent: t("briefing.quicksave_title") });
   const closeBtn = el("button", { type: "button", className: "close-btn", textContent: "✕" });
   closeBtn.addEventListener("click", () => panel.remove());
   header.append(title, closeBtn);
 
   const body = el("div", { className: "tool-body" });
-  const status = el("div", { className: "tool-status", textContent: "scrapt Seite..." });
+  const status = el("div", { className: "tool-status", textContent: t("briefing.scraping_page") });
 
-  const titleInput = el("input", { type: "text", placeholder: "Titel" });
+  const titleInput = el("input", { type: "text", placeholder: t("briefing.title_placeholder") });
   titleInput.style.cssText = "width:100%;margin-bottom:8px;";
   titleInput.style.display = "none";
 
@@ -187,7 +227,7 @@ export async function showQuickSavePage() {
   subfolderSelect.style.display = "none";
   ["artikel", "eigene-notizen", "chat-archive"].forEach(s => subfolderSelect.append(new Option(s, s)));
 
-  const saveBtn = el("button", { textContent: "Speichern", disabled: true });
+  const saveBtn = el("button", { textContent: t("common.save"), disabled: true });
   saveBtn.style.width = "100%";
 
   body.append(status, titleInput, subfolderSelect, saveBtn);
@@ -213,7 +253,7 @@ export async function showQuickSavePage() {
     titleInput.value = data.title || "";
     titleInput.style.display = "";
     subfolderSelect.style.display = "";
-    status.textContent = `${data.wordCount || 0} Wörter erfasst`;
+    status.textContent = t("briefing.words_captured", { count: data.wordCount || 0 });
     status.className = "tool-status success";
     saveBtn.disabled = false;
   } catch (err) {
@@ -223,21 +263,21 @@ export async function showQuickSavePage() {
   }
 
   saveBtn.addEventListener("click", async () => {
-    const t = titleInput.value.trim();
-    if (!t) { status.textContent = "Titel erforderlich"; status.className = "tool-status error"; return; }
+    const titleVal = titleInput.value.trim();
+    if (!titleVal) { status.textContent = t("notes.title_required"); status.className = "tool-status error"; return; }
     saveBtn.disabled = true;
-    status.textContent = "speichere...";
+    status.textContent = t("common.saving");
     status.className = "tool-status";
     try {
       const httpBase = await getHttpBase();
       const vaultId = await getActiveVaultId(httpBase);
-      if (!vaultId) throw new Error("Kein Vault konfiguriert");
+      if (!vaultId) throw new Error(t("briefing.no_vault_configured"));
       const res = await fetch(`${httpBase}/tools/raw/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vault_id: vaultId,
-          title: t,
+          title: titleVal,
           content: markdown,
           target_subfolder: subfolderSelect.value,
           url: pageUrl || null,
@@ -247,10 +287,10 @@ export async function showQuickSavePage() {
       let data = null;
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) {
-        if (res.status === 403) throw new Error("Fehlende Berechtigung — write_raw in Vault-Options aktivieren");
+        if (res.status === 403) throw new Error(t("briefing.no_write_raw_perm"));
         throw new Error(data?.detail || text || `HTTP ${res.status}`);
       }
-      status.textContent = `Gespeichert: ${data.data?.raw_path || "OK"}`;
+      status.textContent = t("briefing.saved_to", { path: data.data?.raw_path || "OK" });
       status.className = "tool-status success";
       setTimeout(() => panel.remove(), 1500);
     } catch (err) {
@@ -269,11 +309,11 @@ function openBriefingLookback(body, restoreFn, vaultId) {
     className: "briefing-lookback-modal",
     style: "display:flex; gap:6px; align-items:center; padding:8px; background:var(--bg-subtle); border-radius:4px; margin-bottom:8px;",
   });
-  modal.append(el("label", { textContent: "Vor wie vielen Tagen?", style: "font-size:11px;" }));
+  modal.append(el("label", { textContent: t("briefing.lookback_days_label"), style: "font-size:11px;" }));
   const input = el("input", { type: "number", value: "14", min: "1", max: "9999" });
   input.style.cssText = "width:60px; font-size:12px; padding:2px 4px;";
-  const goBtn = el("button", { type: "button", textContent: "Anzeigen", className: "briefing-lookback-btn" });
-  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen", className: "briefing-lookback-btn" });
+  const goBtn = el("button", { type: "button", textContent: t("briefing.show"), className: "briefing-lookback-btn" });
+  const cancelBtn = el("button", { type: "button", textContent: t("common.cancel"), className: "briefing-lookback-btn" });
   modal.append(input, goBtn, cancelBtn);
 
   body.prepend(modal);
@@ -283,7 +323,7 @@ function openBriefingLookback(body, restoreFn, vaultId) {
     const days = parseInt(input.value, 10);
     if (!days || days < 1) return;
     goBtn.disabled = true;
-    goBtn.textContent = "lädt...";
+    goBtn.textContent = t("briefing.loading");
     try {
       const httpBase = await getHttpBase();
       const vaultParam = vaultId ? `&vault_id=${encodeURIComponent(vaultId)}` : "";
@@ -295,30 +335,30 @@ function openBriefingLookback(body, restoreFn, vaultId) {
       const payload = data.data || data;
       if (payload.ok === false) {
         modal.remove();
-        const notice = el("div", { className: "briefing-empty", textContent: payload.error || "Kein Journal-Eintrag gefunden." });
+        const notice = el("div", { className: "briefing-empty", textContent: payload.error || t("briefing.no_journal_found") });
         notice.style.cssText = "padding:12px; text-align:center;";
         body.replaceChildren(notice);
-        const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: "← Zurück zum aktuellen Briefing" });
+        const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: t("briefing.back_to_current") });
         backBtn.addEventListener("click", () => restoreFn());
         body.append(backBtn);
         return;
       }
       // Render lookback
       body.replaceChildren();
-      const header = el("div", { className: "briefing-section-title", textContent: `Briefing vom ${payload.date}` });
+      const header = el("div", { className: "briefing-section-title", textContent: t("briefing.briefing_from", { date: payload.date }) });
       header.style.cssText = "margin-bottom:8px;";
       body.append(header);
       const md = el("div", { className: "briefing-lookback-md" });
       md.innerHTML = renderMarkdown(payload.markdown || "");
       body.append(md);
-      const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: "← Zurück zum aktuellen Briefing" });
+      const backBtn = el("button", { type: "button", className: "briefing-lookback-btn", textContent: t("briefing.back_to_current") });
       backBtn.style.marginTop = "12px";
       backBtn.addEventListener("click", () => restoreFn());
       body.append(backBtn);
     } catch (err) {
       goBtn.disabled = false;
-      goBtn.textContent = "Anzeigen";
-      const err2 = el("div", { className: "briefing-error", textContent: "Fehler: " + (err.message || err) });
+      goBtn.textContent = t("briefing.show");
+      const err2 = el("div", { className: "briefing-error", textContent: t("common.error_msg", { message: err.message || err }) });
       modal.append(err2);
     }
   });
@@ -349,10 +389,11 @@ function renderBriefingSections(target, briefingData, profile) {
     // Section-Header: Icon + Titel + Count
     const titleEl = el("h4", { className: "briefing-section-title" });
     const icon = BRIEFING_SOURCE_ICONS[sec.type];
-    const titleText = sec.title || BRIEFING_SOURCE_TITLES[sec.type] || sec.type;
+    const titleKey = BRIEFING_SOURCE_TITLES[sec.type];
+    const titleText = sec.title || (titleKey ? t(titleKey) : sec.type);
     titleEl.textContent = (icon ? icon + " " : "") + titleText + (items.length ? ` (${items.length})` : "");
-    const tooltip = BRIEFING_SOURCE_TOOLTIPS[sec.type];
-    if (tooltip) titleEl.title = tooltip;
+    const tooltipKey = BRIEFING_SOURCE_TOOLTIPS[sec.type];
+    if (tooltipKey) titleEl.title = t(tooltipKey);
     card.append(titleEl);
 
     // Per-Section-Error: Hinweis statt Items
@@ -379,37 +420,37 @@ function renderBriefingSections(target, briefingData, profile) {
     } else if (sec.type === "todos") {
       const today = new Date().toISOString().slice(0, 10);
       const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-      for (const t of items) {
-        if (t.done) continue;
+      for (const todo of items) {
+        if (todo.done) continue;
         const row = el("div", { className: "briefing-todo-row" });
-        const text = el("span", { textContent: t.text });
+        const text = el("span", { textContent: todo.text });
         row.append(text);
-        if (t.due && (t.due === today || t.due === tomorrow)) {
-          row.append(el("span", { className: "briefing-due-badge", textContent: t.due === today ? "heute" : "morgen" }));
+        if (todo.due && (todo.due === today || todo.due === tomorrow)) {
+          row.append(el("span", { className: "briefing-due-badge", textContent: todo.due === today ? t("briefing.today") : t("briefing.tomorrow") }));
         }
         card.append(row);
       }
       if (!card.querySelector(".briefing-todo-row")) {
-        card.append(el("div", { className: "briefing-empty", textContent: "Keine offenen Todos" }));
+        card.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_todos") }));
       }
     } else if (sec.type === "fristen" || sec.type === "vertrags_fristen" || sec.type === "kampagnen_kickoffs" || sec.type === "workshops" || sec.type === "anniversaries") {
       renderBriefingFristenLike(card, items, sec.type);
     } else if (sec.type === "lernstreak") {
       const msg = sec.days_ago === 0
-        ? "Heute schon gelernt"
+        ? t("briefing.watched")
         : sec.last_video_title
-          ? `Letztes Video: "${sec.last_video_title}" — vor ${sec.days_ago} Tag${sec.days_ago === 1 ? "" : "en"}`
-          : "Heute noch kein Video";
+          ? t("briefing.last_video", { title: sec.last_video_title, days: sec.days_ago, plural: sec.days_ago === 1 ? "" : "s" })
+          : t("briefing.today_no_video");
       card.append(el("div", { textContent: msg }));
     } else if (sec.type === "youtube_trending" || sec.type === "competitor_videos" || sec.type === "playlist_trending") {
       renderBriefingVideoCards(card, items, sec.type);
     } else if (sec.type === "recent_videos") {
-      renderBriefingPageList(card, items, { emptyText: "Keine Videos", asLink: true });
+      renderBriefingPageList(card, items, { emptyText: t("briefing.no_videos"), asLink: true });
     } else if (sec.type === "recent_pages" || sec.type === "active_projects") {
-      renderBriefingPageList(card, items, { emptyText: sec.type === "active_projects" ? "Keine aktiven Projekte" : "Keine Änderungen" });
+      renderBriefingPageList(card, items, { emptyText: sec.type === "active_projects" ? t("briefing.no_active_projects") : t("briefing.no_changes") });
     } else if (sec.type === "scratchpad") {
       if (!sec.markdown || !sec.markdown.trim()) {
-        card.append(el("div", { className: "briefing-empty", textContent: "Scratchpad leer" }));
+        card.append(el("div", { className: "briefing-empty", textContent: t("briefing.scratchpad_empty") }));
       } else {
         const md = el("div", { className: "briefing-lookback-md" });
         md.innerHTML = renderMarkdown(sec.markdown);
@@ -417,7 +458,7 @@ function renderBriefingSections(target, briefingData, profile) {
       }
     } else if (sec.type === "last_journal") {
       if (!items.length) {
-        card.append(el("div", { className: "briefing-empty", textContent: "Kein Journal-Eintrag" }));
+        card.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_journal_entry") }));
       } else {
         const it = items[0];
         card.append(el("div", { className: "briefing-journal-date", textContent: it.date }));
@@ -434,7 +475,7 @@ function renderBriefingSections(target, briefingData, profile) {
           card.append(el("div", { textContent: typeof item === "string" ? item : (item.text || item.title || JSON.stringify(item)) }));
         }
       } else {
-        card.append(el("div", { className: "briefing-empty", textContent: "Keine Daten" }));
+        card.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_data") }));
       }
     }
 
@@ -443,7 +484,7 @@ function renderBriefingSections(target, briefingData, profile) {
 
   if (quotaProblem) {
     const notice = el("div", { className: "briefing-quota-notice" });
-    const link = el("a", { textContent: "⚙ YouTube-API-Key in den Optionen setzen", href: "#" });
+    const link = el("a", { textContent: t("briefing.set_youtube_key"), href: "#" });
     link.addEventListener("click", (e) => {
       e.preventDefault();
       chrome.runtime.openOptionsPage();
@@ -453,19 +494,19 @@ function renderBriefingSections(target, briefingData, profile) {
   }
 
   if (!sections.length) {
-    target.append(el("div", { className: "briefing-empty", textContent: "Keine Daten" }));
+    target.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_data") }));
   }
 }
 
 function renderBriefingFristenLike(card, items, type) {
   // type: fristen | vertrags_fristen | kampagnen_kickoffs
   const emptyText = {
-    fristen: "Keine Fristen",
-    vertrags_fristen: "Keine auslaufenden Verträge",
-    kampagnen_kickoffs: "Keine anstehenden Kickoffs",
-    workshops: "Keine anstehenden Workshops",
-    anniversaries: "Keine Jahrestage",
-  }[type] || "Keine Einträge";
+    fristen: t("briefing.no_deadlines"),
+    vertrags_fristen: t("briefing.no_expiring_contracts"),
+    kampagnen_kickoffs: t("briefing.no_upcoming_kickoffs"),
+    workshops: t("briefing.no_upcoming_workshops"),
+    anniversaries: t("briefing.no_anniversaries"),
+  }[type] || t("briefing.no_entries");
 
   for (const f of items) {
     // Shape-Toleranz: title/titel, days_left/tage_offen, date/datum
@@ -487,7 +528,7 @@ function renderBriefingFristenLike(card, items, type) {
 }
 
 function renderBriefingPageList(card, items, opts) {
-  const { emptyText = "Keine Einträge", asLink = false } = opts || {};
+  const { emptyText = t("briefing.no_entries"), asLink = false } = opts || {};
   if (!items.length) {
     card.append(el("div", { className: "briefing-empty", textContent: emptyText }));
     return;
@@ -513,7 +554,7 @@ function renderBriefingPageList(card, items, opts) {
 
 function renderBriefingVideoCards(card, items, type) {
   if (!items.length) {
-    card.append(el("div", { className: "briefing-empty", textContent: "Keine Videos" }));
+    card.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_videos") }));
     return;
   }
 
@@ -543,13 +584,13 @@ function renderBriefingVideoCards(card, items, type) {
     }
 
     const meta = el("div", { className: "briefing-video-meta" });
-    meta.append(el("div", { className: "briefing-video-title", textContent: v.title || "Ohne Titel" }));
+    meta.append(el("div", { className: "briefing-video-title", textContent: v.title || t("briefing.untitled") }));
     if (v.channel_title) {
       meta.append(el("div", { className: "briefing-video-channel", textContent: v.channel_title }));
     }
     const statsParts = [];
-    if (typeof v.views === "number") statsParts.push(`${briefingFormatNumber(v.views)} Views`);
-    if (typeof v.likes === "number") statsParts.push(`${briefingFormatNumber(v.likes)} Likes`);
+    if (typeof v.views === "number") statsParts.push(t("youtube.views", { count: briefingFormatNumber(v.views) }));
+    if (typeof v.likes === "number") statsParts.push(t("youtube.likes", { count: briefingFormatNumber(v.likes) }));
     if (v.published_at) statsParts.push(briefingRelativeTime(v.published_at));
     if (statsParts.length) {
       meta.append(el("div", { className: "briefing-video-stats", textContent: statsParts.join(" • ") }));
@@ -562,7 +603,7 @@ function renderBriefingVideoCards(card, items, type) {
 
   if (hidden.length) {
     const details = el("details", { className: "briefing-show-more" });
-    const summary = el("summary", { textContent: `+ ${hidden.length} weitere anzeigen` });
+    const summary = el("summary", { textContent: t("briefing.show_more", { count: hidden.length }) });
     details.append(summary);
     for (const v of hidden) appendVideoCard(details, v);
     card.append(details);
@@ -571,7 +612,7 @@ function renderBriefingVideoCards(card, items, type) {
 
 function renderBriefingRecommendations(card, items) {
   if (!items.length) {
-    card.append(el("div", { className: "briefing-empty", textContent: "Keine Empfehlungen" }));
+    card.append(el("div", { className: "briefing-empty", textContent: t("briefing.no_recommendations") }));
     return;
   }
   const kindIcons = { artikel: "📝", video: "🎬", tipp: "💡" };
@@ -598,7 +639,7 @@ export async function checkPendingBrainPick() {
 async function showBrainModal({ url, tabId, prefetched }) {
   const overlay = el("div", { className: "playlist-picker-overlay" });
   const dialog = el("div", { className: "brain-modal" });
-  dialog.append(el("h3", { textContent: "Video ins Brain speichern" }));
+  dialog.append(el("h3", { textContent: t("briefing.save_video_to_brain") }));
   const thumb = makeYouTubeThumb(url);
   if (thumb) {
     thumb.classList.add("yt-thumb-large");
@@ -608,11 +649,11 @@ async function showBrainModal({ url, tabId, prefetched }) {
 
   const status = el("div", {
     className: "tool-status",
-    textContent: prefetched ? "Tags werden vorgeschlagen..." : "Transcript wird extrahiert...",
+    textContent: prefetched ? t("briefing.suggesting_tags") : t("briefing.extracting_transcript"),
   });
   dialog.append(status);
 
-  const cancelBtn = el("button", { type: "button", textContent: "Abbrechen", className: "secondary" });
+  const cancelBtn = el("button", { type: "button", textContent: t("common.cancel"), className: "secondary" });
   cancelBtn.addEventListener("click", () => overlay.remove());
 
   overlay.append(dialog);
@@ -621,7 +662,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
   const httpBase = await getHttpBase();
   const vaultId = await getActiveVaultId(httpBase);
   if (!vaultId) {
-    status.textContent = "Kein Vault konfiguriert.";
+    status.textContent = t("briefing.no_vault_configured");
     status.className = "tool-status error";
     dialog.append(cancelBtn);
     return;
@@ -669,7 +710,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
     }
     brainData = await dataPromise;
   } catch (err) {
-    status.textContent = "Fehler: " + (err.message || err);
+    status.textContent = t("common.error_msg", { message: err.message || err });
     status.className = "tool-status error";
     dialog.append(cancelBtn);
     return;
@@ -685,13 +726,13 @@ async function showBrainModal({ url, tabId, prefetched }) {
   dialog.append(el("span", { className: `confidence-badge ${confidenceCls}`, textContent: suggestion.confidence || "?" }));
 
   // Thema (freies Frontmatter-Feld, kein Ordner/Whitelist)
-  const themaLabel = el("label", { textContent: "Thema (frei)" });
-  const themaInput = el("input", { type: "text", placeholder: "z.B. ai, marketing, health", value: suggestion.thema || "" });
+  const themaLabel = el("label", { textContent: t("briefing.thema_label") });
+  const themaInput = el("input", { type: "text", placeholder: t("briefing.thema_placeholder"), value: suggestion.thema || "" });
 
   // Playlist-Dropdown mit Lazy-Load
-  const playlistLabel = el("label", { textContent: "Playlist" });
+  const playlistLabel = el("label", { textContent: t("briefing.playlist_label") });
   const playlistSelect = el("select");
-  const playlistNewInput = el("input", { type: "text", placeholder: "Neue Playlist eingeben..." });
+  const playlistNewInput = el("input", { type: "text", placeholder: t("briefing.new_playlist_placeholder") });
   playlistNewInput.style.display = "none";
 
   async function loadPlaylists() {
@@ -705,7 +746,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
         if (p.name === suggestion.playlist_name) opt.selected = true;
         playlistSelect.append(opt);
       });
-      playlistSelect.append(new Option("+ Neue Playlist...", "__new__"));
+      playlistSelect.append(new Option(t("briefing.new_playlist_option"), "__new__"));
     } catch {}
   }
 
@@ -725,7 +766,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
   const ingestRow = el("label", { className: "checkbox-row" });
   const ingestCb = el("input", { type: "checkbox" });
   ingestCb.checked = true;
-  ingestRow.append(ingestCb, el("span", { textContent: "Direkt ingestet (ohne Claude Code)" }));
+  ingestRow.append(ingestCb, el("span", { textContent: t("briefing.ingest_now") }));
   ingestRow.style.cssText = "margin-top:8px;font-size:12px;";
   dialog.append(ingestRow);
 
@@ -733,7 +774,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
   dialog.append(saveStatus);
 
   const actions = el("div", { className: "playlist-picker-actions" });
-  const saveBtn = el("button", { type: "button", textContent: "Speichern", className: "primary" });
+  const saveBtn = el("button", { type: "button", textContent: t("common.save"), className: "primary" });
 
   saveBtn.addEventListener("click", async () => {
     const thema = themaInput.value.trim() || null;
@@ -741,12 +782,12 @@ async function showBrainModal({ url, tabId, prefetched }) {
       ? playlistNewInput.value.trim()
       : playlistSelect.value;
     if (!playlistName || playlistName === "__new__") {
-      saveStatus.textContent = "Playlist erforderlich";
+      saveStatus.textContent = t("briefing.playlist_required");
       saveStatus.className = "tool-status error";
       return;
     }
     saveBtn.disabled = true;
-    saveStatus.textContent = "speichere...";
+    saveStatus.textContent = t("common.saving");
     saveStatus.className = "tool-status";
     try {
       const res = await fetch(`${httpBase}/tools/brain/save`, {
@@ -768,7 +809,7 @@ async function showBrainModal({ url, tabId, prefetched }) {
       try { resData = JSON.parse(resText); } catch {}
       if (!res.ok) throw new Error(resData?.detail || resText || `HTTP ${res.status}`);
       if (resData?.data?.ingest_warning) {
-        saveStatus.textContent = `Gespeichert (Ingest-Warnung: ${resData.data.ingest_warning})`;
+        saveStatus.textContent = t("briefing.saved_ingest_warning", { warning: resData.data.ingest_warning });
         saveStatus.className = "tool-status";
         setTimeout(() => overlay.remove(), 2500);
       } else {
@@ -777,13 +818,13 @@ async function showBrainModal({ url, tabId, prefetched }) {
     } catch (err) {
       const msg = err.message || String(err);
       if (msg.includes("Schreibrecht") || msg.includes("write_raw") || msg.includes("write_playlists")) {
-        saveStatus.innerHTML = `Fehlende Berechtigung. <a href="#" id="perm-link">In Options aktivieren</a>`;
+        saveStatus.innerHTML = `${t("briefing.missing_perm")} <a href="#" id="perm-link">${t("briefing.enable_in_options")}</a>`;
         saveStatus.querySelector("#perm-link").addEventListener("click", e => {
           e.preventDefault();
           chrome.runtime.openOptionsPage();
         });
       } else {
-        saveStatus.textContent = "Fehler: " + msg;
+        saveStatus.textContent = t("common.error_msg", { message: msg });
       }
       saveStatus.className = "tool-status error";
       saveBtn.disabled = false;
@@ -825,7 +866,7 @@ function hideBrainHint() {
 }
 
 export async function renderDocumentIngest() {
-  state.panelTitle.textContent = "Dokument-Ingest";
+  state.panelTitle.textContent = t("briefing.document_ingest_title");
 
   const SUBFOLDERS = ["artikel", "eigene-notizen", "kunden-input", "chat-archive"];
 
@@ -836,7 +877,7 @@ export async function renderDocumentIngest() {
 
   const titleInput = el("input");
   titleInput.type = "text";
-  titleInput.placeholder = "Titel (optional — sonst Dateiname)";
+  titleInput.placeholder = t("briefing.ingest_title_placeholder");
   titleInput.style.cssText = "width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border,#444);background:var(--bg-card,#2a2a2a);color:var(--text,inherit);box-sizing:border-box;margin-bottom:8px;font-size:13px;";
 
   const subfolderSelect = el("select");
@@ -847,9 +888,9 @@ export async function renderDocumentIngest() {
   sensitiveRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;cursor:pointer;";
   const sensitiveCb = el("input");
   sensitiveCb.type = "checkbox";
-  sensitiveRow.append(sensitiveCb, el("span", { textContent: "Als sensibel kennzeichnen (DSGVO — nur freigegebenes LLM)" }));
+  sensitiveRow.append(sensitiveCb, el("span", { textContent: t("briefing.mark_sensitive") }));
 
-  const uploadBtn = el("button", { textContent: "In Vault speichern (raw/)" });
+  const uploadBtn = el("button", { textContent: t("briefing.save_to_vault_raw") });
   uploadBtn.style.cssText = "width:100%;";
   uploadBtn.disabled = true;
 
@@ -867,13 +908,13 @@ export async function renderDocumentIngest() {
     const file = fileInput.files?.[0];
     if (!file) return;
     uploadBtn.disabled = true;
-    status.textContent = "Lade hoch...";
+    status.textContent = t("briefing.uploading");
     status.className = "tool-status";
     resultBox.textContent = "";
     try {
       const httpBase = await getHttpBase();
       const { selectedVaultId } = await chrome.storage.local.get("selectedVaultId");
-      if (!selectedVaultId) throw new Error("Kein Vault ausgewählt (Einstellungen → Vaults).");
+      if (!selectedVaultId) throw new Error(t("briefing.no_vault_selected"));
       const fd = new FormData();
       fd.append("file", file);
       fd.append("vault_id", selectedVaultId);
@@ -886,7 +927,7 @@ export async function renderDocumentIngest() {
       try { data = JSON.parse(text); } catch {}
       if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
       const rawPath = data?.data?.relative_path || data?.data?.raw_path || "";
-      status.textContent = "Gespeichert!";
+      status.textContent = t("briefing.saved");
       status.className = "tool-status success";
       if (rawPath) resultBox.textContent = rawPath;
       fileInput.value = "";

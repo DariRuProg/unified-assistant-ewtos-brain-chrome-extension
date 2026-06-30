@@ -4,6 +4,12 @@ import { getHttpBase } from "../sidepanel/modules/api.js";
 import { renderMarkdown, openInObsidian } from "../sidepanel/markdown.js";
 import { applyTheme } from "../sidepanel/modules/theme.js";
 import { renderBaseInto } from "../sidepanel/renderers/base-view.js";
+import { CRM_BASE_PATH, mountCrmIo } from "../sidepanel/renderers/crm-io.js";
+import { installFetchAuth } from "../sidepanel/modules/auth.js";
+
+// Auth: Login-Token an alle Server-Fetches hängen (greift nur wenn ein Token
+// gesetzt ist; Open-Mode bleibt unverändert). Der Login selbst läuft im Sidepanel.
+installFetchAuth();
 
 // Tools, die die angeheftete Datei verändern → danach Ansicht links neu laden.
 const WRITE_TOOLS = new Set(["insert_into_open_file", "write_wiki_page", "generate_image"]);
@@ -40,6 +46,9 @@ let sensitiveFolders = [];
 let chatMode = chatModeParam;
 let currentLoadedPath = chatMode === "vault" ? resolvedScratchpadPath : relPath;
 let _applyFileModeFromNav = null; // assigned in boot() — switches UI to file-chat after navigateTo
+let _wsTtsEnabled = false;
+let _wsActiveAudio = null;
+let _wsSpeechPoll = null;
 
 const fileHistory = [];
 function navigateTo(path) {
@@ -57,6 +66,52 @@ function goBack() {
         loadFile(prev);
         if (!fileHistory.length) document.getElementById("ws-back-btn")?.setAttribute("disabled", "");
     }
+}
+
+function _wsStopTts() {
+  if (_wsActiveAudio) { _wsActiveAudio.pause(); _wsActiveAudio = null; }
+  if (_wsSpeechPoll) { clearInterval(_wsSpeechPoll); _wsSpeechPoll = null; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+function addWsTtsButton(bubble) {
+  const speakText = (bubble.textContent || "").trim();
+  if (!speakText) return;
+  const b = el("button", { type: "button", className: "tts-btn", textContent: "🔊", title: "Vorlesen" });
+  function setIdle() { b.textContent = "🔊"; b.disabled = false; }
+  function setSpeaking() { b.textContent = "⏹"; b.disabled = false; }
+  b.addEventListener("click", async () => {
+    if (b.textContent === "⏹") { _wsStopTts(); setIdle(); return; }
+    _wsStopTts();
+    b.disabled = true; b.textContent = "…";
+    try {
+      if (_wsTtsEnabled && httpBase) {
+        const r = await fetch(`${httpBase}/tools/tts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: speakText.slice(0, 5000) }),
+        });
+        if (r.ok) {
+          const audio = new Audio(URL.createObjectURL(await r.blob()));
+          _wsActiveAudio = audio;
+          audio.onended = () => { _wsActiveAudio = null; setIdle(); };
+          audio.onerror = () => { _wsActiveAudio = null; setIdle(); };
+          try { await audio.play(); setSpeaking(); return; } catch { _wsActiveAudio = null; }
+        }
+      }
+      if (!window.speechSynthesis) { setIdle(); return; }
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(speakText.slice(0, 5000));
+      window.speechSynthesis.speak(utt);
+      setSpeaking();
+      _wsSpeechPoll = setInterval(() => {
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          clearInterval(_wsSpeechPoll); _wsSpeechPoll = null; setIdle();
+        }
+      }, 300);
+    } catch { setIdle(); }
+  });
+  bubble.appendChild(b);
 }
 
 const viewEl = document.getElementById("ws-view");
@@ -228,13 +283,6 @@ async function toggleFileSensitive(makeSensitive) {
   }
 }
 
-function openVaultFileInTab(rel) {
-  const url = chrome.runtime.getURL(
-    `workspace/workspace.html?vault_id=${encodeURIComponent(vaultId)}&rel_path=${encodeURIComponent(rel)}`
-  );
-  chrome.tabs.create({ url });
-}
-
 async function loadFile(path) {
   if (path !== undefined) currentLoadedPath = path;
   if (isImagePath(currentLoadedPath)) {
@@ -289,7 +337,9 @@ function renderView() {
   viewEl.style.display = "";
   bannerEl.style.display = "none";
   if (isBasePath(currentLoadedPath)) {
-    renderBaseInto(viewEl, httpBase, vaultId, currentLoadedPath, openVaultFileInTab);
+    renderBaseInto(viewEl, httpBase, vaultId, currentLoadedPath, navigateTo).then(() => {
+      if (currentLoadedPath === CRM_BASE_PATH) mountCrmIo(viewEl, httpBase, vaultId, () => loadFile());
+    });
     buildToolbar();
     return;
   }
@@ -426,6 +476,8 @@ function addChatMsg(role, initialText = "", streaming = true) {
   } else if (initialText) {
     bubble.innerHTML = renderMarkdown(initialText);
     wireVaultImages(bubble);
+    wireVaultPaths(bubble);
+    addWsTtsButton(bubble);
   } else if (streaming) {
     bubble.classList.add("streaming");
   }
@@ -492,6 +544,7 @@ async function sendChat() {
       bubble.classList.remove("streaming");
       wireVaultPaths(bubble);
       if (!assistantText.trim()) bubble.textContent = "(keine Antwort)";
+      addWsTtsButton(bubble);
       const u = data.usage || {};
       const cacheHit = u.cache_read_input_tokens ? ` · cache-hit ${u.cache_read_input_tokens}` : "";
       const fileInfo = chatMode === "file" ? ` · Datei: ${rawContent.length} Zeichen` : "";
@@ -557,6 +610,289 @@ async function sendChat() {
   }
 }
 
+// ---- General Chat (chat_mode=general) ---------------------------------------
+
+const GENERAL_PROVIDERS = [
+  { id: "anthropic",  label: "Anthropic",  models: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] },
+  { id: "openai",     label: "OpenAI",     models: ["gpt-4o", "gpt-4o-mini", "o3"] },
+  { id: "mistral",    label: "Mistral",    models: ["mistral-large-latest", "mistral-small-latest"] },
+  { id: "ollama",     label: "Ollama",     models: ["llama3.2", "llama3.1", "gemma3", "mistral"] },
+  { id: "openrouter", label: "OpenRouter", models: ["anthropic/claude-opus-4", "openai/gpt-4o", "google/gemini-pro"] },
+];
+
+function buildProviderSelect(selectEl, modelSelEl, customInputEl, activeProvider, activeModel) {
+  selectEl.replaceChildren();
+  for (const p of GENERAL_PROVIDERS) {
+    selectEl.append(el("option", { value: p.id, textContent: p.label }));
+  }
+  selectEl.value = activeProvider || "anthropic";
+
+  function refreshModels() {
+    const p = GENERAL_PROVIDERS.find((x) => x.id === selectEl.value) || GENERAL_PROVIDERS[0];
+    modelSelEl.replaceChildren();
+    for (const m of p.models) modelSelEl.append(el("option", { value: m, textContent: m }));
+    modelSelEl.append(el("option", { value: "__custom__", textContent: "— Eigenes Modell —" }));
+    return p.models[0] || "";
+  }
+
+  function applyModel(target) {
+    const options = Array.from(modelSelEl.options).map((o) => o.value);
+    if (options.includes(target)) {
+      modelSelEl.value = target;
+      customInputEl.style.display = "none";
+    } else if (target) {
+      modelSelEl.value = "__custom__";
+      customInputEl.value = target;
+      customInputEl.style.display = "";
+    }
+  }
+
+  refreshModels();
+  applyModel(activeModel || "");
+
+  modelSelEl.addEventListener("change", () => {
+    const isCustom = modelSelEl.value === "__custom__";
+    customInputEl.style.display = isCustom ? "" : "none";
+    if (isCustom) customInputEl.focus();
+  });
+
+  selectEl.addEventListener("change", () => {
+    const def = refreshModels();
+    modelSelEl.value = def;
+    customInputEl.style.display = "none";
+    customInputEl.value = "";
+  });
+}
+
+function getColModel(n) {
+  const sel = document.getElementById(`ws-gen-model-${n}`);
+  if (sel && sel.value === "__custom__") {
+    return (document.getElementById(`ws-gen-model-custom-${n}`)?.value || "").trim();
+  }
+  return sel ? sel.value : "";
+}
+
+function addGenChatMsg(logEl, role, text = "", streaming = false) {
+  const wrap = el("div", { className: `ws-chat-msg ${role}` });
+  const bubble = el("div", { className: "ws-chat-bubble" });
+  if (role === "user") {
+    bubble.textContent = text;
+  } else if (text) {
+    bubble.innerHTML = renderMarkdown(text);
+    if (streaming) bubble.classList.add("streaming");
+  } else if (streaming) {
+    bubble.classList.add("streaming");
+  }
+  wrap.append(bubble);
+  logEl.append(wrap);
+  logEl.scrollTop = logEl.scrollHeight;
+  return bubble;
+}
+
+async function streamGeneral({ logEl, statusEl, message, history, provider, model }) {
+  const bubble = addGenChatMsg(logEl, "assistant", "", true);
+  let accumulated = "";
+
+  try {
+    const res = await fetch(`${httpBase}/tools/chat/general/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ message, history, provider: provider || null, model: model || null }),
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\n\n/);
+      buffer = events.pop();
+      for (const block of events) {
+        let eventName = "message";
+        const dataLines = [];
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        }
+        if (!dataLines.length) continue;
+        let parsed = null;
+        try { parsed = JSON.parse(dataLines.join("\n")); } catch { continue; }
+
+        if (eventName === "text_delta") {
+          accumulated += parsed.text;
+          bubble.innerHTML = renderMarkdown(accumulated);
+          logEl.scrollTop = logEl.scrollHeight;
+        } else if (eventName === "done") {
+          bubble.classList.remove("streaming");
+          if (!accumulated.trim()) bubble.textContent = "(keine Antwort)";
+          addWsTtsButton(bubble);
+          const u = parsed.usage || {};
+          statusEl.textContent = `${u.input_tokens || 0} in / ${u.output_tokens || 0} out Tokens`;
+          return parsed.messages || history;
+        } else if (eventName === "error") {
+          bubble.classList.remove("streaming");
+          bubble.classList.add("error");
+          bubble.textContent = "Fehler: " + (parsed.message || "?");
+          statusEl.textContent = "";
+          return history;
+        }
+      }
+    }
+  } catch (err) {
+    bubble.classList.remove("streaming");
+    bubble.classList.add("error");
+    bubble.textContent = "Fehler: " + (err.message || err);
+    statusEl.textContent = "";
+  }
+  return history;
+}
+
+async function bootGeneral() {
+  await applyStoredTheme();
+
+  // Layout-Toggle und Back-Button sind im general-Modus nicht relevant
+  document.getElementById("ws-layout-toggle").style.display = "none";
+  document.getElementById("ws-back-btn").style.display = "none";
+  document.getElementById("ws-file-path").textContent = "Allgemeiner Chat";
+  document.title = "Chat — EwtosBrain";
+
+  // ws-split ausblenden, ws-general einblenden
+  splitEl.style.display = "none";
+  const genEl = document.getElementById("ws-general");
+  genEl.style.display = "flex";
+
+  httpBase = await getHttpBase();
+
+  // Aktiven Provider/Modell aus Settings holen
+  let activeProvider = "anthropic";
+  let activeModel = "";
+  try {
+    const res = await fetch(`${httpBase}/settings`);
+    if (res.ok) {
+      const s = await res.json();
+      activeProvider = s.llm_provider || "anthropic";
+      activeModel = s.llm_model || s.chat_model || "";
+    }
+  } catch (_) {}
+
+  // Provider-Selects + Modell-Dropdowns aufbauen
+  const provSel1 = document.getElementById("ws-gen-provider-1");
+  const modSel1 = document.getElementById("ws-gen-model-1");
+  const modCustom1 = document.getElementById("ws-gen-model-custom-1");
+  buildProviderSelect(provSel1, modSel1, modCustom1, activeProvider, activeModel);
+
+  const provSel2 = document.getElementById("ws-gen-provider-2");
+  const modSel2 = document.getElementById("ws-gen-model-2");
+  const modCustom2 = document.getElementById("ws-gen-model-custom-2");
+  buildProviderSelect(provSel2, modSel2, modCustom2, "openai", "gpt-4o");
+
+  // Histories pro Spalte (ephemer, clientseitig)
+  const histories = [[], []];
+  let twoModel = false;
+  let busy = false;
+
+  const colsEl = document.getElementById("ws-gen-cols");
+  const col2El = document.getElementById("ws-gen-col-2");
+  const addModelBtn = document.getElementById("ws-gen-add-model");
+  const inputHint = document.getElementById("ws-gen-input-hint");
+  const inputEl = document.getElementById("ws-gen-input");
+  const sendBtn = document.getElementById("ws-gen-send");
+  const log1 = document.getElementById("ws-gen-log-1");
+  const log2 = document.getElementById("ws-gen-log-2");
+  const status1 = document.getElementById("ws-gen-status-1");
+  const status2 = document.getElementById("ws-gen-status-2");
+
+  function updateHint() {
+    inputHint.textContent = twoModel
+      ? "Eine Eingabe → beide Modelle antworten parallel"
+      : "";
+  }
+  updateHint();
+
+  addModelBtn.addEventListener("click", () => {
+    twoModel = !twoModel;
+    col2El.style.display = twoModel ? "flex" : "none";
+    addModelBtn.textContent = twoModel ? "− 2. Modell" : "+ 2. Modell";
+    updateHint();
+  });
+
+  document.getElementById("ws-gen-clear").addEventListener("click", () => {
+    if (!confirm("Chat-Verlauf löschen?")) return;
+    histories[0] = []; histories[1] = [];
+    log1.replaceChildren(); log2.replaceChildren();
+    status1.textContent = ""; status2.textContent = "";
+  });
+
+  async function send() {
+    const message = inputEl.value.trim();
+    if (!message || busy) return;
+    busy = true;
+    sendBtn.disabled = true;
+    inputEl.disabled = true;
+    inputEl.value = "";
+
+    addGenChatMsg(log1, "user", message);
+    if (twoModel) addGenChatMsg(log2, "user", message);
+
+    status1.textContent = "…";
+    if (twoModel) status2.textContent = "…";
+
+    const p1 = provSel1.value;
+    const m1 = getColModel(1);
+    const p2 = provSel2.value;
+    const m2 = getColModel(2);
+
+    const tasks = [
+      streamGeneral({ logEl: log1, statusEl: status1, message, history: histories[0], provider: p1, model: m1 })
+        .then((h) => { histories[0] = h; }),
+    ];
+    if (twoModel) {
+      tasks.push(
+        streamGeneral({ logEl: log2, statusEl: status2, message, history: histories[1], provider: p2, model: m2 })
+          .then((h) => { histories[1] = h; }),
+      );
+    }
+
+    await Promise.all(tasks);
+    busy = false;
+    sendBtn.disabled = false;
+    inputEl.disabled = false;
+    inputEl.focus();
+  }
+
+  sendBtn.addEventListener("click", send);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  // Mic — Spracheingabe
+  const micBtn = document.getElementById("ws-gen-mic");
+  let micRecognition = null;
+  micBtn?.addEventListener("click", () => {
+    if (micRecognition) {
+      micRecognition.stop(); micRecognition = null; micBtn.classList.remove("recording"); return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Spracheingabe nicht verfügbar."); return; }
+    const r = new SR();
+    r.lang = "de-DE"; r.interimResults = true; r.continuous = false;
+    const base = inputEl.value;
+    r.onresult = (e) => {
+      inputEl.value = base + Array.from(e.results).map((x) => x[0].transcript).join("");
+    };
+    r.onend = () => { micRecognition = null; micBtn.classList.remove("recording"); };
+    r.onerror = () => { micRecognition = null; micBtn.classList.remove("recording"); };
+    micRecognition = r;
+    r.start();
+    micBtn.classList.add("recording");
+  });
+
+  inputEl.focus();
+}
+
 // ---- Boot -------------------------------------------------------------------
 
 // Eigene Tab-ID merken, um Broadcasts auf den richtigen Workspace-Tab zu filtern.
@@ -581,6 +917,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 async function boot() {
+  if (chatModeParam === "general") {
+    await bootGeneral();
+    return;
+  }
+
   await applyStoredTheme();
   await loadStoredLayout();
   layoutToggleBtn.addEventListener("click", toggleLayout);
@@ -605,18 +946,16 @@ async function boot() {
 
   document.getElementById("ws-reload-btn").addEventListener("click", () => loadFile().catch(() => {}));
 
-  // Wiki-Links in der Datei-Ansicht (linke Seite) → neuer Tab
+  // Wiki-Links in der Datei-Ansicht (linke Seite, inkl. Frontmatter) → im selben
+  // Tab navigieren, damit der Zurück-Button greift.
   viewEl.addEventListener("click", (e) => {
     const link = e.target.closest("a.wiki-link");
     if (!link) return;
     e.preventDefault();
     let rel = link.getAttribute("data-rel");
     if (!rel) return;
-    if (!/\.(md|txt)$/i.test(rel)) rel = rel + ".md";
-    const url = chrome.runtime.getURL(
-      `workspace/workspace.html?vault_id=${encodeURIComponent(vaultId)}&rel_path=${encodeURIComponent(rel)}`
-    );
-    chrome.tabs.create({ url });
+    if (!/\.[a-z0-9]+$/i.test(rel)) rel += ".md";
+    navigateTo(rel);
   });
 
   // Wiki-Links + Code-Spans mit Vault-Pfaden in Chat-Antworten → navigateTo
@@ -753,6 +1092,7 @@ async function boot() {
     const sr = await fetch(`${httpBase}/settings`);
     if (sr.ok) {
       const s = await sr.json();
+      _wsTtsEnabled = s.chat_tts_enabled === true;
       if (searchToggle) searchToggle.checked = s.vault_search_enabled !== false;
       if (activityToggle) {
         activityToggle.checked = s.chat_show_activity !== false;

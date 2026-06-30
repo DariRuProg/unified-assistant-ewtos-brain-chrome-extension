@@ -17,7 +17,7 @@ router = APIRouter()
 async def briefing_get(
     profile: str = "default",
     vault_id: str | None = None,
-    archive: bool = True,
+    archive: bool = False,
 ) -> dict[str, Any]:
     try:
         data = await briefing_tool.get_briefing(

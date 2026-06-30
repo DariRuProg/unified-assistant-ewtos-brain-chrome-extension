@@ -2,7 +2,7 @@
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { getHttpBase } from '../modules/api.js';
-import { renderMarkdown } from '../markdown.js';
+import { renderMarkdown, wireVaultImages as wireVaultImagesShared } from '../markdown.js';
 import { openTool } from '../modules/tool-runner.js';
 import { t } from '../../i18n/i18n.js';
 
@@ -350,14 +350,7 @@ export async function renderChat() {
   // Lokale Vault-Bilder (![alt](assets/..)) im gerenderten Markdown über den Asset-Endpoint
   // laden — analog zum Vault-Explorer, damit generierte Bilder direkt im Chat erscheinen.
   function wireVaultImages(container) {
-    const vid = effectiveVaultId();
-    if (!vid) return;
-    container.querySelectorAll("img.md-image[data-vault-src]").forEach((img) => {
-      if (img.getAttribute("src")) return;
-      const rel = img.getAttribute("data-vault-src");
-      img.src = `${httpBase}/tools/vault_asset/${encodeURIComponent(vid)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
-      img.addEventListener("error", () => { img.replaceWith(document.createTextNode(`[${rel}]`)); });
-    });
+    wireVaultImagesShared(container, effectiveVaultId(), httpBase);
   }
 
   function renderLog(messages, emptyMsg = t("chat.empty")) {

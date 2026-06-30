@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import os
+import secrets as _secrets
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -220,6 +222,8 @@ def update_vault(vault_id: str, **fields: Any) -> dict[str, Any] | None:
                     updated[k] = fields[k]
             if "use_local_notes" in fields and fields["use_local_notes"] is not None:
                 updated["use_local_notes"] = bool(fields["use_local_notes"])
+            if "members" in fields and fields["members"] is not None:
+                updated["members"] = [str(m) for m in fields["members"] if m]
             if "permissions" in fields and fields["permissions"] is not None:
                 merged = dict(DEFAULT_VAULT_PERMISSIONS)
                 merged.update(updated.get("permissions") or {})
@@ -375,6 +379,193 @@ def remove_vault(vault_id: str) -> bool:
     _cache = current
     _flush()
     return True
+
+
+# --- Auth: Users / Sessions / Seats (F0) ----------------------------------
+
+DEFAULT_LICENSING = {"seat_limit": None, "tier": "free", "license_key": None}
+SESSION_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 Tage — danach gilt ein Seat als frei
+
+
+def get_or_create_jwt_secret() -> str:
+    """Stabiler Signier-Schlüssel für Login-Tokens. .env (config.SECRET_KEY) hat
+    Vorrang; sonst wird einmalig ein Secret generiert und in settings.json persistiert."""
+    if config.SECRET_KEY:
+        return config.SECRET_KEY
+    global _cache
+    current = all()
+    sec = current.get("jwt_secret")
+    if not sec:
+        sec = _secrets.token_urlsafe(48)
+        current["jwt_secret"] = sec
+        _cache = current
+        _flush()
+    return sec
+
+
+def get_users() -> list[dict[str, Any]]:
+    return list(all().get("users") or [])
+
+
+def user_count() -> int:
+    return len(all().get("users") or [])
+
+
+def get_user(user_id: str) -> dict[str, Any] | None:
+    for u in get_users():
+        if u.get("id") == user_id:
+            return dict(u)
+    return None
+
+
+def get_user_by_username(username: str) -> dict[str, Any] | None:
+    uname = (username or "").strip().lower()
+    if not uname:
+        return None
+    for u in get_users():
+        if (u.get("username") or "").lower() == uname:
+            return dict(u)
+    return None
+
+
+def add_user(username: str, password_hash: str, role: str = "member") -> dict[str, Any]:
+    global _cache
+    username = (username or "").strip()
+    if not username:
+        raise ValueError("Username fehlt")
+    if get_user_by_username(username):
+        raise ValueError("Username existiert bereits")
+    current = all()
+    users = list(current.get("users") or [])
+    user = {
+        "id": _new_id(),
+        "username": username,
+        "password_hash": password_hash,
+        "role": role if role in ("admin", "member") else "member",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    users.append(user)
+    current["users"] = users
+    _cache = current
+    _flush()
+    return dict(user)
+
+
+def remove_user(user_id: str) -> bool:
+    global _cache
+    current = all()
+    users = list(current.get("users") or [])
+    new_users = [u for u in users if u.get("id") != user_id]
+    if len(new_users) == len(users):
+        return False
+    current["users"] = new_users
+    # Sessions des entfernten Users gleich mit aufräumen
+    current["sessions"] = [s for s in (current.get("sessions") or []) if s.get("user_id") != user_id]
+    _cache = current
+    _flush()
+    return True
+
+
+def _prune_sessions(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    now = time.time()
+    return [s for s in sessions if (now - float(s.get("last_seen", 0))) < SESSION_TTL_SECONDS]
+
+
+def register_session(user_id: str, instance_token: str, device_name: str = "") -> None:
+    """Registriert/aktualisiert eine Geräte-Session (Seat). instance_token ist eine
+    pro Extension-Installation stabile UUID."""
+    global _cache
+    current = all()
+    sessions = _prune_sessions(list(current.get("sessions") or []))
+    now = time.time()
+    for s in sessions:
+        if s.get("instance_token") == instance_token:
+            s["user_id"] = user_id
+            s["last_seen"] = now
+            if device_name:
+                s["device_name"] = device_name
+            break
+    else:
+        sessions.append({
+            "user_id": user_id,
+            "instance_token": instance_token,
+            "device_name": device_name,
+            "created_at": now,
+            "last_seen": now,
+        })
+    current["sessions"] = sessions
+    _cache = current
+    _flush()
+
+
+def licensing() -> dict[str, Any]:
+    out = dict(DEFAULT_LICENSING)
+    out.update(all().get("licensing") or {})
+    return out
+
+
+def seat_limit() -> int | None:
+    return licensing().get("seat_limit")
+
+
+def active_seat_count() -> int:
+    sessions = _prune_sessions(list(all().get("sessions") or []))
+    return len({s.get("instance_token") for s in sessions if s.get("instance_token")})
+
+
+def seat_available(instance_token: str) -> bool:
+    """True, wenn dieses Gerät einen Seat belegen darf. seat_limit None = unbegrenzt.
+    Ein bereits registriertes Gerät zählt nicht erneut."""
+    limit = seat_limit()
+    if limit is None:
+        return True
+    sessions = _prune_sessions(list(all().get("sessions") or []))
+    tokens = {s.get("instance_token") for s in sessions if s.get("instance_token")}
+    if instance_token in tokens:
+        return True
+    return len(tokens) < int(limit)
+
+
+# --- Per-Vault-Rechte (F0) -------------------------------------------------
+
+def vault_members(vault_id: str) -> list[str]:
+    v = get_vault(vault_id)
+    return list(v.get("members") or []) if v else []
+
+
+def set_vault_members(vault_id: str, members: list[str]) -> list[str] | None:
+    global _cache
+    current = all()
+    vaults = list(current.get("vaults") or [])
+    for i, v in enumerate(vaults):
+        if v.get("id") == vault_id:
+            updated = dict(v)
+            updated["members"] = [str(m) for m in (members or []) if m]
+            vaults[i] = updated
+            current["vaults"] = vaults
+            _cache = current
+            _flush()
+            return updated["members"]
+    return None
+
+
+def user_can_access_vault(user_id: str | None, vault_id: str) -> bool:
+    """Open-Mode (kein user_id, keine User) → frei. Admin → alles. Sonst: Vault
+    ohne members-Liste ist für alle angemeldeten User offen; mit Liste nur für
+    eingetragene Mitglieder."""
+    if user_count() == 0:
+        return True
+    if user_id:
+        u = get_user(user_id)
+        if u and u.get("role") == "admin":
+            return True
+    v = get_vault(vault_id)
+    if not v:
+        return False
+    members = v.get("members") or []
+    if not members:
+        return True
+    return bool(user_id) and user_id in members
 
 
 def migrate_legacy_vault_path(default_chat_file: Path) -> dict[str, Any] | None:
