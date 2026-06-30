@@ -586,6 +586,56 @@ body {
 .scrape-status.err { color: #ef4444; }
 .scrape-status.ok { color: #22c55e; }
 
+/* CALLOUT / PITCH / HINT-ARROW / TAGS / SCRAPER-CARDS / CHAT-DOCK */
+.view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
+.vault-top, .web-top {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px 14px 6px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.callout {
+  background: var(--bg-subtle); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.55; color: var(--text);
+}
+.callout-head { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
+.pitch {
+  background: var(--accent); color: var(--accent-tx);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  font-size: 13px; line-height: 1.5;
+}
+.pitch-head { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+.hint-arrow {
+  background: var(--bg-card); border: 1px dashed var(--border);
+  border-radius: 8px; padding: 9px 12px; margin: 8px 0;
+  font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px;
+}
+.hint-arrow::before { content: "\2190"; font-size: 16px; color: var(--accent); flex-shrink: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+.tag {
+  font-size: 10.5px; font-weight: 600; padding: 2px 8px;
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-muted); background: var(--bg-card); letter-spacing: 0.2px;
+}
+.scraper-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.scraper-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-muted);
+}
+.scraper-card-head { font-weight: 700; font-size: 12.5px; color: var(--text); margin-bottom: 3px; }
+.scraper-card-badge {
+  display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 5px;
+  background: var(--accent); color: var(--accent-tx); margin-bottom: 5px; letter-spacing: 0.3px;
+}
+.chat-dock {
+  flex-shrink: 0; border-top: 2px solid var(--border);
+  background: var(--bg-card); padding: 10px 12px;
+}
+.dock-head { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 7px; }
+.chat-dock .chat-log { max-height: 140px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.chat-dock .chat-ex { margin-bottom: 5px; }
+.chat-dock .composer { padding-top: 7px; }
+
 /* CHAT */
 .view-chat { display: flex; flex-direction: column; gap: 8px; }
 .chat-ctx:empty { display: none; }
@@ -991,6 +1041,10 @@ function openInViewport(label, url, md) {
 
 const VIEWS = {
   home: `<div class="view view-home">
+  <div class="callout" style="margin-bottom:12px">
+    <div class="callout-head">Ewtos Office-Brain — dein KI-Mitarbeiter im Browser</div>
+    Vault-Wissen &middot; Browser-Tools &middot; Chat. Self-hosted, BYOK, DSGVO-freundlich &mdash; deine Daten bleiben auf deinem Server.
+  </div>
   <div class="tools-head">Werkzeuge</div>
   <div class="tgroup"><div class="tgroup-label">Vault</div><div class="tiles">
     <button class="tile" data-open="vault">📚<span>Explorer</span></button>
@@ -1019,17 +1073,76 @@ const VIEWS = {
   </div></div>
 </div>`,
   vault: `<div class="view view-vault">
-  <div class="view-head">📚 Vault Explorer<span class="view-sub"> — Datei klicken, öffnet links</span></div>
-  <ul class="filelist" id="filelist"></ul>
-</div>`,
-  web: `<div class="view view-web">
-  <div class="view-head">📄 Page Scrape<span class="view-sub"> — echte URL → Markdown</span></div>
-  <div class="scrape-row">
-    <input id="scrape-url" type="url" placeholder="https://example.com" autocomplete="off">
-    <button id="scrape-go" class="btn-p">Scrapen</button>
+  <div class="vault-top">
+    <div class="callout">
+      <div class="callout-head">📚 Das ist dein Vault &mdash; dein zweites Gehirn.</div>
+      In der echten App liegen hier <strong>deine</strong> Ordner: <code>kontext/</code> (wer du bist &amp; dein Stil), <code>raw/</code> (Quellen, unveränderlich), <code>wiki/</code> (LLM-kuratiert), PARA-Buckets. Die KI liest die Wiki-Seiten wie ein Mensch im Wiki &mdash; keine Vektor-DB, kein Embedding-Aufwand (Karpathy-Methode).
+    </div>
+    <div class="hint-arrow">Klick eine Datei &mdash; sie öffnet links im Viewport. In der echten App kannst du sie dort direkt editieren und speichern. Diese Demo ist read-only.</div>
+    <ul class="filelist" id="filelist"></ul>
+    <div class="tags">
+      <span class="tag">read-only Demo</span>
+      <span class="tag">dein Server, deine Daten</span>
+      <span class="tag">DSGVO-freundlich</span>
+      <span class="tag">kein Cloud-Lock-in</span>
+    </div>
   </div>
-  <div class="scrape-status" id="scrape-status"></div>
-  <p class="view-note">Holt die Seite serverseitig, wandelt sie in Markdown und zeigt sie links. Danach kannst du im Chat „über diese Seite“ reden.</p>
+  <div class="chat-dock">
+    <div class="dock-head">💬 Frag direkt zum Vault-Wissen</div>
+    <div class="chat-ctx" id="chat-ctx"></div>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="chat-ex" id="chat-ex">
+      <button data-q="Was ist die Karpathy-Methode und warum kein RAG?">Karpathy-Methode?</button>
+      <button data-q="Welche Ordner hat ein Vault und was bedeuten sie?">Vault-Struktur?</button>
+    </div>
+    <div class="composer">
+      <textarea id="msg" rows="2" placeholder="Frag zum Vault-Wissen…"></textarea>
+      <button id="send-btn" class="btn-p">Senden</button>
+    </div>
+  </div>
+</div>`,
+  web: `<div class=”view view-web”>
+  <div class=”web-top”>
+    <div class=”pitch”>
+      <div class=”pitch-head”>&#x26A1; Webseite &#x2192; sauberes Markdown. In Sekunden.</div>
+      Kein Copy-Paste, kein Chaos. EwtosBrain scrapt jede URL, extrahiert den Inhalt und wandelt ihn in strukturiertes, KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
+    </div>
+    <div class=”scrape-row”>
+      <input id=”scrape-url” type=”url” placeholder=”https://example.com” autocomplete=”off”>
+      <button id=”scrape-go” class=”btn-p”>Scrapen</button>
+    </div>
+    <div class=”scrape-status” id=”scrape-status”></div>
+    <div class=”callout” style=”margin-top:10px”>
+      <div class=”callout-head”>Zwei Scraper &mdash; ein Ergebnis</div>
+      <div class=”scraper-cards”>
+        <div class=”scraper-card”>
+          <div class=”scraper-card-badge”>DOM</div>
+          <div class=”scraper-card-head”>Browser-Scraper</div>
+          Liest das gerenderte DOM direkt im Tab &mdash; blitzschnell, sieht was du siehst, funktioniert auch hinter Login.
+        </div>
+        <div class=”scraper-card”>
+          <div class=”scraper-card-badge”>Playwright</div>
+          <div class=”scraper-card-head”>Server-Scraper</div>
+          Headless Chrome, rendert JavaScript voll, scrollt automatisch, klickt FAQ und Accordeons einzeln auf.
+        </div>
+      </div>
+      <p style=”font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.5”>Diese Demo nutzt einen leichten Server-Fetch (kein Browser im Container). F&uuml;r SPAs und JS-lastige Seiten: die echte App hat beide Scraper &mdash; gleiche Ausgabe, doppelte Abdeckung.</p>
+    </div>
+  </div>
+  <div class=”chat-dock”>
+    <div class=”dock-head” id=”dock-title”>💬 Frag &uuml;ber diese Seite</div>
+    <div class=”chat-ctx” id=”chat-ctx”></div>
+    <div class=”chat-log” id=”chat-log”></div>
+    <div class=”chat-ex” id=”chat-ex”>
+      <button data-q=”Was ist der Kerninhalt dieser Seite?”>Kerninhalt?</button>
+      <button data-q=”Fasse diese Seite in 3 Sätzen zusammen.”>Zusammenfassung</button>
+      <button data-q=”Welche Produkte oder Dienstleistungen werden angeboten?”>Angebote?</button>
+    </div>
+    <div class=”composer”>
+      <textarea id=”msg” rows=”2” placeholder=”Frag &uuml;ber den Seiteninhalt…”></textarea>
+      <button id=”send-btn” class=”btn-p”>Senden</button>
+    </div>
+  </div>
 </div>`,
   chat: `<div class="view view-chat">
   <div class="chat-ctx" id="chat-ctx"></div>
@@ -1074,6 +1187,7 @@ function setView(name) {
       $$("#filelist .f-item").forEach((el) => {
         el.addEventListener("click", () => openFile(el.dataset.path));
       });
+      wireChat();
     });
   } else if (name === "web") wireWeb();
   else if (name === "chat") wireChat();
@@ -1160,6 +1274,7 @@ function wireWeb() {
       }
     });
   }
+  wireChat();
 }
 
 async function doScrape() {
@@ -1206,6 +1321,8 @@ async function doScrape() {
       status.textContent = "Gescrapt: " + (data.wordCount || 0) + " Wörter";
       status.className = "scrape-status ok";
     }
+    const dockTitle = $("#dock-title");
+    if (dockTitle) dockTitle.innerHTML = "&#x1F4AC; Frag über <b>" + escapeHtml(host) + "</b>";
     updateCtxPill();
   } catch (e) {
     if (status) {
