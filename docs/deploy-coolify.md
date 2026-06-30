@@ -13,8 +13,22 @@ Reverse-Proxy und automatisches HTTPS — das ist deine „Ein-Klick"-Lösung.
 - Das Repo ist in Coolify erreichbar (GitHub/GitLab verbunden, oder öffentliche Repo-URL).
 - Eine (Sub-)Domain, z.B. `demo.ewtos.com`, mit **A-Record auf die Server-IP**.
 
+## GitHub verbinden — OHNE GitHub App (empfohlen)
+Die „GitHub App"-Variante scheitert, wenn die Coolify-Instanz nur unter einer rohen
+IP/HTTP erreichbar ist (der GitHub-Redirect kommt nicht zurück). Zwei einfachere Wege:
+
+- **Weg A — Repo public:** GitHub → Repo → Settings → Change visibility → Public. Dann in
+  Coolify **+ New → Application → Public Repository** + die HTTPS-URL. Kein Webhook nötig.
+- **Weg B — privat via Deploy Key:** Coolify **+ New → Application → Private Repository
+  (with deploy key)** → Coolify zeigt einen SSH-Public-Key → den in GitHub unter Repo →
+  Settings → **Deploy keys** → Add deploy key einfügen (read-only) → in Coolify die
+  SSH-URL `git@github.com:<user>/<repo>.git` eintragen.
+
+Nachteil beider: kein Auto-Deploy bei `git push` — man klickt „Deploy" manuell (reicht zum
+Start). Auto-Deploy + GitHub App braucht eine Coolify-Instanz mit eigener Domain + HTTPS.
+
 ## 1. Anwendung anlegen
-1. Coolify → **+ New** → **Application** → dein Repo wählen, Branch `master`.
+1. Coolify → **+ New** → **Application** → Quelle nach „GitHub verbinden" oben, Branch `master`.
 2. **Build Pack: Dockerfile** (Coolify findet den `Dockerfile` im Repo-Root automatisch).
 3. **Port** (Ports Exposes): `9988`.
 
@@ -25,15 +39,19 @@ Unter **Environment Variables** eintragen:
 |----------|------|-------|
 | `EWTOS_DEMO_MODE` | `1` | Demo: Beispiel-Vault + read-only (für eine echte Instanz weglassen) |
 | `EWTOS_SECRET_KEY` | `<openssl rand -hex 48>` | stabiler Login-Token-Schlüssel |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | damit der Demo-Chat antworten kann (oder `OPENAI_API_KEY` etc.) |
-| `EWTOS_LLM_PROVIDER` | `anthropic` | **wichtig für Demo:** Provider festnageln (im Demo-Modus ist `/settings` gesperrt) |
-| `EWTOS_LLM_MODEL` | `claude-haiku-4-5-20251001` | **günstiges** Modell für die Demo (sonst greift der teure Default `claude-opus-4-7`) |
 
 `EWTOS_HOST=0.0.0.0` und `EWTOS_PORT=9988` stecken schon im Dockerfile.
 
-> Kostenkontrolle: Da im Demo-Modus `/settings` schreibgeschützt ist, lässt sich das
-> Modell nur über `EWTOS_LLM_PROVIDER` / `EWTOS_LLM_MODEL` setzen — unbedingt ein
-> günstiges Modell wählen.
+**Kein eigener LLM-Key nötig.** Die öffentliche Demo-Seite **`https://demo.ewtos.com/demo`**
+arbeitet **BYOK**: der Besucher trägt seinen eigenen Key ein (Schwerpunkt Gemini Free-Tier),
+der Server macht keine eigenen LLM-Calls. Du musst also **keinen** `ANTHROPIC_API_KEY` o.ä.
+hinterlegen.
+
+> Optional — nur falls du zusätzlich erlauben willst, dass sich die **Extension** gegen die
+> Demo verbindet und dort chattet (dieser Pfad nutzt einen Server-Key): dann
+> `ANTHROPIC_API_KEY` + `EWTOS_LLM_PROVIDER=anthropic` + `EWTOS_LLM_MODEL=claude-haiku-4-5-20251001`
+> setzen (günstiges Modell, da `/settings` im Demo-Modus gesperrt ist). Für die reine
+> `/demo`-Seite ist das **nicht** nötig.
 
 ## 3. Persistentes Datenverzeichnis (empfohlen)
 **Storages** → Persistent Storage hinzufügen, Mount-Pfad **`/data`**. Dorthin schreibt
