@@ -12,6 +12,7 @@ zurück. Alte settings.json läuft ohne Migration weiter.
 from __future__ import annotations
 
 import logging
+import os
 
 import settings
 from llm_providers.anthropic_backend import AnthropicBackend
@@ -28,8 +29,8 @@ def effective_llm_config() -> tuple[str, str]:
     Wenn `llm_provider` nicht gesetzt → "anthropic". Wenn `llm_model` nicht
     gesetzt → Fallback auf `chat_model` (Anthropic-Modellname).
     """
-    provider = (settings.get("llm_provider") or "anthropic").strip().lower()
-    model = (settings.get("llm_model") or settings.get("chat_model") or "").strip()
+    provider = (os.getenv("EWTOS_LLM_PROVIDER") or settings.get("llm_provider") or "anthropic").strip().lower()
+    model = (os.getenv("EWTOS_LLM_MODEL") or settings.get("llm_model") or settings.get("chat_model") or "").strip()
     return provider, model
 
 

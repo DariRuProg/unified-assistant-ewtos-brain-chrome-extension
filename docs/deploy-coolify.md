@@ -26,8 +26,14 @@ Unter **Environment Variables** eintragen:
 | `EWTOS_DEMO_MODE` | `1` | Demo: Beispiel-Vault + read-only (für eine echte Instanz weglassen) |
 | `EWTOS_SECRET_KEY` | `<openssl rand -hex 48>` | stabiler Login-Token-Schlüssel |
 | `ANTHROPIC_API_KEY` | `sk-ant-…` | damit der Demo-Chat antworten kann (oder `OPENAI_API_KEY` etc.) |
+| `EWTOS_LLM_PROVIDER` | `anthropic` | **wichtig für Demo:** Provider festnageln (im Demo-Modus ist `/settings` gesperrt) |
+| `EWTOS_LLM_MODEL` | `claude-haiku-4-5-20251001` | **günstiges** Modell für die Demo (sonst greift der teure Default `claude-opus-4-7`) |
 
 `EWTOS_HOST=0.0.0.0` und `EWTOS_PORT=9988` stecken schon im Dockerfile.
+
+> Kostenkontrolle: Da im Demo-Modus `/settings` schreibgeschützt ist, lässt sich das
+> Modell nur über `EWTOS_LLM_PROVIDER` / `EWTOS_LLM_MODEL` setzen — unbedingt ein
+> günstiges Modell wählen.
 
 ## 3. Persistentes Datenverzeichnis (empfohlen)
 **Storages** → Persistent Storage hinzufügen, Mount-Pfad **`/data`**. Dorthin schreibt
