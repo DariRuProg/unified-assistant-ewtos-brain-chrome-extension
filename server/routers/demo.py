@@ -586,55 +586,72 @@ body {
 .scrape-status.err { color: #ef4444; }
 .scrape-status.ok { color: #22c55e; }
 
-/* CALLOUT / PITCH / HINT-ARROW / TAGS / SCRAPER-CARDS / CHAT-DOCK */
-.view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
-.vault-top, .web-top {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 12px 14px 6px;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-}
-.callout {
-  background: var(--bg-subtle); border: 1px solid var(--border);
-  border-left: 3px solid var(--accent); border-radius: 8px;
-  padding: 10px 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.55; color: var(--text);
-}
-.callout-head { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
+/* PITCH / TAGS / INFO-TOOLTIP / CHAT-DOCK */
+.view-vault, .view-web { padding: 0; }
+.vault-top, .web-top { padding: 12px 14px 80px; }
 .pitch {
   background: var(--accent); color: var(--accent-tx);
-  border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
-  font-size: 13px; line-height: 1.5;
+  border-radius: 9px; padding: 9px 12px; margin-bottom: 11px;
+  font-size: 12.5px; line-height: 1.5;
 }
-.pitch-head { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
-.hint-arrow {
-  background: var(--bg-card); border: 1px dashed var(--border);
-  border-radius: 8px; padding: 9px 12px; margin: 8px 0;
-  font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px;
-}
-.hint-arrow::before { content: "\2190"; font-size: 16px; color: var(--accent); flex-shrink: 0; }
-.tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+.pitch-head { font-weight: 700; font-size: 13.5px; margin-bottom: 2px; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 2px; }
 .tag {
   font-size: 10.5px; font-weight: 600; padding: 2px 8px;
   border: 1px solid var(--border); border-radius: 999px;
   color: var(--text-muted); background: var(--bg-card); letter-spacing: 0.2px;
 }
-.scraper-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
-.scraper-card {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 8px; padding: 9px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-muted);
+
+/* Info-Tooltip (hover) */
+.info-wrap {
+  position: relative; display: inline-flex; align-items: center;
+  vertical-align: middle; margin-left: 5px;
 }
-.scraper-card-head { font-weight: 700; font-size: 12.5px; color: var(--text); margin-bottom: 3px; }
-.scraper-card-badge {
-  display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 5px;
-  background: var(--accent); color: var(--accent-tx); margin-bottom: 5px; letter-spacing: 0.3px;
+.info-btn {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-subtle); border: 1px solid var(--border-input);
+  color: var(--text-muted); font-size: 10px; font-weight: 700; font-style: normal;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: default; flex-shrink: 0; line-height: 1; user-select: none;
 }
+.tip {
+  display: none; position: absolute; z-index: 40;
+  bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  min-width: 230px; max-width: 270px;
+  padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 9px; font-size: 12px; line-height: 1.55; color: var(--text);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2); pointer-events: none; white-space: normal;
+}
+.tip::after {
+  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--border);
+}
+.tip::before {
+  content: ""; position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--bg-card); z-index: 1;
+}
+.info-wrap:hover .tip { display: block; }
+
+/* Scraper-Info-Zeile */
+.scraper-hint {
+  font-size: 11.5px; color: var(--text-muted); margin-top: 8px;
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+}
+.scraper-hint strong { color: var(--text); }
+
+/* Chat-Dock: sticky am unteren Rand */
 .chat-dock {
-  flex-shrink: 0; border-top: 2px solid var(--border);
-  background: var(--bg-card); padding: 10px 12px;
+  position: sticky; bottom: 0;
+  border-top: 2px solid var(--border); background: var(--bg-card); padding: 10px 12px;
 }
 .dock-head { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 7px; }
-.chat-dock .chat-log { max-height: 140px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.chat-dock .chat-log {
+  max-height: 220px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
 .chat-dock .chat-ex { margin-bottom: 5px; }
 .chat-dock .composer { padding-top: 7px; }
+.chat-dock .composer #msg { min-height: 58px; }
 
 /* CHAT */
 .view-chat { display: flex; flex-direction: column; gap: 8px; }
@@ -1041,9 +1058,9 @@ function openInViewport(label, url, md) {
 
 const VIEWS = {
   home: `<div class="view view-home">
-  <div class="callout" style="margin-bottom:12px">
-    <div class="callout-head">Ewtos Office-Brain — dein KI-Mitarbeiter im Browser</div>
-    Vault-Wissen &middot; Browser-Tools &middot; Chat. Self-hosted, BYOK, DSGVO-freundlich &mdash; deine Daten bleiben auf deinem Server.
+  <div class="tools-head" style="padding-bottom:6px">
+    Ewtos Office-Brain
+    <span class="view-sub"> &mdash; Vault &middot; Browser-Tools &middot; Chat &middot; BYOK</span>
   </div>
   <div class="tools-head">Werkzeuge</div>
   <div class="tgroup"><div class="tgroup-label">Vault</div><div class="tiles">
@@ -1074,16 +1091,20 @@ const VIEWS = {
 </div>`,
   vault: `<div class="view view-vault">
   <div class="vault-top">
-    <div class="callout">
-      <div class="callout-head">📚 Das ist dein Vault &mdash; dein zweites Gehirn.</div>
-      In der echten App liegen hier <strong>deine</strong> Ordner: <code>kontext/</code> (wer du bist &amp; dein Stil), <code>raw/</code> (Quellen, unveränderlich), <code>wiki/</code> (LLM-kuratiert), PARA-Buckets. Die KI liest die Wiki-Seiten wie ein Mensch im Wiki &mdash; keine Vektor-DB, kein Embedding-Aufwand (Karpathy-Methode).
+    <div class="view-head">
+      📚 Vault Explorer
+      <span class="info-wrap"><i class="info-btn">i</i><div class="tip">Dein zweites Gehirn. In der echten App: deine eigenen Ordner &mdash; kontext/ (wer du bist), raw/ (Quellen, immutable), wiki/ (LLM-kuratiert), PARA-Buckets. KI liest Wiki-Seiten direkt &mdash; keine Vektor-DB (Karpathy-Methode).</div></span>
+      <span class="view-sub"> &mdash; Datei klicken, öffnet links</span>
     </div>
-    <div class="hint-arrow">Klick eine Datei &mdash; sie öffnet links im Viewport. In der echten App kannst du sie dort direkt editieren und speichern. Diese Demo ist read-only.</div>
+    <p class="view-note" style="margin-bottom:6px">
+      &#x2190; In der echten App direkt editierbar &amp; speicherbar.
+      <span class="info-wrap"><i class="info-btn">i</i><div class="tip">Demo = read-only. Echte App: Datei links im Viewport öffnen, tippen, Strg+S &mdash; Vault wird sofort aktualisiert. Kein separates Editor-Fenster nötig.</div></span>
+    </p>
     <ul class="filelist" id="filelist"></ul>
     <div class="tags">
       <span class="tag">read-only Demo</span>
-      <span class="tag">dein Server, deine Daten</span>
-      <span class="tag">DSGVO-freundlich</span>
+      <span class="tag">dein Server</span>
+      <span class="tag">DSGVO</span>
       <span class="tag">kein Cloud-Lock-in</span>
     </div>
   </div>
@@ -1094,9 +1115,10 @@ const VIEWS = {
     <div class="chat-ex" id="chat-ex">
       <button data-q="Was ist die Karpathy-Methode und warum kein RAG?">Karpathy-Methode?</button>
       <button data-q="Welche Ordner hat ein Vault und was bedeuten sie?">Vault-Struktur?</button>
+      <button data-q="Wie funktioniert Chat mit Vault-Wissen?">Wie funktioniert Chat?</button>
     </div>
     <div class="composer">
-      <textarea id="msg" rows="2" placeholder="Frag zum Vault-Wissen…"></textarea>
+      <textarea id="msg" rows="3" placeholder="Frag zum Vault-Wissen…"></textarea>
       <button id="send-btn" class="btn-p">Senden</button>
     </div>
   </div>
@@ -1104,29 +1126,18 @@ const VIEWS = {
   web: `<div class=”view view-web”>
   <div class=”web-top”>
     <div class=”pitch”>
-      <div class=”pitch-head”>&#x26A1; Webseite &#x2192; sauberes Markdown. In Sekunden.</div>
-      Kein Copy-Paste, kein Chaos. EwtosBrain scrapt jede URL, extrahiert den Inhalt und wandelt ihn in strukturiertes, KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
+      <div class=”pitch-head”>&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
+      Jede Webseite in KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
     </div>
     <div class=”scrape-row”>
       <input id=”scrape-url” type=”url” placeholder=”https://example.com” autocomplete=”off”>
       <button id=”scrape-go” class=”btn-p”>Scrapen</button>
     </div>
     <div class=”scrape-status” id=”scrape-status”></div>
-    <div class=”callout” style=”margin-top:10px”>
-      <div class=”callout-head”>Zwei Scraper &mdash; ein Ergebnis</div>
-      <div class=”scraper-cards”>
-        <div class=”scraper-card”>
-          <div class=”scraper-card-badge”>DOM</div>
-          <div class=”scraper-card-head”>Browser-Scraper</div>
-          Liest das gerenderte DOM direkt im Tab &mdash; blitzschnell, sieht was du siehst, funktioniert auch hinter Login.
-        </div>
-        <div class=”scraper-card”>
-          <div class=”scraper-card-badge”>Playwright</div>
-          <div class=”scraper-card-head”>Server-Scraper</div>
-          Headless Chrome, rendert JavaScript voll, scrollt automatisch, klickt FAQ und Accordeons einzeln auf.
-        </div>
-      </div>
-      <p style=”font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.5”>Diese Demo nutzt einen leichten Server-Fetch (kein Browser im Container). F&uuml;r SPAs und JS-lastige Seiten: die echte App hat beide Scraper &mdash; gleiche Ausgabe, doppelte Abdeckung.</p>
+    <div class=”scraper-hint”>
+      <strong>Echte App:</strong> 2 Scraper
+      <span class=”info-wrap”><i class=”info-btn”>i</i><div class=”tip”><strong>DOM-Scraper</strong> &mdash; liest gerendertes DOM im Tab, blitzschnell, auch hinter Login.<br><br><strong>Playwright-Scraper</strong> &mdash; headless Chrome, rendert JS voll, klickt FAQ/Accordeons auf, scrollt f&uuml;r Lazy-Load automatisch.<br><br>Diese Demo: leichter Server-Fetch (kein Browser im Container). F&uuml;r SPAs: echte App nutzen.</div></span>
+      &middot; Diese Demo: leichter Fetch
     </div>
   </div>
   <div class=”chat-dock”>
@@ -1139,7 +1150,7 @@ const VIEWS = {
       <button data-q=”Welche Produkte oder Dienstleistungen werden angeboten?”>Angebote?</button>
     </div>
     <div class=”composer”>
-      <textarea id=”msg” rows=”2” placeholder=”Frag &uuml;ber den Seiteninhalt…”></textarea>
+      <textarea id=”msg” rows=”3” placeholder=”Frag &uuml;ber den Seiteninhalt…”></textarea>
       <button id=”send-btn” class=”btn-p”>Senden</button>
     </div>
   </div>
