@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "EwtosBrain",
+  "name": "Ewtos Office-Brain",
   "version": "0.1.0",
-  "description": "Produktivitäts-Assistent mit Vault-Wissen, Browser-Tools und Claude-Code-Integration.",
+  "description": "Produktivitäts-Assistent mit Vault-Wissen, Browser-Tools und KI-Chat — self-hosted, BYOK, DSGVO-freundlich.",
   "permissions": [
     "sidePanel",
     "storage",

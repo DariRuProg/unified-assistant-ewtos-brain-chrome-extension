@@ -8,6 +8,6 @@ lernst und denkst — damit du es später wiederfindest und nutzt, statt es zu v
 - **Organisieren:** Rohes nach und nach zu kuratierten Seiten verdichten.
 - **Abrufen:** Wissen befragen, wenn du es brauchst — hier per KI-Chat.
 
-## In EwtosBrain
-EwtosBrain ist das „Gesicht + die Hände" deines zweiten Gehirns im Browser: erfassen
+## In Ewtos Office-Brain
+Ewtos Office-Brain ist das „Gesicht + die Hände" deines zweiten Gehirns im Browser: erfassen
 über [[ewtosbrain-features]], organisieren nach der [[karpathy-methode]], abrufen per Chat.

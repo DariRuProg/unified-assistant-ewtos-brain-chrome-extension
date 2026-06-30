@@ -1,6 +1,6 @@
-# EwtosBrain — Features
+# Ewtos Office-Brain — Features
 
-EwtosBrain ist eine Chrome-Extension + ein selbst betriebener Server, der deinen
+Ewtos Office-Brain ist eine Chrome-Extension + ein selbst betriebener Server, der deinen
 Obsidian-Vault per KI nutzbar macht.
 
 ## Was es kann
@@ -17,4 +17,4 @@ Obsidian-Vault per KI nutzbar macht.
 
 ## Demo vs. echtes Produkt
 Diese Demo ist **read-only** mit Beispiel-Daten. Für den eigenen Vault + Schreiben
-installierst du den kostenlosen EwtosBrain-Server (Download auf ewtos.com).
+installierst du den kostenlosen Ewtos Office-Brain-Server (Download auf ewtos.com).

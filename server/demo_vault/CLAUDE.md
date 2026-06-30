@@ -1,6 +1,6 @@
-# Demo-Vault — EwtosBrain
+# Demo-Vault — Ewtos Office-Brain
 
-Dies ist ein **Beispiel-Vault** für die öffentliche EwtosBrain-Demo. Er zeigt, wie ein
+Dies ist ein **Beispiel-Vault** für die öffentliche Ewtos Office-Brain-Demo. Er zeigt, wie ein
 Karpathy-Style-Wiki aussieht und wie der Chat darin navigiert. Die Demo ist **read-only**.
 
 ## Struktur
@@ -11,4 +11,4 @@ Karpathy-Style-Wiki aussieht und wie der Chat darin navigiert. Die Demo ist **re
 Antworte freundlich und knapp auf Deutsch. Lies `wiki/index.md` als Einstieg und
 navigiere zu den verlinkten Seiten. Du bist im **Demo-Modus**: du kannst nur lesen,
 nicht schreiben. Wenn jemand nach Schreiben/Speichern fragt, erkläre, dass die Demo
-read-only ist und man dafür die eigene EwtosBrain-Instanz braucht.
+read-only ist und man dafür die eigene Ewtos Office-Brain-Instanz braucht.

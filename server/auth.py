@@ -15,16 +15,16 @@ import config
 import settings
 import users
 
-PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/bootstrap", "/auth/status"}
-# Eigene Secrets statt User-Token (kommen mit F1/F2):
-PUBLIC_PREFIXES = ("/telegram/", "/api/widget/")
+PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/bootstrap", "/auth/status", "/demo"}
+# Eigene Secrets / Besucher-BYOK statt User-Token (kommen mit F1/F2):
+PUBLIC_PREFIXES = ("/telegram/", "/api/widget/", "/demo/")
 
 # Demo-Modus: read-only. Mutierende Requests werden geblockt — außer Lese-POSTs
 # (Chat-Streams + Login/Status). Chat-Schreib-Tools sind zusätzlich in chat.py
 # herausgefiltert (doppelte Absicherung).
 _DEMO_POST_ALLOWLIST_EXACT = {"/auth/login", "/auth/status", "/vaults/preview-claude-md",
                               "/tools/crm/import_preview"}
-_DEMO_POST_ALLOWLIST_PREFIX = ("/tools/chat/",)
+_DEMO_POST_ALLOWLIST_PREFIX = ("/tools/chat/", "/demo/")
 
 
 def _demo_blocked(request: Request) -> bool:

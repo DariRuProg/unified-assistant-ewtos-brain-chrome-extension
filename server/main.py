@@ -29,6 +29,7 @@ from routers import video_brain
 from routers import vaults
 from routers import blueprints
 from routers import chat as chat_router
+from routers import demo as demo_router
 from routers import web_tools
 from routers import vault_files
 from routers import videos
@@ -77,6 +78,7 @@ app.include_router(video_brain.router)
 app.include_router(vaults.router)
 app.include_router(blueprints.router)
 app.include_router(chat_router.router)
+app.include_router(demo_router.router)
 app.include_router(web_tools.router)
 app.include_router(vault_files.router)
 app.include_router(videos.router)
