@@ -22,7 +22,7 @@ router = APIRouter()
 
 _GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 _DEFAULT_MODELS = {
-    "gemini": "gemini-2.0-flash",
+    "gemini": "gemini-2.5-flash",
     "openai": "gpt-4o-mini",
     "anthropic": "claude-haiku-4-5-20251001",
 }
@@ -159,6 +159,12 @@ _PAGE = """<!DOCTYPE html>
       Noch keinen? <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">
       Kostenlosen Gemini-Key holen →</a>
     </div>
+    <div style="margin-top:12px">
+      <label>Modell</label>
+      <input id="model" list="models" autocomplete="off" spellcheck="false">
+      <datalist id="models"></datalist>
+      <div class="hint">Frei editierbar — z.B. ein neueres Modell, falls eines abgekündigt wurde.</div>
+    </div>
   </div>
 
   <div class="card">
@@ -178,7 +184,7 @@ _PAGE = """<!DOCTYPE html>
 </div>
 <script>
   const $ = (id) => document.getElementById(id);
-  const log = $("log"), keyEl = $("key"), provEl = $("provider"), msgEl = $("msg"), sendBtn = $("send");
+  const log = $("log"), keyEl = $("key"), provEl = $("provider"), msgEl = $("msg"), sendBtn = $("send"), modelEl = $("model");
   const KEYSTORE = "ob_demo_key";
   try { keyEl.value = sessionStorage.getItem(KEYSTORE) || ""; } catch {}
   keyEl.addEventListener("change", () => { try { sessionStorage.setItem(KEYSTORE, keyEl.value); } catch {} });
@@ -187,7 +193,20 @@ _PAGE = """<!DOCTYPE html>
     openai: 'Key unter <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>',
     anthropic: 'Key unter <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>'
   };
-  provEl.addEventListener("change", () => { $("keyhint").innerHTML = hints[provEl.value]; });
+  // Nur VORSCHLÄGE — das Feld ist frei editierbar, du kannst jedes Modell eintippen.
+  const MODELS = {
+    gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
+    openai: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
+    anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8"]
+  };
+  function applyProvider(resetModel) {
+    const p = provEl.value;
+    $("keyhint").innerHTML = hints[p];
+    $("models").innerHTML = (MODELS[p] || []).map((m) => '<option value="' + m + '">').join("");
+    if (resetModel || !modelEl.value.trim()) modelEl.value = (MODELS[p] || [""])[0];
+  }
+  provEl.addEventListener("change", () => applyProvider(true));
+  applyProvider(false);
 
   const history = [];
   function bubble(cls, text) {
@@ -205,7 +224,7 @@ _PAGE = """<!DOCTYPE html>
     try {
       const res = await fetch("/demo/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: provEl.value, api_key: key, message: q, history })
+        body: JSON.stringify({ provider: provEl.value, api_key: key, model: modelEl.value.trim(), message: q, history })
       });
       const data = await res.json();
       if (!res.ok) { thinking.remove(); bubble("err", data.detail || ("Fehler " + res.status)); return; }
