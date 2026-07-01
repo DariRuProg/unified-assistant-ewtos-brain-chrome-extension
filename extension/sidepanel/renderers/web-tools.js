@@ -331,6 +331,8 @@ export async function renderScrapeChat() {
   const sendBtn = el("button", { type: "button", textContent: "➤" });
   sendBtn.disabled = true;
   chatInputRow.append(chatTextarea, micBtn, sendBtn);
+  const chatOfflineHint = el("div", { className: "sc-chat-offline", textContent: t("web_tools.sc_chat_needs_server") });
+  chatOfflineHint.style.display = "none";
 
   let scrapedPage = null;
   let chatHistory = [];
@@ -430,11 +432,19 @@ export async function renderScrapeChat() {
     sendBtn.disabled = true;
     try {
       const scrape = async (mode) => {
-        const r = await fetch(`${httpBase}/tools/page_scrape`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode }),
-        });
+        let r;
+        try {
+          r = await fetch(`${httpBase}/tools/page_scrape`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode }),
+          });
+        } catch {
+          // Server nicht erreichbar (fetch() selbst wirft) — direkt im Browser scrapen.
+          const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "page_scrape", params: { mode } });
+          if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+          return resp.data;
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       };
@@ -464,7 +474,7 @@ export async function renderScrapeChat() {
       sourceInfo.className = "sc-source-info success";
       previewToggle.style.display = "";
       copyBtn.style.display = "";
-      sendBtn.disabled = false;
+      applyChatOnline(state.serverConnected !== false);
       currentTab = await getActiveTab();
       refreshPageBar();
     } catch (err) {
@@ -476,9 +486,16 @@ export async function renderScrapeChat() {
     }
   }
 
+  // Chat braucht Server (LLM) — Scrapen läuft offline weiter. Bei fehlender
+  // Verbindung Hinweis zeigen + Senden sperren; Live-Update über onRuntimeMsg.
+  function applyChatOnline(online) {
+    chatOfflineHint.style.display = online ? "none" : "";
+    sendBtn.disabled = online ? (!scrapedPage || busy) : true;
+  }
+
   async function sendMsg() {
     const message = chatTextarea.value.trim();
-    if (!message || busy || !scrapedPage) return;
+    if (!message || busy || !scrapedPage || state.serverConnected === false) return;
     busy = true;
     sendBtn.disabled = true;
     chatTextarea.disabled = true;
@@ -565,7 +582,11 @@ export async function renderScrapeChat() {
   // gesperrt, läuft daher im Tab-Kontext; Ergebnisse kommen per runtime-Message) ──
   let recording = false;
   let baseText = "";
-  function onMicMessage(msg) {
+  function onRuntimeMsg(msg) {
+    if (msg?.type === "connection_status") {
+      applyChatOnline(!!msg.connected && !msg.incompatible);
+      return;
+    }
     if (msg.type === "transcript_result") {
       chatTextarea.value = baseText + msg.text;
     } else if (msg.type === "transcript_end") {
@@ -580,12 +601,12 @@ export async function renderScrapeChat() {
       if (msg.error !== "aborted") setChatStatus(t("web_tools.sc_mic_error", { error: msg.error }), "error");
     }
   }
-  chrome.runtime.onMessage.addListener(onMicMessage);
+  chrome.runtime.onMessage.addListener(onRuntimeMsg);
   chrome.tabs.onActivated.addListener(onTabActivated);
   chrome.tabs.onUpdated.addListener(onTabUpdated);
   state.currentToolCleanup = () => {
     stopAllTts();
-    try { chrome.runtime.onMessage.removeListener(onMicMessage); } catch (_) {}
+    try { chrome.runtime.onMessage.removeListener(onRuntimeMsg); } catch (_) {}
     try { chrome.tabs.onActivated.removeListener(onTabActivated); } catch (_) {}
     try { chrome.tabs.onUpdated.removeListener(onTabUpdated); } catch (_) {}
   };
@@ -650,7 +671,8 @@ export async function renderScrapeChat() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
   });
 
-  state.panelBody.append(pageBar, scrapeModeRow, previewWrap, chatLog, chatStatus, chatInputRow);
+  state.panelBody.append(pageBar, scrapeModeRow, previewWrap, chatLog, chatStatus, chatOfflineHint, chatInputRow);
+  applyChatOnline(state.serverConnected !== false);
   (async () => { currentTab = await getActiveTab(); refreshPageBar(); })();
   setTimeout(() => doScrape(), 0);
 }
@@ -727,15 +749,25 @@ export function renderSeoCheck() {
     output.replaceChildren();
     try {
       const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/seo_check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      let res, data;
+      try {
+        res = await fetch(`${httpBase}/tools/seo_check`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch {
+        const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "seo_check", params: {} });
+        if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+        data = resp.data;
+      }
+      if (res) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+        data = parsed;
+      }
 
       [row("URL", data.url), row("Title", data.title), row("Description", data.description), row("Canonical", data.canonical), row("Robots", data.robots)]
         .forEach((node) => { if (node) output.append(node); });
@@ -801,15 +833,25 @@ export function renderImageAnalyse() {
     list.replaceChildren();
     try {
       const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/image_analyse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      let res, data;
+      try {
+        res = await fetch(`${httpBase}/tools/image_analyse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch {
+        const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "image_analyse", params: {} });
+        if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+        data = resp.data;
+      }
+      if (res) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+        data = parsed;
+      }
 
       const { images = [], total = 0, missing_alt = 0 } = data;
       currentImages = images;
@@ -1072,15 +1114,25 @@ export function renderColorPicker() {
     status.className = "tool-status";
     try {
       const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/color_picker`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      let res, data;
+      try {
+        res = await fetch(`${httpBase}/tools/color_picker`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch {
+        const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "color_picker", params: {} });
+        if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+        data = resp.data;
+      }
+      if (res) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+        data = parsed;
+      }
 
       if (!data.has_design_system && !data.computed?.length) {
         status.textContent = t("web_tools.color_none");
@@ -1445,15 +1497,23 @@ export function renderScreenshot() {
 
   async function captureVisible() {
     const httpBase = await getHttpBase();
-    const res = await fetch(`${httpBase}/tools/screenshot`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    let res, data;
+    try {
+      res = await fetch(`${httpBase}/tools/screenshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } catch {
+      const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "screenshot", params: {} });
+      if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+      return resp.data.dataUrl;
+    }
     const text = await res.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch {}
-    if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch {}
+    if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+    data = parsed;
     return data.dataUrl;
   }
 
@@ -1618,15 +1678,25 @@ export function renderUrlExtractor() {
     lastUrls = [];
     try {
       const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/url_extractor`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filter_domain: filterCb.checked }),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      let res, data;
+      try {
+        res = await fetch(`${httpBase}/tools/url_extractor`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filter_domain: filterCb.checked }),
+        });
+      } catch {
+        const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "url_extractor", params: { filter_domain: filterCb.checked } });
+        if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+        data = resp.data;
+      }
+      if (res) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+        data = parsed;
+      }
       lastUrls = data.urls || [];
       lastBaseUrl = data.base_url || "";
       renderOutput();
@@ -1723,9 +1793,14 @@ export function renderUrlExtractor() {
       promoteDesc.value = "";
       promoteForm.style.display = "none";
     } catch (err) {
-      promoteHint.innerHTML = err.message || String(err);
-      promoteHint.className = "tool-status error";
-      promoteHint.querySelector(".open-options-link")?.addEventListener("click", e => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+      if (err instanceof TypeError || /Failed to fetch/i.test(err.message || "")) {
+        promoteHint.textContent = t("web_tools.promote_offline");
+        promoteHint.className = "tool-status error";
+      } else {
+        promoteHint.innerHTML = err.message || String(err);
+        promoteHint.className = "tool-status error";
+        promoteHint.querySelector(".open-options-link")?.addEventListener("click", e => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+      }
     } finally {
       promoteSubBtn.disabled = false;
     }

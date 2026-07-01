@@ -5,7 +5,7 @@ import { state } from './state.js';
 import { checkPendingBrainPick, checkActiveTabForYoutube } from './renderers/briefing.js';
 import { checkPendingPlaylistPick } from './renderers/playlists.js';
 import { statusDot, openOptions, reconnectBtn, offlineBannerText, DEFAULT_OFFLINE_HTML, burgerBtn, navSidebar, toggleFavbarBtn, toolSearch, viewToggleBtn, pageChatBtn } from './modules/dom-refs.js';
-import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb, setToolViewMode } from './modules/nav.js';
+import { renderSidebar, renderToolList, renderQuickActions, openQuickEditor, applyQuickRowVisibility, updateCrumb, setToolViewMode, toolNeedsServer } from './modules/nav.js';
 import { openTool, TOOL_RENDERERS } from './modules/tool-runner.js';
 import { initI18n, localizeDom, t } from '../i18n/i18n.js';
 import { ensureAuth } from './modules/auth.js';
@@ -277,6 +277,15 @@ function setStatus(connected, customText) {
   statusDot.title = customText ?? (connected ? t("sidepanel.status_connected") : t("sidepanel.status_offline"));
   const banner = document.getElementById("offline-banner");
   if (banner) banner.classList.toggle("hidden", connected);
+
+  const prev = state.serverConnected;
+  state.serverConnected = connected;
+  if (prev === connected) return;
+  if (!state.activeTool) {
+    renderToolList();
+  } else if (prev === false && connected === true && toolNeedsServer(state.activeTool)) {
+    openTool(state.activeTool);
+  }
 }
 
 async function checkStartTool() {

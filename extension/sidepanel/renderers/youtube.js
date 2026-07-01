@@ -188,15 +188,27 @@ export function renderYoutubeTranscript() {
     fallbackRow.classList.add("hidden");
     try {
       const httpBase = await getHttpBase();
-      const res = await fetch(`${httpBase}/tools/youtube_transcript`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(data?.detail || text || `HTTP ${res.status}`);
+      let res, data;
+      try {
+        res = await fetch(`${httpBase}/tools/youtube_transcript`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+      } catch {
+        // Server nicht erreichbar — direkt per DOM-Scrape im Browser versuchen.
+        const resp = await chrome.runtime.sendMessage({ type: "run_tool_direct", tool: "youtube_transcript", params: { url } });
+        if (!resp?.ok) throw new Error(resp?.error || t("web_tools.server_unreachable"));
+        data = resp.data;
+        data.source = "extension";
+      }
+      if (res) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(parsed?.detail || text || `HTTP ${res.status}`);
+        data = parsed;
+      }
       applyResult(data, url, true);
       chrome.storage.local.set({ [YT_STORE_KEY]: lastResult });
       runBtn.classList.remove("needs-fetch");

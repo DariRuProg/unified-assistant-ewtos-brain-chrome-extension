@@ -2,7 +2,9 @@
 import { state } from '../state.js';
 import { el } from '../dom.js';
 import { content } from './dom-refs.js';
-import { getGroups, renderSidebar, renderToolList, renderQuickActions, applyQuickRowVisibility, updateCrumb } from './nav.js';
+import { getGroups, renderSidebar, renderToolList, renderQuickActions, applyQuickRowVisibility, updateCrumb, toolNeedsServer } from './nav.js';
+import { t } from '../../i18n/i18n.js';
+import { DOWNLOAD_URL } from '../../lib/constants.js';
 import { renderYoutubeTranscript } from '../renderers/youtube.js';
 import { renderNotesFile, renderTodos } from '../renderers/notes.js';
 import { renderChat } from '../renderers/chat.js';
@@ -72,8 +74,25 @@ export function openTool(toolId, options = null) {
   view.append(header, state.panelBody);
   content.append(view);
 
-  renderer();
+  if (toolNeedsServer(toolId) && state.serverConnected === false) {
+    renderServerRequired();
+  } else {
+    renderer();
+  }
   state.pendingToolOptions = null;
+}
+
+function renderServerRequired() {
+  if (state.panelTitle) state.panelTitle.textContent = t("sidepanel.server_required_title");
+  const box = el("div", { className: "server-required" });
+  box.append(el("p", { className: "sr-msg", textContent: t("sidepanel.server_required_body") }));
+  const actions = el("div", { className: "sr-actions" });
+  const reconnect = el("button", { type: "button", className: "sr-btn", textContent: t("sidepanel.retry_connect") });
+  reconnect.addEventListener("click", () => chrome.runtime.sendMessage({ type: "reconnect" }).catch(() => {}));
+  const download = el("a", { className: "sr-btn sr-btn--ghost ext-link", href: DOWNLOAD_URL, textContent: t("sidepanel.download_server") });
+  actions.append(reconnect, download);
+  box.append(actions);
+  state.panelBody.append(box);
 }
 
 function closeTool() {

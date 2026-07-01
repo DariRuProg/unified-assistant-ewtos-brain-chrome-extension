@@ -1,5 +1,7 @@
 // EwtosBrain Setup Wizard | ewtos.com
 import { initI18n, t, localizeDom } from '../i18n/i18n.js';
+import { applyTheme } from '../sidepanel/modules/theme.js';
+import { DOWNLOAD_URL } from '../lib/constants.js';
 
 const TOTAL = 6;
 let current = 1;
@@ -88,7 +90,7 @@ function updateFooter(step) {
   }
   footer.style.display = step === TOTAL ? 'none' : 'flex';
   btnBack.style.display = step > 1 ? 'inline-flex' : 'none';
-  btnSkip.style.display = step === 4 ? 'inline-flex' : 'none';
+  btnSkip.style.display = (step === 2 || step === 4) ? 'inline-flex' : 'none';
 
   if (step === 1) { btnNext.textContent = t('wizard.btn_next'); btnNext.disabled = false; }
   else if (step === 2) { btnNext.textContent = t('common.next'); btnNext.disabled = !connOk; }
@@ -486,10 +488,12 @@ async function skipSetupAgent() {
 // ── Connection Test ───────────────────────────────────────────────────────
 document.getElementById('btn-test-conn').addEventListener('click', async () => {
   const btn = document.getElementById('btn-test-conn');
+  const offlineHelp = document.getElementById('step2-offline-help');
   btn.disabled = true;
   btn.textContent = t('wizard.conn_testing');
   setStatus('conn-dot', 'conn-text', 'connecting', t('wizard.conn_testing'));
   connOk = false;
+  offlineHelp.style.display = 'none';
   document.getElementById('btn-next').disabled = true;
 
   try {
@@ -503,10 +507,17 @@ document.getElementById('btn-test-conn').addEventListener('click', async () => {
     }
   } catch {
     setStatus('conn-dot', 'conn-text', 'error', t('wizard.conn_failed'));
+    offlineHelp.style.display = 'block';
   }
 
   btn.disabled = false;
   btn.textContent = t('wizard.conn_retry');
+});
+
+document.getElementById('btn-download-server').href = DOWNLOAD_URL;
+document.getElementById('close-wizard-later').addEventListener('click', (e) => {
+  e.preventDefault();
+  chrome.tabs.getCurrent(tab => { if (tab) chrome.tabs.remove(tab.id); });
 });
 
 function setStatus(dotId, textId, state, msg) {
@@ -601,7 +612,8 @@ document.getElementById('mode-existing').addEventListener('click', () => {
 document.getElementById('btn-next').addEventListener('click', () => navigate(1));
 document.getElementById('btn-back').addEventListener('click', () => navigate(-1));
 document.getElementById('btn-skip').addEventListener('click', () => {
-  // Skip-Button überspringt Vault komplett → direkt zu Step 6
+  // Skip-Button (Step 2: Server, Step 4: Vault) überspringt den Rest des Setups → direkt zu Step 6.
+  // Schritte 3/4 würden ohne Server sofort mit einem nutzlosen POST-Fehler enden.
   document.getElementById('step-' + current).classList.remove('active');
   document.getElementById('step-6').classList.add('active');
   current = 6;
@@ -663,6 +675,19 @@ document.getElementById('btn-addvault-close').addEventListener('click', () => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────
+{
+  const { theme = 'neutral', darkMode = false } = await chrome.storage.local.get(['theme', 'darkMode']);
+  applyTheme(theme, darkMode);
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.theme !== undefined || changes.darkMode !== undefined) {
+    chrome.storage.local.get(['theme', 'darkMode'], ({ theme = 'neutral', darkMode = false }) => {
+      applyTheme(theme, darkMode);
+    });
+  }
+});
+
 await initI18n();
 localizeDom();
 updateFooter(current);

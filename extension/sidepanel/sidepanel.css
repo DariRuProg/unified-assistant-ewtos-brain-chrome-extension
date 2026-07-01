@@ -118,6 +118,13 @@ main::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
   font-size: 11px;
 }
 
+.offline-banner a {
+  color: var(--warning-text);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.offline-banner a:hover { opacity: 0.8; }
+
 .offline-banner button {
   align-self: flex-start;
   padding: 4px 10px;
@@ -294,6 +301,7 @@ main::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 .tools--tiles .search-empty { grid-column: 1 / -1; }
 
 .tool-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -325,6 +333,52 @@ main::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
   line-height: 1.2;
   color: var(--text);
   word-break: break-word;
+}
+
+/* "Server nötig"-Badge + Dim für server-abhängige Tools ohne Verbindung */
+.tool-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--badge-soon-bg);
+  color: var(--badge-soon-text);
+  white-space: nowrap;
+}
+.tool-tile .tool-badge--server { position: absolute; top: 5px; right: 5px; }
+.tool-row .tool-badge--server { margin-left: auto; flex-shrink: 0; }
+.tool-tile--needs-server .tr-ico,
+.tool-tile--needs-server .tr-label,
+.tool-row--needs-server .tr-ico,
+.tool-row--needs-server .tr-txt { opacity: 0.5; }
+
+.server-required { padding: 24px 16px; text-align: center; }
+.server-required .sr-msg { color: var(--text-muted); line-height: 1.5; margin: 0 0 16px; }
+.server-required .sr-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.sr-btn {
+  padding: 8px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.sr-btn--ghost { background: transparent; color: var(--accent); border-color: var(--border-input); }
+
+.sc-chat-offline {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .dark-toggle.active { background: var(--bg-subtle); }

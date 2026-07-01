@@ -7,6 +7,14 @@ import { openWorkspaceTab } from './workspace-tab.js';
 import { showBriefingPanel, showQuickSavePage } from '../renderers/briefing.js';
 import { t } from '../../i18n/i18n.js';
 
+// Tools, die rein clientseitig laufen (direkter background.js-Pfad, kein Server nötig).
+// Alles andere gilt konservativ als server-abhängig → "Server"-Badge, wenn offline.
+export const OFFLINE_TOOLS = new Set([
+  "page_scrape", "seo_check", "url_extractor",
+  "image_analyse", "color_picker", "screenshot", "youtube_transcript",
+]);
+export const toolNeedsServer = (id) => !OFFLINE_TOOLS.has(id);
+
 export function getGroups() {
   return [
   {
@@ -367,10 +375,21 @@ export function renderSidebar() {
   }
 }
 
+// Markiert server-abhängige Tools offline mit Dim-Klasse + orangem "Server"-Badge.
+function applyServerBadge(li, tool) {
+  if (!(toolNeedsServer(tool.id) && state.serverConnected === false)) return;
+  const base = li.classList.contains("tool-tile") ? "tool-tile" : "tool-row";
+  li.classList.add(base + "--needs-server");
+  li.dataset.tool = tool.id;
+  li.title = t("nav.needs_server_title");
+  li.append(el("span", { className: "tool-badge tool-badge--server", textContent: t("nav.needs_server_badge") }));
+}
+
 function buildToolTile(t) {
   const li = el("li", { className: "tool-tile" });
   li.append(el("span", { className: "tr-ico", textContent: t.icon || "•" }));
   li.append(el("span", { className: "tr-label", textContent: t.label }));
+  applyServerBadge(li, t);
   li.addEventListener("click", () => openTool(t.id, t.openOptions || null));
   return li;
 }
@@ -383,6 +402,7 @@ function buildToolRow(t) {
   txt.append(el("span", { className: "tr-label", textContent: t.label }));
   if (t.hint) txt.append(el("span", { className: "tr-hint", textContent: t.hint }));
   li.append(txt);
+  applyServerBadge(li, t);
   li.addEventListener("click", (e) => {
     if (e.target.closest(".tool-caret, .tool-popover")) return;
     openTool(t.id, t.openOptions || null);

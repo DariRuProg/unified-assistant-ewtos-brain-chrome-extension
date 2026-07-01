@@ -168,25 +168,47 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
         const frames = [];
         let y = 0;
-        while (y < dims.scrollHeight && frames.length < MAX_FRAMES) {
-          const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: "png" });
-          frames.push({ dataUrl, y });
-          y += dims.clientHeight;
-          if (y < dims.scrollHeight) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: (sy) => window.scrollTo(0, sy),
-              args: [y],
-            });
-            await new Promise(r => setTimeout(r, 600));
+        try {
+          while (y < dims.scrollHeight && frames.length < MAX_FRAMES) {
+            const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: "png" });
+            frames.push({ dataUrl, y });
+            y += dims.clientHeight;
+            if (y < dims.scrollHeight) {
+              // Ab Frame 2: angepinnte Elemente (fixed/sticky) ausblenden, damit sie
+              // nicht in jedem Frame erneut oben kleben. visibility:hidden erhaelt das
+              // Layout (kein Reflow). Marker macht das Wiederherstellen eindeutig.
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (sy) => {
+                  window.scrollTo(0, sy);
+                  for (const el of document.body.querySelectorAll("*")) {
+                    if (el.hasAttribute("data-ewtos-shot-hidden")) continue;
+                    const pos = getComputedStyle(el).position;
+                    if (pos === "fixed" || pos === "sticky") {
+                      el.setAttribute("data-ewtos-shot-hidden", "1");
+                      el.style.setProperty("visibility", "hidden", "important");
+                    }
+                  }
+                },
+                args: [y],
+              });
+              await new Promise(r => setTimeout(r, 600));
+            }
           }
+        } finally {
+          // Immer wiederherstellen (auch bei Fehler): Sichtbarkeit + Original-Scroll.
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (sy) => {
+              for (const el of document.querySelectorAll("[data-ewtos-shot-hidden]")) {
+                el.style.removeProperty("visibility");
+                el.removeAttribute("data-ewtos-shot-hidden");
+              }
+              window.scrollTo(0, sy);
+            },
+            args: [dims.scrollY],
+          });
         }
-
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (sy) => window.scrollTo(0, sy),
-          args: [dims.scrollY],
-        });
 
         sendResponse({
           ok: true,
@@ -246,6 +268,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, dataUrl: croppedUrl });
       } catch (err) {
         sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "run_tool_direct") {
+    const handler = TOOL_HANDLERS[msg.tool];
+    if (!handler) {
+      sendResponse({ ok: false, error: `Unknown tool: ${msg.tool}` });
+      return false;
+    }
+    (async () => {
+      try {
+        const data = await handler(msg.params || {});
+        sendResponse({ ok: true, data });
+      } catch (err) {
+        sendResponse({ ok: false, error: err?.message || String(err) });
       }
     })();
     return true;
@@ -520,10 +558,6 @@ chrome.commands.onCommand.addListener(async (command) => {
       console.log(`[EwtosBrain] Shortcut Multi-Tab: ${tabs.length} Tabs`);
       notify("Multi-Tab", `${tabs.length} URLs gespeichert + in Clipboard`);
     }
-    // 'add-highlighted-youtube-to-playlist' ist im Manifest registriert,
-    // aber noch nicht implementiert — der Sidepanel-Picker erwartet aktuell
-    // das Single-URL-Schema. Multi-YouTube-Pfad kommt als eigene Iteration
-    // (siehe backlog_multi_tab_capture.md).
   } catch (err) {
     notifyError(err?.message || String(err));
   }

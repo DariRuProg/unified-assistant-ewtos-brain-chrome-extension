@@ -12,4 +12,5 @@ export const state = {
   _chatPageModeScrape: null,
   currentToolCleanup: null,
   toolViewMode: "list",
+  serverConnected: null,
 };
