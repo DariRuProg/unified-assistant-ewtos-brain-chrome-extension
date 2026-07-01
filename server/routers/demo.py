@@ -849,8 +849,11 @@ body {
 .tour-card.below .tour-arrow { top: -16px; border-bottom-color: var(--bg-card); }
 .tour-card.above .tour-arrow { bottom: -16px; border-top-color: var(--bg-card); }
 
-/* CHAT (linker Arbeitsflächen-Tab) */
-.chat-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; gap: 8px; }
+/* CHAT (Bottom-Dock im linken Tab: Dokument oben, Chat unten) */
+.chat-pane {
+  flex: 0 0 36%; min-height: 150px; display: flex; flex-direction: column;
+  padding: 10px 16px 12px; gap: 8px; border-top: 2px solid var(--border); background: var(--bg-card);
+}
 .chat-modes { display: flex; gap: 6px; flex-shrink: 0; }
 .chat-mode-btn {
   padding: 5px 12px; font-size: 12px; font-family: inherit; cursor: pointer;
@@ -1232,8 +1235,26 @@ const RAW_PATH = "raw/youtube/" + VID_DATUM + "-" + VIDEO.slug + ".md";
 const WIKI_PATH = "wiki/resources/videos/" + VIDEO.slug + ".md";
 const CREATOR_PATH = "wiki/resources/creators/dario-ewtos.md";
 const RAW_REF = "raw/youtube/" + VID_DATUM + "-" + VIDEO.slug;
+const SCRATCH_PATH = "notes/scratchpad.md";
 
 function thumbUrl(id) { return "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"; }
+
+function scratchpadMarkdown() {
+  return [
+    "# Scratchpad",
+    "",
+    "Dein schneller Notizblock — alles, was du festhalten willst, landet hier. Der Vault-Chat unten liest dein ganzes Wiki.",
+    "",
+    "## Offene Gedanken",
+    "- EwtosBrain-Demo den Kollegen zeigen",
+    "- Karpathy-Methode im Team-Meeting erklären",
+    "- Erklärvideo aufnehmen und ins Brain schicken",
+    "",
+    "## Notizen",
+    "Frag den Chat z.B. 'Was ist die Karpathy-Methode?' oder 'Welche Tools gibt es?' —",
+    "die Antwort kommt aus dem [[wiki/index]] deines Vaults."
+  ].join("\n");
+}
 
 const vaultOverride = {};
 const extraFiles = [];
@@ -2492,9 +2513,9 @@ function showDoc() {
   if (em) em.style.display = "none";
 }
 
-function showChat() {
+function showChatDock() {
   const dw = $("#doc-wrap"), cp = $("#chat-pane"), em = $("#embed-wrap");
-  if (dw) dw.style.display = "none";
+  if (dw) dw.style.display = "";
   if (cp) cp.style.display = "flex";
   if (em) em.style.display = "none";
 }
@@ -2559,11 +2580,6 @@ function chatBannerHtml() {
   return "🧠 Chat mit <b>Vault</b> &mdash; dein ganzes Wissen";
 }
 
-function chatTabLabel() {
-  if (chatMode === "file") return "Chat — " + (chatFile || "");
-  return "Chat — Vault";
-}
-
 function updateChatPane() {
   const bn = $("#chat-banner");
   if (bn) bn.innerHTML = chatBannerHtml();
@@ -2583,7 +2599,7 @@ function updateChatPane() {
   const log = $("#chat-log");
   if (!log) return;
   if (!hist.length) {
-    log.innerHTML = chatEmptyState();
+    log.innerHTML = getKey() ? "" : chatEmptyState();
     const sk = $("#ce-setkey");
     if (sk) sk.addEventListener("click", () => { const dlg = $("#settings-dlg"); if (dlg && dlg.showModal) dlg.showModal(); });
     return;
@@ -2603,13 +2619,15 @@ function openChatTab(mode, file, content) {
   if (chatMode === "file") {
     if (file) chatFile = file;
     if (content != null) chatFileContent = content;
+    openInViewport(chatFile, "ewtos://vault/" + chatFile, chatFileContent || "");
+    activePath = chatFile;
+  } else {
+    chatMode = "vault";
+    openInViewport(SCRATCH_PATH, "ewtos://vault/" + SCRATCH_PATH, vaultOverride[SCRATCH_PATH] || "");
+    activePath = SCRATCH_PATH;
+    if (currentView !== "vault") setView("vault");
   }
-  const ic = $("#tab-ico"), tl = $("#tab-label"), ub = $("#urlbar-text");
-  if (ic) ic.textContent = "💬";
-  if (tl) tl.textContent = chatTabLabel();
-  if (ub) ub.textContent = "ewtos://chat";
-  pitchActive = false;
-  showChat();
+  showChatDock();
   updateChatPane();
   const msg = $("#msg");
   if (msg) msg.focus();
@@ -2621,10 +2639,7 @@ function switchChatMode(mode) {
     if (bn) bn.innerHTML = "Erst eine Datei öffnen und &bdquo;Mit dieser Datei chatten&ldquo;.";
     return;
   }
-  chatMode = mode;
-  const tl = $("#tab-label");
-  if (tl) tl.textContent = chatTabLabel();
-  updateChatPane();
+  openChatTab(mode);
 }
 
 function wireChatOnce() {
@@ -2752,7 +2767,7 @@ function renderPageChat() {
   const log = $("#pchat-log");
   if (!log) return;
   if (!hist.length) {
-    log.innerHTML = chatEmptyState();
+    log.innerHTML = getKey() ? "" : chatEmptyState();
     const sk = $("#ce-setkey");
     if (sk) sk.addEventListener("click", () => { const dlg = $("#settings-dlg"); if (dlg && dlg.showModal) dlg.showModal(); });
     return;
@@ -2971,6 +2986,9 @@ async function init() {
   initNav();
   initToolSearch();
   wireChatOnce();
+
+  vaultOverride[SCRATCH_PATH] = scratchpadMarkdown();
+  if (extraFiles.indexOf(SCRATCH_PATH) === -1) extraFiles.push(SCRATCH_PATH);
 
   try {
     await loadFiles();
