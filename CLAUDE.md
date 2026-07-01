@@ -5,6 +5,10 @@ Unified Chrome Extension + Python Server. KI-Assistent für tägliche Mitarbeite
 **Owner:** ewtos.com (Webprogrammierer in Werbeagentur, baut WordPress-Plugins, Automationen, KI-Lösungen — Ziel: KI-fähiger Web- & Automatisierungsberater).
 **Sprache:** Deutsch in der UI und Doku, Tags/Code-Identifier englisch.
 
+## Coding-Regeln
+
+Beim Coden gilt **zuerst der globale Skill `coding-discipline`** (Modularität / keine Monolithen). Die Architektur-Entscheidungen weiter unten **ergänzen** ihn, heben ihn nicht auf. Insbesondere: Frontend (CSS/JS/HTML) gehört nicht als Rawstring in Python-Router. `server/routers/demo.py` ist bekannter Modularitäts-Schuld (CSS/JS im `_PAGE`-String) und wird in einem eigenen Task ausgelagert — **nicht** als „gewollte Architektur" führen.
+
 ## Vision
 
 Eine Chrome-Extension als täglicher KI-Assistent für Mitarbeiter eines Unternehmens. Eigenständig nutzbar (Tools, Chat, Note-Taker), aber auch von Claude Code/Desktop aus steuerbar — Server hält Sessions zentral, damit der Owner Mitarbeiter-Chats übernehmen kann.
