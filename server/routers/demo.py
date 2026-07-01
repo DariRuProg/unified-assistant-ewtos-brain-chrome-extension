@@ -80,9 +80,9 @@ _SYSTEM = (
 
 _SYSTEM_PAGE = (
     "Du bist der Demo-Assistent von Ewtos Office-Brain. Beantworte Fragen "
-    "AUSSCHLIESSLICH auf Basis des folgenden gescrapten Seiteninhalts. Steht etwas "
-    "nicht drin, sag das ehrlich. Antworte auf Deutsch und knapp. Dies ist eine "
-    "read-only Demo.\n\n=== Seiteninhalt ===\n{context}"
+    "AUSSCHLIESSLICH auf Basis des folgenden Inhalts (eine Datei oder eine gescrapte "
+    "Seite). Steht etwas nicht drin, sag das ehrlich. Antworte auf Deutsch und knapp. "
+    "Dies ist eine read-only Demo.\n\n=== Inhalt ===\n{context}"
 )
 
 
@@ -787,12 +787,7 @@ body {
 .playlist-item-links a:hover, .playlist-item-links .small:hover { background: var(--bg-hover); }
 .pl-badge { font-size: 11px; font-weight: 600; color: #22c55e; padding: 4px 4px; }
 
-/* PITCH / TAGS / SCRAPER-HINT / CHAT-DOCK / TOUR */
-.view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
-.vault-top, .web-top {
-  flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-}
+/* PITCH / TAGS / SCRAPER-HINT / TOUR */
 .pitch {
   background: var(--accent); color: var(--accent-tx);
   border-radius: 9px; padding: 9px 12px; margin-bottom: 11px;
@@ -821,20 +816,6 @@ body {
   transition: background 0.12s;
 }
 .tour-trigger:hover { background: var(--bg-hover); }
-
-/* Chat-Dock: fuellt den Rest bis zum Seitenende */
-.chat-dock {
-  flex: 1 1 auto; min-height: 170px; display: flex; flex-direction: column;
-  border-top: 2px solid var(--border); background: var(--bg-card); padding: 10px 12px;
-}
-.dock-head, .chat-dock .chat-ctx, .chat-dock .chat-ex, .chat-dock .composer { flex-shrink: 0; }
-.dock-head { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 7px; }
-.chat-dock .chat-log {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-}
-.chat-dock .chat-ex { margin-bottom: 5px; }
-.chat-dock .composer { padding-top: 7px; }
 
 /* Tour-Overlay: floatende Karte, durchklickbar + wegklickbar */
 .tour-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.22); }
@@ -868,22 +849,27 @@ body {
 .tour-card.below .tour-arrow { top: -16px; border-bottom-color: var(--bg-card); }
 .tour-card.above .tour-arrow { bottom: -16px; border-top-color: var(--bg-card); }
 
-/* CHAT */
-.view-chat { display: flex; flex-direction: column; gap: 8px; }
-.chat-ctx:empty { display: none; }
-.ctx-pill {
-  display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px;
-  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px;
-  font-size: 11.5px; color: var(--text);
+/* CHAT (linker Arbeitsflächen-Tab) */
+.chat-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; gap: 8px; }
+.chat-modes { display: flex; gap: 6px; flex-shrink: 0; }
+.chat-mode-btn {
+  padding: 5px 12px; font-size: 12px; font-family: inherit; cursor: pointer;
+  color: var(--text-muted); background: transparent; border: 1px solid var(--border-input); border-radius: 7px;
+  transition: background 0.12s, color 0.12s;
 }
-.ctx-pill b { font-weight: 600; }
-.ctx-pill #ctx-clear {
-  border: none; background: transparent; color: var(--text-muted); font-size: 15px;
-  line-height: 1; cursor: pointer; padding: 0 0 0 2px; font-family: inherit;
+.chat-mode-btn:hover { background: var(--bg-hover); }
+.chat-mode-btn.active { background: var(--accent); color: var(--accent-tx); border-color: var(--accent); }
+.chat-source-banner {
+  flex-shrink: 0; font-size: 12px; color: var(--text-muted);
+  padding: 6px 10px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px;
 }
-.ctx-pill #ctx-clear:hover { color: var(--text); }
+.chat-source-banner b { color: var(--text); font-weight: 600; }
 
-.chat-log { display: flex; flex-direction: column; gap: 9px; padding: 4px 0; }
+.chat-log {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 9px; padding: 4px 2px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
 .msg { max-width: 86%; padding: 9px 13px; border-radius: 10px; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .msg.me { align-self: flex-end; background: var(--bg-subtle); color: var(--text); }
 .msg.ai { align-self: flex-start; background: var(--bg-card); border: 1px solid var(--border); color: var(--text); }
@@ -928,6 +914,28 @@ body {
   border-radius: 8px; outline: none;
 }
 .composer #msg:focus { border-color: var(--accent); }
+.chat-pane .composer { flex-shrink: 0; }
+
+/* Datei-Viewer-Aktionen (links) */
+.viewer-actions { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+.vault-file-chat-btn {
+  padding: 8px 14px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  color: var(--accent-tx); background: var(--accent); border: 1px solid var(--accent); border-radius: 9px;
+}
+.vault-file-chat-btn:hover { background: var(--accent-h); }
+.scrape-chat-wrap:empty { display: none; }
+
+/* Frontmatter-Block */
+.fm-block { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; }
+.fm-block > summary { cursor: pointer; padding: 7px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-faint); }
+.fm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.fm-table th, .fm-table td { text-align: left; padding: 5px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+.fm-table th { width: 34%; color: var(--text-muted); font-weight: 600; }
+.fm-table td { color: var(--text); word-break: break-word; }
+
+/* Markdown-Bilder */
+.md-image { max-width: 100%; height: auto; border-radius: 6px; display: block; margin: 4px 0; }
+.md-img-broken { display: inline-block; font-size: 12px; color: var(--text-faint); background: var(--bg-subtle); border: 1px dashed var(--border); border-radius: 6px; padding: 6px 10px; }
 
 /* LOCKED */
 .view-locked { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 24px 16px; }
@@ -1001,7 +1009,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .doc.markdown blockquote { border-left: 3px solid var(--accent); padding-left: 14px; margin: 0 0 14px; color: var(--text-muted); }
 .doc.markdown a { color: var(--accent); text-decoration: none; }
 .doc.markdown a:hover { text-decoration: underline; }
-.doc.markdown a[data-wiki] { color: var(--accent); }
+.doc.markdown a.wiki-link { color: var(--accent); border-bottom: 1px dashed var(--accent); }
+.doc.markdown a.wiki-link:hover { border-bottom-style: solid; text-decoration: none; }
 .doc.markdown hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
 .doc.markdown img { max-width: 100%; height: auto; border-radius: 6px; }
 .doc.markdown table { border-collapse: collapse; width: 100%; margin: 0 0 16px; font-size: 13.5px; }
@@ -1026,7 +1035,21 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
       <div class="tab" id="tab"><span id="tab-ico">📄</span><span id="tab-label">wiki/index.md</span></div>
       <div class="urlbar"><span class="lock">🔒</span><span id="urlbar-text">ewtos://vault/wiki/index.md</span></div>
     </div>
-    <div class="doc-wrap"><article class="doc markdown" id="doc"></article></div>
+    <div class="doc-wrap" id="doc-wrap"><article class="doc markdown" id="doc"></article></div>
+    <div class="chat-pane" id="chat-pane" style="display:none">
+      <div class="chat-modes" id="chat-modes">
+        <button class="chat-mode-btn" data-mode="vault" type="button">Vault</button>
+        <button class="chat-mode-btn" data-mode="page" type="button">Seite</button>
+        <button class="chat-mode-btn" data-mode="file" type="button">Datei</button>
+      </div>
+      <div class="chat-source-banner" id="chat-banner"></div>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chat-ex" id="chat-ex"></div>
+      <form class="composer" id="chat-form">
+        <textarea id="msg" rows="2" placeholder="Frag etwas…"></textarea>
+        <button id="send-btn" class="btn-p" type="submit">Senden</button>
+      </form>
+    </div>
   </section>
 
   <div class="drag-handle" id="drag-handle" role="separator" aria-orientation="vertical" title="Breite ziehen"></div>
@@ -1134,7 +1157,10 @@ let activePath = null;
 let pageContext = null;
 let pageHost = null;
 let currentView = "home";
-const history = [];
+let chatMode = "vault";
+let chatFile = null;
+let chatFileContent = "";
+const histories = {};
 
 /* ===== Demo-Video (Mockup) — TODO: nach Upload gegen echtes Video tauschen ===== */
 /* Nur id/url/title/transcript/description/summary anpassen, Rest folgt automatisch. */
@@ -1302,15 +1328,28 @@ function renderInline(text) {
     codeStash.push("<code>" + c + "</code>");
     return "\u0000" + (codeStash.length - 1) + "\u0000";
   });
-  s = s.replace(/\[\[([^\]]+)\]\]/g, (m, w) => {
-    const label = w.trim();
-    return '<a href="#" data-wiki="' + escapeHtml(label) + '">' + label + "</a>";
+  s = s.replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g, (m, alt, url) => {
+    return '<img class="md-image" src="' + escapeHtml(url) + '" alt="' + escapeHtml(alt) + '" loading="lazy">';
+  });
+  s = s.replace(/!\[\[([^\]]+?)\]\]/g, (m, rel) => {
+    const r = rel.trim();
+    return '<img class="md-image" data-vault-src="' + escapeHtml(r) + '" alt="' + escapeHtml(r) + '" loading="lazy">';
+  });
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, rel) => {
+    return '<img class="md-image" data-vault-src="' + escapeHtml(rel.trim()) + '" alt="' + escapeHtml(alt) + '" loading="lazy">';
+  });
+  s = s.replace(/\[\[([^\]|#^]+)(?:[#^][^\]|]*)?(?:\|([^\]]+))?\]\]/g, (m, path, alias) => {
+    const display = (alias || path).trim();
+    return '<a href="#" class="wiki-link" data-rel="' + escapeHtml(path.trim()) + '">' + escapeHtml(display) + "</a>";
+  });
+  s = s.replace(/\[([^\]]+)\]\((?!https?:\/\/)([^)#\s]+\.md)(?:#[^)]*)?\)/g, (m, txt, path) => {
+    return '<a href="#" class="wiki-link" data-rel="' + escapeHtml(path) + '">' + txt + "</a>";
   });
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, txt, url) => {
     const u = safeUrl(url);
     if (!u) return txt;
     if (u === "#") return '<a href="#">' + txt + "</a>";
-    return '<a href="' + u + '" target="_blank" rel="noopener">' + txt + "</a>";
+    return '<a href="' + u + '" class="ext-link" target="_blank" rel="noopener">' + txt + "</a>";
   });
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g, "$1<em>$2</em>");
@@ -1320,9 +1359,24 @@ function renderInline(text) {
 }
 
 function renderMD(md) {
-  const escaped = escapeHtml(md == null ? "" : md);
+  let raw = md == null ? "" : String(md);
+  let fmHtml = "";
+  const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (fm) {
+    const rows = fm[1].trim().split(/\r?\n/).map((line) => {
+      const mm = line.match(/^([\w][\w-]*):\s*(.*)$/);
+      if (!mm) return "";
+      return "<tr><th>" + escapeHtml(mm[1]) + "</th><td>" + renderInline(escapeHtml(mm[2].trim())) + "</td></tr>";
+    }).filter(Boolean);
+    if (rows.length) {
+      fmHtml = '<details class="fm-block" open><summary>Metadaten</summary><table class="fm-table"><tbody>' + rows.join("") + "</tbody></table></details>";
+    }
+    raw = raw.slice(fm[0].length);
+  }
+  const escaped = escapeHtml(raw);
   const lines = escaped.split(/\r?\n/);
   const out = [];
+  if (fmHtml) out.push(fmHtml);
   let i = 0;
   let para = [];
 
@@ -1415,20 +1469,45 @@ function slugify(s) {
   return String(s).toLowerCase().trim().replace(/\s+/g, "-");
 }
 
-function wireWikiLinks() {
-  const doc = $("#doc");
+function resolveVaultPath(rel) {
+  let r = String(rel || "").trim();
+  if (!r) return null;
+  if (!/\.(md|txt)$/i.test(r)) r = r + ".md";
+  if (files.indexOf(r) !== -1) return r;
+  const base = r.slice(r.lastIndexOf("/") + 1);
+  const hit = files.find((f) => f === base || f.endsWith("/" + base));
+  if (hit) return hit;
+  const wikiTry = "wiki/" + r;
+  if (files.indexOf(wikiTry) !== -1) return wikiTry;
+  return null;
+}
+
+function wireDocLinks(root) {
+  const doc = root || $("#doc");
   if (!doc) return;
-  $$("[data-wiki]", doc).forEach((a) => {
+  $$("a.wiki-link", doc).forEach((a) => {
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      const slug = slugify(a.dataset.wiki);
-      const target = "wiki/" + slug + ".md";
-      if (files.indexOf(target) !== -1) openFile(target);
+      const target = resolveVaultPath(a.dataset.rel);
+      if (target) openFile(target);
+    });
+  });
+  $$("img.md-image", doc).forEach((img) => {
+    if (!img.getAttribute("src")) {
+      const rel = img.getAttribute("data-vault-src") || "";
+      img.replaceWith(document.createTextNode("[" + rel + "]"));
+      return;
+    }
+    img.addEventListener("error", () => {
+      const span = document.createElement("span");
+      span.className = "md-img-broken";
+      span.textContent = "[Bild: " + (img.getAttribute("alt") || "") + "]";
+      img.replaceWith(span);
     });
   });
 }
 
-function openInViewport(label, url, md) {
+function openInViewport(label, url, md, filePath) {
   const tl = $("#tab-label");
   const ub = $("#urlbar-text");
   const doc = $("#doc");
@@ -1436,9 +1515,20 @@ function openInViewport(label, url, md) {
   if (ic) ic.textContent = "📄";
   if (tl) tl.textContent = label;
   if (ub) ub.textContent = url;
-  if (doc) doc.innerHTML = renderMD(md);
+  if (doc) {
+    let html = renderMD(md);
+    if (filePath) {
+      html += '<div class="viewer-actions">' +
+        '<button class="vault-file-chat-btn" id="file-chat-btn" type="button">💬 Mit dieser Datei chatten</button>' +
+        "</div>";
+    }
+    doc.innerHTML = html;
+    wireDocLinks(doc);
+    const fcb = $("#file-chat-btn", doc);
+    if (fcb) fcb.addEventListener("click", () => openChatTab("file", filePath, md));
+  }
   pitchActive = false;
-  wireWikiLinks();
+  showDoc();
 }
 
 const PITCH_URL = "https://ewtos.com";
@@ -1494,6 +1584,7 @@ function renderPitch() {
   if (doc) doc.innerHTML = pitchHtml();
   pitchActive = true;
   activePath = null;
+  showDoc();
 
   const play = $("#pp-play");
   const facade = $("#pp-video-facade");
@@ -1569,78 +1660,35 @@ const VIEWS = {
     <button class="tile locked" data-lock="Screenshot">📸<span>Screenshot</span></button>
   </div></div>
 </div>`,
-  vault: `<div class="view view-vault">
-  <div class="vault-top">
-    <div class="view-head">
-      📚 Vault Explorer
-      <button class="tour-trigger" id="vault-tour" type="button">&#x2139; So funktioniert's</button>
-    </div>
-    <div class="view-sub" style="margin:-4px 0 8px">Datei klicken &mdash; öffnet links im Viewport.</div>
-    <ul class="filelist" id="filelist"></ul>
-    <div class="tags">
-      <span class="tag">read-only Demo</span>
-      <span class="tag">dein Server</span>
-      <span class="tag">DSGVO</span>
-      <span class="tag">kein Cloud-Lock-in</span>
-    </div>
+  vault: `<div class="view">
+  <div class="view-head">
+    📚 Vault Explorer
+    <button class="tour-trigger" id="vault-tour" type="button">&#x2139; So funktioniert's</button>
   </div>
-  <div class="chat-dock">
-    <div class="dock-head">💬 Frag direkt zum Vault-Wissen</div>
-    <div class="chat-ctx" id="chat-ctx"></div>
-    <div class="chat-log" id="chat-log"></div>
-    <div class="chat-ex" id="chat-ex">
-      <button data-q="Was ist die Karpathy-Methode und warum kein RAG?">Karpathy-Methode?</button>
-      <button data-q="Welche Ordner hat ein Vault und was bedeuten sie?">Vault-Struktur?</button>
-      <button data-q="Wie funktioniert Chat mit Vault-Wissen?">Wie funktioniert Chat?</button>
-    </div>
-    <div class="composer">
-      <textarea id="msg" rows="3" placeholder="Frag zum Vault-Wissen…"></textarea>
-      <button id="send-btn" class="btn-p">Senden</button>
-    </div>
+  <div class="view-sub" style="margin:-4px 0 8px">Datei klicken &mdash; öffnet links im Viewport.</div>
+  <ul class="filelist" id="filelist"></ul>
+  <button class="btn-p" id="vault-chat-btn" type="button" style="margin:6px 0 10px">💬 Mit Vault chatten</button>
+  <div class="tags">
+    <span class="tag">read-only Demo</span>
+    <span class="tag">dein Server</span>
+    <span class="tag">DSGVO</span>
+    <span class="tag">kein Cloud-Lock-in</span>
   </div>
 </div>`,
-  web: `<div class="view view-web">
-  <div class="web-top">
-    <div class="pitch">
-      <div class="pitch-head">&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
-      Jede Webseite in KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
-    </div>
-    <div class="scrape-row">
-      <input id="scrape-url" type="url" placeholder="https://example.com" autocomplete="off">
-      <button id="scrape-go" class="btn-p">Scrapen</button>
-    </div>
-    <div class="scrape-status" id="scrape-status"></div>
-    <div class="scraper-hint">
-      <strong>Echte App:</strong> 2 Scraper (DOM + Playwright) &middot; Demo: leichter Fetch
-      <button class="tour-trigger" id="web-tour" type="button">&#x2139; Details</button>
-    </div>
+  web: `<div class="view">
+  <div class="pitch">
+    <div class="pitch-head">&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
+    Jede Webseite in KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
   </div>
-  <div class="chat-dock">
-    <div class="dock-head" id="dock-title">💬 Frag &uuml;ber diese Seite</div>
-    <div class="chat-ctx" id="chat-ctx"></div>
-    <div class="chat-log" id="chat-log"></div>
-    <div class="chat-ex" id="chat-ex">
-      <button data-q="Was ist der Kerninhalt dieser Seite?">Kerninhalt?</button>
-      <button data-q="Fasse diese Seite in 3 Sätzen zusammen.">Zusammenfassung</button>
-      <button data-q="Welche Produkte oder Dienstleistungen werden angeboten?">Angebote?</button>
-    </div>
-    <div class="composer">
-      <textarea id="msg" rows="3" placeholder="Frag &uuml;ber den Seiteninhalt…"></textarea>
-      <button id="send-btn" class="btn-p">Senden</button>
-    </div>
+  <div class="scrape-row">
+    <input id="scrape-url" type="url" placeholder="https://example.com" autocomplete="off">
+    <button id="scrape-go" class="btn-p">Scrapen</button>
   </div>
-</div>`,
-  chat: `<div class="view view-chat">
-  <div class="chat-ctx" id="chat-ctx"></div>
-  <div class="chat-log" id="chat-log"></div>
-  <div class="chat-ex" id="chat-ex">
-    <button data-q="Was ist die Karpathy-Methode und warum kein RAG?">Karpathy-Methode?</button>
-    <button data-q="Welche Tools bietet Ewtos Office-Brain?">Welche Tools?</button>
-    <button data-q="Wie funktioniert das mit eigenem Server und Daten?">Server &amp; Daten?</button>
-  </div>
-  <div class="composer">
-    <textarea id="msg" rows="2" placeholder="Frag etwas…"></textarea>
-    <button id="send-btn" class="btn-p">Senden</button>
+  <div class="scrape-status" id="scrape-status"></div>
+  <div class="scrape-chat-wrap" id="scrape-chat-wrap" style="margin-top:8px"></div>
+  <div class="scraper-hint">
+    <strong>Echte App:</strong> 2 Scraper (DOM + Playwright) &middot; Demo: leichter Fetch
+    <button class="tour-trigger" id="web-tour" type="button">&#x2139; Details</button>
   </div>
 </div>`,
   crm: `<div class="view">
@@ -1727,12 +1775,12 @@ const TOURS = {
     { target: "#filelist", title: "Dein Vault", body: "In der echten App liegen hier deine Ordner: kontext/ (wer du bist), raw/ (Quellen, immutable), wiki/ (LLM-kuratiert), PARA-Buckets." },
     { target: "#filelist", title: "Karpathy statt RAG", body: "Die KI liest die Wiki-Seiten direkt wie ein Mensch im Wiki — keine Vektor-DB, kein Embedding-Aufwand." },
     { target: "#doc", title: "Direkt editierbar", body: "Echte App: Datei links im Viewport öffnen, tippen, Strg+S — der Vault wird sofort aktualisiert. Diese Demo ist read-only." },
-    { target: ".chat-dock", title: "Direkt fragen", body: "Stell hier unten direkt Fragen ans Vault-Wissen — BYOK, dein Key, dein Server." }
+    { target: "#vault-chat-btn", title: "Direkt fragen", body: "Öffnet den Chat links im Tab — frag dein ganzes Vault-Wissen. Oder öffne eine Datei und klick dort 'Mit dieser Datei chatten'. BYOK, dein Key, dein Server." }
   ],
   web: [
     { target: "#scrape-url", title: "URL → Markdown", body: "Jede Webseite in Sekunden in sauberes, KI-lesbares Markdown verwandeln." },
     { target: ".scraper-hint", title: "Zwei Scraper", body: "Echte App: DOM-Scraper (liest den Tab, blitzschnell, auch hinter Login) + Playwright (headless Chrome, rendert JS voll, klickt FAQ/Accordeons auf). Diese Demo nutzt nur einen leichten Server-Fetch." },
-    { target: ".chat-dock", title: "Über die Seite fragen", body: "Nach dem Scrapen fragst du hier unten direkt über den Seiteninhalt." }
+    { target: "#scrape-url", title: "Über die Seite fragen", body: "Nach dem Scrapen erscheint 'Mit dieser Seite chatten' — der Chat öffnet links im Tab mit dem Seiteninhalt als Kontext." }
   ]
 };
 
@@ -1841,6 +1889,7 @@ function positionTourCard() {
 }
 
 function setView(name) {
+  if (name === "chat") { openChatTab("vault"); return; }
   const content = $("#content");
   if (!content) return;
   endTour();
@@ -1867,12 +1916,12 @@ function setView(name) {
       $$("#filelist .f-item").forEach((el) => {
         el.addEventListener("click", () => openFile(el.dataset.path));
       });
-      wireChat();
     });
     const tt = $("#vault-tour");
     if (tt) tt.addEventListener("click", () => startTour("vault"));
+    const vcb = $("#vault-chat-btn");
+    if (vcb) vcb.addEventListener("click", () => openChatTab("vault"));
   } else if (name === "web") wireWeb();
-  else if (name === "chat") wireChat();
 }
 
 function wireHome() {
@@ -2263,7 +2312,7 @@ async function loadFiles() {
 async function openFile(path) {
   if (vaultOverride[path] != null) {
     activePath = path;
-    openInViewport(path, "ewtos://vault/" + path, vaultOverride[path]);
+    openInViewport(path, "ewtos://vault/" + path, vaultOverride[path], path);
     $$("#filelist .f-item").forEach((el) => {
       el.classList.toggle("active", el.dataset.path === path);
     });
@@ -2274,7 +2323,7 @@ async function openFile(path) {
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     activePath = path;
-    openInViewport(path, "ewtos://vault/" + path, data.content || "");
+    openInViewport(path, "ewtos://vault/" + path, data.content || "", path);
     $$("#filelist .f-item").forEach((el) => {
       el.classList.toggle("active", el.dataset.path === path);
     });
@@ -2298,7 +2347,14 @@ function wireWeb() {
   }
   const tt = $("#web-tour");
   if (tt) tt.addEventListener("click", () => startTour("web"));
-  wireChat();
+}
+
+function showPageChatBtn() {
+  const w = $("#scrape-chat-wrap");
+  if (!w) return;
+  w.innerHTML = '<button class="btn-p" id="scrape-chat" type="button">💬 Mit dieser Seite chatten</button>';
+  const b = $("#scrape-chat");
+  if (b) b.addEventListener("click", () => openChatTab("page"));
 }
 
 function scrapePitchPage() {
@@ -2311,9 +2367,7 @@ function scrapePitchPage() {
     status.textContent = "Gescrapt: " + md.split(/\s+/).length + " Wörter (diese Pitch-Seite)";
     status.className = "scrape-status ok";
   }
-  const dockTitle = $("#dock-title");
-  if (dockTitle) dockTitle.innerHTML = "&#x1F4AC; Frag über <b>ewtos.com</b>";
-  updateCtxPill();
+  showPageChatBtn();
 }
 
 async function doScrape() {
@@ -2363,9 +2417,7 @@ async function doScrape() {
       status.textContent = "Gescrapt: " + (data.wordCount || 0) + " Wörter";
       status.className = "scrape-status ok";
     }
-    const dockTitle = $("#dock-title");
-    if (dockTitle) dockTitle.innerHTML = "&#x1F4AC; Frag über <b>" + escapeHtml(host) + "</b>";
-    updateCtxPill();
+    showPageChatBtn();
   } catch (e) {
     if (status) {
       status.textContent = "Netzwerkfehler beim Scrapen.";
@@ -2376,23 +2428,41 @@ async function doScrape() {
   }
 }
 
-function updateCtxPill() {
-  const ctx = $("#chat-ctx");
-  if (!ctx) return;
-  if (pageContext) {
-    ctx.innerHTML = '<div class="ctx-pill">🌐 Seite: <b>' + escapeHtml(pageHost || "") + '</b><button id="ctx-clear" title="Kontext lösen">×</button></div>';
-    const clr = $("#ctx-clear");
-    if (clr) {
-      clr.addEventListener("click", () => {
-        pageContext = null;
-        pageHost = null;
-        updateCtxPill();
-      });
-    }
-  } else {
-    ctx.innerHTML = "";
-  }
+function showDoc() {
+  const dw = $("#doc-wrap"), cp = $("#chat-pane");
+  if (dw) dw.style.display = "";
+  if (cp) cp.style.display = "none";
 }
+
+function showChat() {
+  const dw = $("#doc-wrap"), cp = $("#chat-pane");
+  if (dw) dw.style.display = "none";
+  if (cp) cp.style.display = "flex";
+}
+
+function ctxKey() {
+  if (chatMode === "page") return "page:" + (pageHost || "");
+  if (chatMode === "file") return "file:" + (chatFile || "");
+  return "vault";
+}
+
+const CHAT_EX = {
+  vault: [
+    ["Was ist die Karpathy-Methode und warum kein RAG?", "Karpathy-Methode?"],
+    ["Welche Tools bietet Ewtos Office-Brain?", "Welche Tools?"],
+    ["Wie funktioniert das mit eigenem Server und Daten?", "Server & Daten?"]
+  ],
+  page: [
+    ["Was ist der Kerninhalt dieser Seite?", "Kerninhalt?"],
+    ["Fasse diese Seite in 3 Sätzen zusammen.", "Zusammenfassung"],
+    ["Welche Produkte oder Dienstleistungen werden angeboten?", "Angebote?"]
+  ],
+  file: [
+    ["Worum geht es in dieser Datei?", "Worum geht's?"],
+    ["Fasse diese Datei kurz zusammen.", "Zusammenfassung"],
+    ["Was sind die wichtigsten Punkte?", "Wichtigste Punkte?"]
+  ]
+};
 
 function getKey() {
   const inp = $("#api-key");
@@ -2410,58 +2480,101 @@ function chatEmptyState() {
     '</div>';
 }
 
-function renderHistory() {
+function chatBannerHtml() {
+  if (chatMode === "page") return '🌐 Chat: <b>' + escapeHtml(pageHost || "Seite") + "</b>";
+  if (chatMode === "file") return '🗒 Chat: <b>' + escapeHtml(chatFile || "") + "</b>";
+  return "🧠 Chat mit <b>Vault</b> &mdash; dein ganzes Wissen";
+}
+
+function chatTabLabel() {
+  if (chatMode === "file") return "Chat — " + (chatFile || "");
+  if (chatMode === "page") return "Chat — " + (pageHost || "Seite");
+  return "Chat — Vault";
+}
+
+function updateChatPane() {
+  const bn = $("#chat-banner");
+  if (bn) bn.innerHTML = chatBannerHtml();
+  $$("#chat-modes .chat-mode-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === chatMode);
+  });
+  const ex = $("#chat-ex");
+  const hist = histories[ctxKey()] || [];
+  if (ex) {
+    if (hist.length) { ex.style.display = "none"; ex.innerHTML = ""; }
+    else {
+      ex.style.display = "";
+      ex.innerHTML = (CHAT_EX[chatMode] || CHAT_EX.vault)
+        .map((q) => '<button type="button" data-q="' + escapeHtml(q[0]) + '">' + escapeHtml(q[1]) + "</button>").join("");
+    }
+  }
   const log = $("#chat-log");
   if (!log) return;
+  if (!hist.length) {
+    log.innerHTML = chatEmptyState();
+    const sk = $("#ce-setkey");
+    if (sk) sk.addEventListener("click", () => { const dlg = $("#settings-dlg"); if (dlg && dlg.showModal) dlg.showModal(); });
+    return;
+  }
   log.innerHTML = "";
-  history.forEach((m) => {
+  hist.forEach((m) => {
     const el = document.createElement("div");
-    if (m.role === "user") {
-      el.className = "msg me";
-      el.textContent = m.content || "";
-    } else {
-      el.className = "msg ai";
-      el.innerHTML = renderMD(m.content || "");
-    }
+    if (m.role === "user") { el.className = "msg me"; el.textContent = m.content || ""; }
+    else { el.className = "msg ai"; el.innerHTML = renderMD(m.content || ""); wireDocLinks(el); }
     log.appendChild(el);
   });
   log.scrollTop = log.scrollHeight;
 }
 
-function wireChat() {
-  const send = $("#send-btn");
+function openChatTab(mode, file, content) {
+  chatMode = mode || "vault";
+  if (chatMode === "file") {
+    if (file) chatFile = file;
+    if (content != null) chatFileContent = content;
+  }
+  if (chatMode === "page" && !pageContext) chatMode = "vault";
+  const ic = $("#tab-ico"), tl = $("#tab-label"), ub = $("#urlbar-text");
+  if (ic) ic.textContent = "💬";
+  if (tl) tl.textContent = chatTabLabel();
+  if (ub) ub.textContent = "ewtos://chat";
+  pitchActive = false;
+  showChat();
+  updateChatPane();
   const msg = $("#msg");
-  if (send) {
-    send.addEventListener("click", () => {
-      if (msg) ask(msg.value);
-    });
-  }
-  if (msg) {
-    msg.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        ask(msg.value);
-      }
-    });
-  }
-  $$("#chat-ex [data-q]").forEach((b) => {
-    b.addEventListener("click", () => ask(b.dataset.q));
-  });
+  if (msg) msg.focus();
+}
 
-  const log = $("#chat-log");
-  const ex = $("#chat-ex");
-  if (history.length) {
-    if (ex) ex.style.display = "none";
-    renderHistory();
-  } else if (log && !log.children.length) {
-    log.innerHTML = chatEmptyState();
-    const sk = $("#ce-setkey");
-    if (sk) sk.addEventListener("click", () => {
-      const dlg = $("#settings-dlg");
-      if (dlg && dlg.showModal) dlg.showModal();
-    });
+function switchChatMode(mode) {
+  const bn = $("#chat-banner");
+  if (mode === "page" && !pageContext) {
+    if (bn) bn.innerHTML = "Erst eine Seite scrapen (Web-Tool rechts).";
+    return;
   }
-  updateCtxPill();
+  if (mode === "file" && !chatFile) {
+    if (bn) bn.innerHTML = "Erst eine Datei öffnen und &bdquo;Mit dieser Datei chatten&ldquo;.";
+    return;
+  }
+  chatMode = mode;
+  const tl = $("#tab-label");
+  if (tl) tl.textContent = chatTabLabel();
+  updateChatPane();
+}
+
+function wireChatOnce() {
+  const form = $("#chat-form");
+  const msg = $("#msg");
+  if (form) form.addEventListener("submit", (e) => { e.preventDefault(); if (msg) ask(msg.value); });
+  if (msg) msg.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(msg.value); }
+  });
+  const ex = $("#chat-ex");
+  if (ex) ex.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-q]");
+    if (b) ask(b.dataset.q);
+  });
+  $$("#chat-modes .chat-mode-btn").forEach((b) => {
+    b.addEventListener("click", () => switchChatMode(b.dataset.mode));
+  });
 }
 
 async function ask(raw) {
@@ -2476,9 +2589,13 @@ async function ask(raw) {
   const log = $("#chat-log");
   const ex = $("#chat-ex");
   const msg = $("#msg");
-  if (ex) ex.style.display = "none";
   if (msg) msg.value = "";
+  if (ex) { ex.style.display = "none"; }
   if (log && log.querySelector(".chat-empty")) log.innerHTML = "";
+
+  const k = ctxKey();
+  if (!histories[k]) histories[k] = [];
+  const hist = histories[k];
 
   const me = document.createElement("div");
   me.className = "msg me";
@@ -2488,27 +2605,21 @@ async function ask(raw) {
   const ai = document.createElement("div");
   ai.className = "msg ai";
   ai.textContent = "…";
-  if (log) {
-    log.appendChild(ai);
-    log.scrollTop = log.scrollHeight;
-  }
+  if (log) { log.appendChild(ai); log.scrollTop = log.scrollHeight; }
 
   const provider = ($("#provider") && $("#provider").value) || "gemini";
   const model = ($("#model") && $("#model").value.trim()) || (MODELS[provider] && MODELS[provider][0]) || "";
+
+  let ctx = null, ingested = null;
+  if (chatMode === "page") ctx = pageContext;
+  else if (chatMode === "file") ctx = chatFileContent;
+  else if (videoIngested) ingested = vaultOverride[WIKI_PATH];
 
   try {
     const res = await fetch("/demo/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider,
-        api_key: key,
-        model,
-        message: q,
-        history: history.slice(),
-        context: pageContext || null,
-        ingested: (videoIngested && !pageContext) ? vaultOverride[WIKI_PATH] : null
-      })
+      body: JSON.stringify({ provider, api_key: key, model, message: q, history: hist.slice(), context: ctx, ingested })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -2516,9 +2627,10 @@ async function ask(raw) {
       ai.textContent = data.detail || ("Fehler " + res.status);
     } else {
       ai.innerHTML = renderMD(data.answer || "");
-      history.push({ role: "user", content: q });
-      history.push({ role: "assistant", content: data.answer || "" });
-      while (history.length > 16) history.shift();
+      wireDocLinks(ai);
+      hist.push({ role: "user", content: q });
+      hist.push({ role: "assistant", content: data.answer || "" });
+      while (hist.length > 16) hist.shift();
     }
   } catch (e) {
     ai.className = "msg err";
@@ -2703,6 +2815,7 @@ async function init() {
   initDialogs();
   initNav();
   initToolSearch();
+  wireChatOnce();
 
   try {
     await loadFiles();
