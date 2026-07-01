@@ -586,9 +586,12 @@ body {
 .scrape-status.err { color: #ef4444; }
 .scrape-status.ok { color: #22c55e; }
 
-/* PITCH / TAGS / INFO-TOOLTIP / CHAT-DOCK */
-.view-vault, .view-web { padding: 0; }
-.vault-top, .web-top { padding: 12px 14px 80px; }
+/* PITCH / TAGS / SCRAPER-HINT / CHAT-DOCK / TOUR */
+.view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
+.vault-top, .web-top {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
 .pitch {
   background: var(--accent); color: var(--accent-tx);
   border-radius: 9px; padding: 9px 12px; margin-bottom: 11px;
@@ -601,57 +604,68 @@ body {
   border: 1px solid var(--border); border-radius: 999px;
   color: var(--text-muted); background: var(--bg-card); letter-spacing: 0.2px;
 }
-
-/* Info-Tooltip (hover) */
-.info-wrap {
-  position: relative; display: inline-flex; align-items: center;
-  vertical-align: middle; margin-left: 5px;
-}
-.info-btn {
-  width: 16px; height: 16px; border-radius: 50%;
-  background: var(--bg-subtle); border: 1px solid var(--border-input);
-  color: var(--text-muted); font-size: 10px; font-weight: 700; font-style: normal;
-  display: inline-flex; align-items: center; justify-content: center;
-  cursor: default; flex-shrink: 0; line-height: 1; user-select: none;
-}
-.tip {
-  display: none; position: absolute; z-index: 40;
-  bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  min-width: 230px; max-width: 270px;
-  padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 9px; font-size: 12px; line-height: 1.55; color: var(--text);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.2); pointer-events: none; white-space: normal;
-}
-.tip::after {
-  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  border: 6px solid transparent; border-top-color: var(--border);
-}
-.tip::before {
-  content: ""; position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(-50%);
-  border: 6px solid transparent; border-top-color: var(--bg-card); z-index: 1;
-}
-.info-wrap:hover .tip { display: block; }
-
-/* Scraper-Info-Zeile */
 .scraper-hint {
   font-size: 11.5px; color: var(--text-muted); margin-top: 8px;
-  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .scraper-hint strong { color: var(--text); }
 
-/* Chat-Dock: sticky am unteren Rand */
+/* Tour-Trigger (Chip) */
+.tour-trigger {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; vertical-align: middle;
+  font-size: 11px; font-weight: 600; font-family: inherit;
+  color: var(--accent); background: var(--bg-card);
+  border: 1px solid var(--accent); border-radius: 999px; cursor: pointer;
+  transition: background 0.12s;
+}
+.tour-trigger:hover { background: var(--bg-hover); }
+
+/* Chat-Dock: fuellt den Rest bis zum Seitenende */
 .chat-dock {
-  position: sticky; bottom: 0;
+  flex: 1 1 auto; min-height: 170px; display: flex; flex-direction: column;
   border-top: 2px solid var(--border); background: var(--bg-card); padding: 10px 12px;
 }
+.dock-head, .chat-dock .chat-ctx, .chat-dock .chat-ex, .chat-dock .composer { flex-shrink: 0; }
 .dock-head { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 7px; }
 .chat-dock .chat-log {
-  max-height: 220px; overflow-y: auto;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .chat-dock .chat-ex { margin-bottom: 5px; }
 .chat-dock .composer { padding-top: 7px; }
-.chat-dock .composer #msg { min-height: 58px; }
+
+/* Tour-Overlay: floatende Karte, durchklickbar + wegklickbar */
+.tour-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.22); }
+.tour-focus {
+  position: relative; z-index: 55;
+  outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 7px;
+}
+.tour-card {
+  position: fixed; z-index: 60; width: 250px; max-width: calc(100vw - 20px);
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 11px;
+  padding: 13px 14px; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4); color: var(--text);
+}
+.tour-counter { font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin-bottom: 5px; }
+.tour-title { font-size: 14px; font-weight: 700; margin-bottom: 5px; }
+.tour-body { font-size: 12.5px; line-height: 1.55; color: var(--text-muted); margin-bottom: 12px; }
+.tour-nav { display: flex; align-items: center; gap: 7px; }
+.tour-nav .sp { flex: 1; }
+.tour-btn {
+  padding: 6px 13px; font-size: 12px; font-weight: 600; font-family: inherit;
+  border-radius: 8px; cursor: pointer; border: 1px solid var(--border-input);
+  background: var(--bg-subtle); color: var(--text); transition: background 0.12s;
+}
+.tour-btn:hover { background: var(--bg-hover); }
+.tour-btn.primary { background: var(--accent); color: var(--accent-tx); border-color: var(--accent); }
+.tour-close {
+  border: none; background: transparent; color: var(--text-muted);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; font-family: inherit;
+}
+.tour-close:hover { color: var(--text); }
+.tour-arrow { position: absolute; width: 0; height: 0; border: 8px solid transparent; display: none; }
+.tour-card.below .tour-arrow { top: -16px; border-bottom-color: var(--bg-card); }
+.tour-card.above .tour-arrow { bottom: -16px; border-top-color: var(--bg-card); }
 
 /* CHAT */
 .view-chat { display: flex; flex-direction: column; gap: 8px; }
@@ -1065,7 +1079,6 @@ const VIEWS = {
   <div class="tools-head">Werkzeuge</div>
   <div class="tgroup"><div class="tgroup-label">Vault</div><div class="tiles">
     <button class="tile" data-open="vault">📚<span>Explorer</span></button>
-    <button class="tile" data-open="chat">💬<span>Chat</span></button>
     <button class="tile locked" data-lock="CRM">🤝<span>CRM</span></button>
     <button class="tile locked" data-lock="Dokument-Ingest">📥<span>Ingest</span></button>
     <button class="tile locked" data-lock="Vault Health">🩺<span>Health</span></button>
@@ -1093,13 +1106,9 @@ const VIEWS = {
   <div class="vault-top">
     <div class="view-head">
       📚 Vault Explorer
-      <span class="info-wrap"><i class="info-btn">i</i><div class="tip">Dein zweites Gehirn. In der echten App: deine eigenen Ordner &mdash; kontext/ (wer du bist), raw/ (Quellen, immutable), wiki/ (LLM-kuratiert), PARA-Buckets. KI liest Wiki-Seiten direkt &mdash; keine Vektor-DB (Karpathy-Methode).</div></span>
-      <span class="view-sub"> &mdash; Datei klicken, öffnet links</span>
+      <button class="tour-trigger" id="vault-tour" type="button">&#x2139; So funktioniert's</button>
     </div>
-    <p class="view-note" style="margin-bottom:6px">
-      &#x2190; In der echten App direkt editierbar &amp; speicherbar.
-      <span class="info-wrap"><i class="info-btn">i</i><div class="tip">Demo = read-only. Echte App: Datei links im Viewport öffnen, tippen, Strg+S &mdash; Vault wird sofort aktualisiert. Kein separates Editor-Fenster nötig.</div></span>
-    </p>
+    <div class="view-sub" style="margin:-4px 0 8px">Datei klicken &mdash; öffnet links im Viewport.</div>
     <ul class="filelist" id="filelist"></ul>
     <div class="tags">
       <span class="tag">read-only Demo</span>
@@ -1123,35 +1132,34 @@ const VIEWS = {
     </div>
   </div>
 </div>`,
-  web: `<div class=”view view-web”>
-  <div class=”web-top”>
-    <div class=”pitch”>
-      <div class=”pitch-head”>&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
+  web: `<div class="view view-web">
+  <div class="web-top">
+    <div class="pitch">
+      <div class="pitch-head">&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
       Jede Webseite in KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
     </div>
-    <div class=”scrape-row”>
-      <input id=”scrape-url” type=”url” placeholder=”https://example.com” autocomplete=”off”>
-      <button id=”scrape-go” class=”btn-p”>Scrapen</button>
+    <div class="scrape-row">
+      <input id="scrape-url" type="url" placeholder="https://example.com" autocomplete="off">
+      <button id="scrape-go" class="btn-p">Scrapen</button>
     </div>
-    <div class=”scrape-status” id=”scrape-status”></div>
-    <div class=”scraper-hint”>
-      <strong>Echte App:</strong> 2 Scraper
-      <span class=”info-wrap”><i class=”info-btn”>i</i><div class=”tip”><strong>DOM-Scraper</strong> &mdash; liest gerendertes DOM im Tab, blitzschnell, auch hinter Login.<br><br><strong>Playwright-Scraper</strong> &mdash; headless Chrome, rendert JS voll, klickt FAQ/Accordeons auf, scrollt f&uuml;r Lazy-Load automatisch.<br><br>Diese Demo: leichter Server-Fetch (kein Browser im Container). F&uuml;r SPAs: echte App nutzen.</div></span>
-      &middot; Diese Demo: leichter Fetch
+    <div class="scrape-status" id="scrape-status"></div>
+    <div class="scraper-hint">
+      <strong>Echte App:</strong> 2 Scraper (DOM + Playwright) &middot; Demo: leichter Fetch
+      <button class="tour-trigger" id="web-tour" type="button">&#x2139; Details</button>
     </div>
   </div>
-  <div class=”chat-dock”>
-    <div class=”dock-head” id=”dock-title”>💬 Frag &uuml;ber diese Seite</div>
-    <div class=”chat-ctx” id=”chat-ctx”></div>
-    <div class=”chat-log” id=”chat-log”></div>
-    <div class=”chat-ex” id=”chat-ex”>
-      <button data-q=”Was ist der Kerninhalt dieser Seite?”>Kerninhalt?</button>
-      <button data-q=”Fasse diese Seite in 3 Sätzen zusammen.”>Zusammenfassung</button>
-      <button data-q=”Welche Produkte oder Dienstleistungen werden angeboten?”>Angebote?</button>
+  <div class="chat-dock">
+    <div class="dock-head" id="dock-title">💬 Frag &uuml;ber diese Seite</div>
+    <div class="chat-ctx" id="chat-ctx"></div>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="chat-ex" id="chat-ex">
+      <button data-q="Was ist der Kerninhalt dieser Seite?">Kerninhalt?</button>
+      <button data-q="Fasse diese Seite in 3 Sätzen zusammen.">Zusammenfassung</button>
+      <button data-q="Welche Produkte oder Dienstleistungen werden angeboten?">Angebote?</button>
     </div>
-    <div class=”composer”>
-      <textarea id=”msg” rows=”3” placeholder=”Frag &uuml;ber den Seiteninhalt…”></textarea>
-      <button id=”send-btn” class=”btn-p”>Senden</button>
+    <div class="composer">
+      <textarea id="msg" rows="3" placeholder="Frag &uuml;ber den Seiteninhalt…"></textarea>
+      <button id="send-btn" class="btn-p">Senden</button>
     </div>
   </div>
 </div>`,
@@ -1181,9 +1189,128 @@ function lockedView(ico, title) {
 </div>`;
 }
 
+const TOURS = {
+  vault: [
+    { target: "#filelist", title: "Dein Vault", body: "In der echten App liegen hier deine Ordner: kontext/ (wer du bist), raw/ (Quellen, immutable), wiki/ (LLM-kuratiert), PARA-Buckets." },
+    { target: "#filelist", title: "Karpathy statt RAG", body: "Die KI liest die Wiki-Seiten direkt wie ein Mensch im Wiki — keine Vektor-DB, kein Embedding-Aufwand." },
+    { target: "#doc", title: "Direkt editierbar", body: "Echte App: Datei links im Viewport öffnen, tippen, Strg+S — der Vault wird sofort aktualisiert. Diese Demo ist read-only." },
+    { target: ".chat-dock", title: "Direkt fragen", body: "Stell hier unten direkt Fragen ans Vault-Wissen — BYOK, dein Key, dein Server." }
+  ],
+  web: [
+    { target: "#scrape-url", title: "URL → Markdown", body: "Jede Webseite in Sekunden in sauberes, KI-lesbares Markdown verwandeln." },
+    { target: ".scraper-hint", title: "Zwei Scraper", body: "Echte App: DOM-Scraper (liest den Tab, blitzschnell, auch hinter Login) + Playwright (headless Chrome, rendert JS voll, klickt FAQ/Accordeons auf). Diese Demo nutzt nur einen leichten Server-Fetch." },
+    { target: ".chat-dock", title: "Über die Seite fragen", body: "Nach dem Scrapen fragst du hier unten direkt über den Seiteninhalt." }
+  ]
+};
+
+let tourState = null;
+
+function endTour() {
+  if (!tourState) return;
+  if (tourState.focusEl) tourState.focusEl.classList.remove("tour-focus");
+  if (tourState.card) tourState.card.remove();
+  if (tourState.backdrop) tourState.backdrop.remove();
+  document.removeEventListener("keydown", tourState.onKey);
+  window.removeEventListener("resize", tourState.onResize);
+  tourState = null;
+}
+
+function startTour(view) {
+  endTour();
+  const steps = TOURS[view];
+  if (!steps || !steps.length) return;
+  const backdrop = document.createElement("div");
+  backdrop.className = "tour-backdrop";
+  backdrop.addEventListener("click", endTour);
+  const card = document.createElement("div");
+  card.className = "tour-card";
+  document.body.appendChild(backdrop);
+  document.body.appendChild(card);
+  const onKey = (e) => { if (e.key === "Escape") endTour(); };
+  const onResize = () => positionTourCard();
+  document.addEventListener("keydown", onKey);
+  window.addEventListener("resize", onResize);
+  tourState = { steps, i: 0, backdrop, card, focusEl: null, onKey, onResize };
+  renderTourStep();
+}
+
+function renderTourStep() {
+  if (!tourState) return;
+  const { steps, i, card } = tourState;
+  const step = steps[i];
+  if (tourState.focusEl) {
+    tourState.focusEl.classList.remove("tour-focus");
+    tourState.focusEl = null;
+  }
+  const target = step.target ? $(step.target) : null;
+  if (target) {
+    target.classList.add("tour-focus");
+    tourState.focusEl = target;
+  }
+  const first = i === 0;
+  const last = i === steps.length - 1;
+  card.innerHTML =
+    '<span class="tour-arrow"></span>' +
+    '<div class="tour-counter">Tipp ' + (i + 1) + " / " + steps.length + "</div>" +
+    '<div class="tour-title">' + escapeHtml(step.title) + "</div>" +
+    '<div class="tour-body">' + escapeHtml(step.body) + "</div>" +
+    '<div class="tour-nav">' +
+      (first ? "" : '<button class="tour-btn" data-prev type="button">Zurück</button>') +
+      '<span class="sp"></span>' +
+      '<button class="tour-btn primary" data-next type="button">' + (last ? "Fertig" : "Weiter") + "</button>" +
+      '<button class="tour-close" data-close type="button" title="Schließen">×</button>' +
+    "</div>";
+  const nextBtn = card.querySelector("[data-next]");
+  if (nextBtn) nextBtn.addEventListener("click", () => {
+    if (last) endTour();
+    else { tourState.i++; renderTourStep(); }
+  });
+  const prevBtn = card.querySelector("[data-prev]");
+  if (prevBtn) prevBtn.addEventListener("click", () => { tourState.i--; renderTourStep(); });
+  const closeBtn = card.querySelector("[data-close]");
+  if (closeBtn) closeBtn.addEventListener("click", endTour);
+  positionTourCard();
+}
+
+function positionTourCard() {
+  if (!tourState) return;
+  const { card, focusEl } = tourState;
+  const arrow = card.querySelector(".tour-arrow");
+  const cw = card.offsetWidth;
+  const ch = card.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const M = 10;
+  card.classList.remove("above", "below");
+  if (!focusEl) {
+    card.style.left = Math.round((vw - cw) / 2) + "px";
+    card.style.top = Math.round((vh - ch) / 2) + "px";
+    if (arrow) arrow.style.display = "none";
+    return;
+  }
+  if (arrow) arrow.style.display = "";
+  const r = focusEl.getBoundingClientRect();
+  let top;
+  let below = true;
+  if (r.bottom + 16 + ch + M <= vh) { top = r.bottom + 16; below = true; }
+  else if (r.top - 16 - ch - M >= 0) { top = r.top - 16 - ch; below = false; }
+  else { top = Math.max(M, Math.min(vh - ch - M, r.bottom + 16)); below = r.top < vh / 2; }
+  card.classList.add(below ? "below" : "above");
+  let left = r.left + r.width / 2 - cw / 2;
+  left = Math.max(M, Math.min(vw - cw - M, left));
+  card.style.left = Math.round(left) + "px";
+  card.style.top = Math.round(top) + "px";
+  if (arrow) {
+    let ax = r.left + r.width / 2 - left;
+    ax = Math.max(14, Math.min(cw - 14, ax));
+    arrow.style.left = Math.round(ax - 8) + "px";
+  }
+}
+
 function setView(name) {
   const content = $("#content");
   if (!content) return;
+  endTour();
   if (name === "video") content.innerHTML = lockedView("🎬", "Video-Tools");
   else if (name === "bilder") content.innerHTML = lockedView("🎨", "Bilder-Tools");
   else content.innerHTML = VIEWS[name] || VIEWS.home;
@@ -1200,6 +1327,8 @@ function setView(name) {
       });
       wireChat();
     });
+    const tt = $("#vault-tour");
+    if (tt) tt.addEventListener("click", () => startTour("vault"));
   } else if (name === "web") wireWeb();
   else if (name === "chat") wireChat();
 }
@@ -1285,6 +1414,8 @@ function wireWeb() {
       }
     });
   }
+  const tt = $("#web-tour");
+  if (tt) tt.addEventListener("click", () => startTour("web"));
   wireChat();
 }
 
