@@ -594,6 +594,78 @@ body {
 .scrape-status.err { color: #ef4444; }
 .scrape-status.ok { color: #22c55e; }
 
+/* Back-Button (Demo-Tool-Views) */
+.back-btn {
+  display: inline-flex; align-items: center; margin-right: 4px; padding: 2px 8px;
+  font-size: 11px; font-weight: 600; font-family: inherit; vertical-align: middle;
+  color: var(--text-muted); background: var(--bg-subtle);
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer; transition: background 0.12s;
+}
+.back-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* CRM */
+.crm-list { display: flex; flex-direction: column; gap: 8px; }
+.crm-card {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+}
+.crm-avatar {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--accent-tx); background: var(--accent);
+}
+.crm-body { flex: 1; min-width: 0; }
+.crm-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.crm-meta { font-size: 11.5px; color: var(--text-muted); margin: 1px 0 4px; }
+.crm-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.crm-kontakt { flex-shrink: 0; font-size: 10.5px; color: var(--text-faint); white-space: nowrap; align-self: flex-start; }
+.crm-status {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 999px; line-height: 1.5;
+}
+.crm-status.aktiv { color: #166534; background: #dcfce7; }
+.crm-status.lead { color: #1e40af; background: #dbeafe; }
+.crm-status.angebot { color: #92400e; background: #fef3c7; }
+.crm-status.pausiert { color: #4b5563; background: #e5e7eb; }
+[data-mode="dark"] .crm-status.aktiv { color: #4ade80; background: rgba(34,197,94,0.15); }
+[data-mode="dark"] .crm-status.lead { color: #60a5fa; background: rgba(59,130,246,0.15); }
+[data-mode="dark"] .crm-status.angebot { color: #fbbf24; background: rgba(245,158,11,0.15); }
+[data-mode="dark"] .crm-status.pausiert { color: #9ca3af; background: rgba(156,163,175,0.15); }
+
+/* Todos */
+.todo-add { display: flex; gap: 6px; margin-bottom: 10px; }
+.todo-add #todo-input {
+  flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; font-family: inherit; color: var(--text);
+  background: var(--bg-card); border: 1px solid var(--border-input); border-radius: 8px; outline: none;
+}
+.todo-add #todo-input:focus { border-color: var(--accent); }
+.todo-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.todo-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+}
+.todo-check { border: none; background: transparent; color: var(--accent); font-size: 17px; line-height: 1; cursor: pointer; padding: 0; font-family: inherit; }
+.todo-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text); word-break: break-word; }
+.todo-item.done .todo-text { text-decoration: line-through; color: var(--text-faint); }
+.todo-del { border: none; background: transparent; color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; font-family: inherit; }
+.todo-del:hover { color: #ef4444; }
+.todo-empty { font-size: 12px; color: var(--text-muted); padding: 8px 2px; }
+
+/* Color Picker */
+.cp-result { display: flex; align-items: center; gap: 12px; min-height: 4px; }
+.cp-swatch { width: 60px; height: 60px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--border); }
+.cp-info { display: flex; flex-direction: column; gap: 5px; }
+.cp-val {
+  align-self: flex-start; padding: 3px 9px; font-size: 12.5px; font-family: ui-monospace, "Consolas", monospace;
+  color: var(--text); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; transition: background 0.12s;
+}
+.cp-val:hover { background: var(--bg-hover); }
+.cp-status { font-size: 11px; color: var(--text-muted); }
+.cp-recent-wrap { margin-top: 14px; }
+.cp-recent { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cp-chip { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+.cp-chip:hover { transform: scale(1.1); }
+
 /* PITCH / TAGS / SCRAPER-HINT / CHAT-DOCK / TOUR */
 .view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
 .vault-top, .web-top {
@@ -1103,11 +1175,11 @@ const VIEWS = {
   <div class="tools-head">Werkzeuge</div>
   <div class="tgroup"><div class="tgroup-label">Vault</div><div class="tiles">
     <button class="tile" data-open="vault">📚<span>Explorer</span></button>
-    <button class="tile locked" data-lock="CRM">🤝<span>CRM</span></button>
+    <button class="tile" data-open="crm">🤝<span>CRM</span></button>
+    <button class="tile" data-open="todos">✅<span>Todos</span></button>
     <button class="tile locked" data-lock="Dokument-Ingest">📥<span>Ingest</span></button>
     <button class="tile locked" data-lock="Vault Health">🩺<span>Health</span></button>
     <button class="tile locked" data-lock="Notizen">📝<span>Notizen</span></button>
-    <button class="tile locked" data-lock="Todos">✅<span>Todos</span></button>
   </div></div>
   <div class="tgroup"><div class="tgroup-label">Web</div><div class="tiles">
     <button class="tile" data-open="web">📄<span>Scrape</span></button>
@@ -1122,7 +1194,7 @@ const VIEWS = {
   <div class="tgroup"><div class="tgroup-label">Bilder</div><div class="tiles">
     <button class="tile locked" data-lock="Image Analyse">🖼️<span>Analyse</span></button>
     <button class="tile locked" data-lock="Image Generator">🪄<span>Generator</span></button>
-    <button class="tile locked" data-lock="Color Picker">🎨<span>Picker</span></button>
+    <button class="tile" data-open="colorpicker">🎨<span>Picker</span></button>
     <button class="tile locked" data-lock="Screenshot">📸<span>Screenshot</span></button>
   </div></div>
 </div>`,
@@ -1199,6 +1271,44 @@ const VIEWS = {
     <textarea id="msg" rows="2" placeholder="Frag etwas…"></textarea>
     <button id="send-btn" class="btn-p">Senden</button>
   </div>
+</div>`,
+  crm: `<div class="view">
+  <div class="view-head">
+    <button class="back-btn" data-home type="button">&larr; Übersicht</button>
+    🤝 CRM <span class="view-sub">&mdash; Kunden-Cockpit (Demo)</span>
+  </div>
+  <div class="view-sub" style="margin:-4px 0 10px">4 Beispiel-Kunden. In der echten App liegt jeder als Markdown im Vault.</div>
+  <div class="crm-list" id="crm-list"></div>
+  <div class="view-note">Echte App: Kunden leben unter <code>kontext/kunden/</code> &mdash; editierbar, versioniert, DSGVO-konform auf deinem Server. Der Chat-Agent kann sie lesen und pflegen.</div>
+</div>`,
+  todos: `<div class="view">
+  <div class="view-head">
+    <button class="back-btn" data-home type="button">&larr; Übersicht</button>
+    ✅ Todos <span class="view-sub">&mdash; Demo, lokal</span>
+  </div>
+  <div class="todo-add">
+    <input id="todo-input" type="text" placeholder="Neues Todo…" autocomplete="off">
+    <button id="todo-add-btn" class="btn-p" type="button">Hinzufügen</button>
+  </div>
+  <ul class="todo-list" id="todo-list"></ul>
+  <div class="view-note">Echte App: Todos leben in <code>notes/todos.md</code> im Vault &mdash; der Chat-Agent hakt sie ab (<code>list_todos</code>, <code>add_todo</code>, <code>update_todo</code>).</div>
+</div>`,
+  colorpicker: `<div class="view">
+  <div class="view-head">
+    <button class="back-btn" data-home type="button">&larr; Übersicht</button>
+    🎨 Color Picker <span class="view-sub">&mdash; Demo</span>
+  </div>
+  <div class="pitch">
+    <div class="pitch-head">&#x1F58D; Farbpipette</div>
+    Nimm jede Farbe vom Bildschirm auf &mdash; Hex &amp; RGB, ein Klick zum Kopieren.
+  </div>
+  <button id="cp-pick" class="btn-p" type="button" style="margin:2px 0 12px">Farbe aufnehmen</button>
+  <div class="cp-result" id="cp-result"></div>
+  <div class="cp-recent-wrap" id="cp-recent-wrap" style="display:none">
+    <div class="tgroup-label">Zuletzt</div>
+    <div class="cp-recent" id="cp-recent"></div>
+  </div>
+  <div class="view-note">Nutzt die native EyeDropper-API deines Browsers. Echte App: pickt auch gezielt aus DOM-Elementen und exportiert ganze Paletten.</div>
 </div>`
 };
 
@@ -1343,12 +1453,16 @@ function setView(name) {
   $$(".nav-item[data-view]").forEach((b) => {
     b.classList.toggle("active", b.dataset.view === name);
   });
+  $$("[data-home]").forEach((b) => b.addEventListener("click", () => setView("home")));
 
   if (name === "home") {
     wireHome();
     const ts = $("#tool-search");
     if (ts && ts.value.trim()) filterTiles(ts.value);
-  } else if (name === "vault") {
+  } else if (name === "crm") wireCrm();
+  else if (name === "todos") wireTodos();
+  else if (name === "colorpicker") wireColorPicker();
+  else if (name === "vault") {
     loadFiles().then(() => {
       $$("#filelist .f-item").forEach((el) => {
         el.addEventListener("click", () => openFile(el.dataset.path));
@@ -1392,6 +1506,166 @@ function initToolSearch() {
     if (q.trim() && currentView !== "home") setView("home");
     filterTiles(q);
   });
+}
+
+const CRM = [
+  { name: "Bäckerei Sonnenschein", firma: "Sonnenschein GmbH", projekt: "Website-Relaunch", status: "aktiv", kontakt: "vor 3 Tagen", tags: ["WordPress", "Elementor"] },
+  { name: "Zahnarztpraxis Dr. Meier", firma: "Praxis am Markt", projekt: "SEO & Local", status: "lead", kontakt: "vor 1 Woche", tags: ["SEO", "Google Business"] },
+  { name: "Autohaus Brandt", firma: "Brandt & Söhne KG", projekt: "Elementor-Wartung", status: "aktiv", kontakt: "gestern", tags: ["Wartung", "Hosting"] },
+  { name: "Café Central", firma: "Central Gastro UG", projekt: "Social Media", status: "angebot", kontakt: "vor 2 Wochen", tags: ["Instagram", "Content"] }
+];
+const CRM_STATUS = { aktiv: "Aktiv", lead: "Lead", angebot: "Angebot raus", pausiert: "Pausiert" };
+
+function crmInitials(name) {
+  const parts = name.replace(/^(Dr\.|Café|Bäckerei|Autohaus|Zahnarztpraxis)\s+/i, "").split(/\s+/).filter(Boolean);
+  const a = (parts[0] || name)[0] || "?";
+  const b = (parts[1] || "")[0] || "";
+  return (a + b).toUpperCase();
+}
+
+function wireCrm() {
+  const wrap = $("#crm-list");
+  if (!wrap) return;
+  wrap.innerHTML = CRM.map((c) => {
+    const tags = c.tags.map((t) => '<span class="tag">' + escapeHtml(t) + "</span>").join("");
+    return '<div class="crm-card">' +
+      '<div class="crm-avatar">' + escapeHtml(crmInitials(c.name)) + "</div>" +
+      '<div class="crm-body">' +
+        '<div class="crm-name">' + escapeHtml(c.name) +
+          ' <span class="crm-status ' + c.status + '">' + escapeHtml(CRM_STATUS[c.status] || c.status) + "</span></div>" +
+        '<div class="crm-meta">' + escapeHtml(c.firma) + " &middot; " + escapeHtml(c.projekt) + "</div>" +
+        '<div class="crm-tags">' + tags + "</div>" +
+      "</div>" +
+      '<div class="crm-kontakt">' + escapeHtml(c.kontakt) + "</div>" +
+    "</div>";
+  }).join("");
+}
+
+let todos = [
+  { text: "Angebot Café Central nachfassen", done: false },
+  { text: "Elementor-Update Autohaus Brandt testen", done: false },
+  { text: "SEO-Audit Zahnarztpraxis Meier", done: true },
+  { text: "Newsletter-Template finalisieren", done: false }
+];
+
+function renderTodos() {
+  const ul = $("#todo-list");
+  if (!ul) return;
+  if (!todos.length) {
+    ul.innerHTML = '<li class="todo-empty">Keine Todos &mdash; leg oben eins an.</li>';
+    return;
+  }
+  ul.innerHTML = todos.map((t, i) => {
+    return '<li class="todo-item' + (t.done ? " done" : "") + '" data-i="' + i + '">' +
+      '<button class="todo-check" data-toggle="' + i + '" type="button" aria-label="Umschalten">' + (t.done ? "☑" : "☐") + "</button>" +
+      '<span class="todo-text">' + escapeHtml(t.text) + "</span>" +
+      '<button class="todo-del" data-del="' + i + '" type="button" aria-label="Löschen">×</button>' +
+    "</li>";
+  }).join("");
+  $$("#todo-list [data-toggle]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const i = +b.dataset.toggle;
+      todos[i].done = !todos[i].done;
+      renderTodos();
+    });
+  });
+  $$("#todo-list [data-del]").forEach((b) => {
+    b.addEventListener("click", () => {
+      todos.splice(+b.dataset.del, 1);
+      renderTodos();
+    });
+  });
+}
+
+function addTodo() {
+  const inp = $("#todo-input");
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  todos.push({ text, done: false });
+  inp.value = "";
+  renderTodos();
+}
+
+function wireTodos() {
+  const btn = $("#todo-add-btn");
+  const inp = $("#todo-input");
+  if (btn) btn.addEventListener("click", addTodo);
+  if (inp) inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addTodo(); }
+  });
+  renderTodos();
+}
+
+const cpRecent = [];
+
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "";
+  const n = parseInt(m[1], 16);
+  return "rgb(" + ((n >> 16) & 255) + ", " + ((n >> 8) & 255) + ", " + (n & 255) + ")";
+}
+
+function cpCopy(hex, statusEl) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(hex).then(() => {
+      if (statusEl) { statusEl.textContent = "Kopiert: " + hex; }
+    }).catch(() => {});
+  }
+}
+
+function showColor(hex) {
+  const res = $("#cp-result");
+  if (!res) return;
+  const rgb = hexToRgb(hex);
+  res.innerHTML =
+    '<div class="cp-swatch" style="background:' + escapeHtml(hex) + '"></div>' +
+    '<div class="cp-info">' +
+      '<button class="cp-val" data-copy="' + escapeHtml(hex) + '" type="button">' + escapeHtml(hex) + "</button>" +
+      '<button class="cp-val" data-copy="' + escapeHtml(rgb) + '" type="button">' + escapeHtml(rgb) + "</button>" +
+      '<div class="cp-status" id="cp-status">Klick auf einen Wert zum Kopieren</div>' +
+    "</div>";
+  $$("#cp-result [data-copy]").forEach((b) => {
+    b.addEventListener("click", () => cpCopy(b.dataset.copy, $("#cp-status")));
+  });
+  if (cpRecent.indexOf(hex) === -1) {
+    cpRecent.unshift(hex);
+    while (cpRecent.length > 8) cpRecent.pop();
+  }
+  renderCpRecent();
+}
+
+function renderCpRecent() {
+  const wrap = $("#cp-recent-wrap");
+  const box = $("#cp-recent");
+  if (!wrap || !box) return;
+  if (!cpRecent.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  box.innerHTML = cpRecent.map((h) =>
+    '<button class="cp-chip" data-copy="' + escapeHtml(h) + '" title="' + escapeHtml(h) + '" type="button" style="background:' + escapeHtml(h) + '"></button>'
+  ).join("");
+  $$("#cp-recent [data-copy]").forEach((b) => {
+    b.addEventListener("click", () => cpCopy(b.dataset.copy, $("#cp-status")));
+  });
+}
+
+async function wireColorPicker() {
+  const btn = $("#cp-pick");
+  const res = $("#cp-result");
+  if (!btn) return;
+  if (!window.EyeDropper) {
+    btn.disabled = true;
+    if (res) res.innerHTML = '<div class="cp-status">Dein Browser unterstützt die EyeDropper-API nicht (Chrome/Edge ab v95). In der echten Extension gibt es einen DOM-basierten Fallback.</div>';
+    renderCpRecent();
+    return;
+  }
+  btn.addEventListener("click", async () => {
+    try {
+      const r = await new window.EyeDropper().open();
+      if (r && r.sRGBHex) showColor(r.sRGBHex);
+    } catch (e) {}
+  });
+  renderCpRecent();
 }
 
 function openToolDlg(name) {
