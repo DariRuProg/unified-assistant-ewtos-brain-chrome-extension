@@ -551,6 +551,7 @@ body {
 }
 .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .tile {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; padding: 12px 6px; background: var(--bg-subtle); border: 1px solid var(--border);
   border-radius: 10px; color: var(--text); font-size: 18px; line-height: 1; cursor: pointer;
@@ -559,7 +560,14 @@ body {
 .tile span { font-size: 11px; font-weight: 600; line-height: 1.2; }
 .tile:hover { background: var(--bg-hover); }
 .tile:not(.locked) { border-color: var(--accent); }
-.tile.locked { opacity: 0.5; cursor: pointer; }
+.tile.locked { opacity: 0.6; cursor: pointer; }
+.tile.locked::after {
+  content: "Pro"; position: absolute; top: 5px; right: 5px;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 999px; line-height: 1.4;
+  color: var(--accent-tx); background: var(--accent);
+}
+.tgroup.hidden, .tile.hidden { display: none; }
 
 /* VAULT */
 .filelist { list-style: none; }
@@ -701,6 +709,16 @@ body {
 .msg.ai a { color: var(--accent); text-decoration: underline; word-break: break-all; }
 .msg.ai blockquote { border-left: 3px solid var(--accent); margin: 4px 0; padding: 2px 10px; color: var(--text-muted); }
 .msg.ai hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+
+.chat-empty {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 12px 13px; margin: 4px 0; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.chat-empty .ce-head { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.chat-empty p { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0; }
+.chat-empty .ce-hint a { color: var(--accent); }
+.chat-empty .btn-s { margin-top: 3px; padding: 6px 12px; font-size: 12px; }
 
 .chat-ex { display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-ex button {
@@ -907,6 +925,7 @@ let files = [];
 let activePath = null;
 let pageContext = null;
 let pageHost = null;
+let currentView = "home";
 const history = [];
 
 const $ = (sel, root) => (root || document).querySelector(sel);
@@ -1075,6 +1094,11 @@ const VIEWS = {
   <div class="tools-head" style="padding-bottom:6px">
     Ewtos Office-Brain
     <span class="view-sub"> &mdash; Vault &middot; Browser-Tools &middot; Chat &middot; BYOK</span>
+  </div>
+  <div class="pitch">
+    <div class="pitch-head">&#x1F9E0; Dein zweites Gehirn &mdash; direkt im Browser.</div>
+    Vault-Wissen, Web-Tools und Chat an einem Ort. Der Server ist dein Gehirn: dein Wissen
+    bleibt auf deiner Maschine &mdash; DSGVO-freundlich, kein Cloud-Lock-in.
   </div>
   <div class="tools-head">Werkzeuge</div>
   <div class="tgroup"><div class="tgroup-label">Vault</div><div class="tiles">
@@ -1311,6 +1335,7 @@ function setView(name) {
   const content = $("#content");
   if (!content) return;
   endTour();
+  currentView = name;
   if (name === "video") content.innerHTML = lockedView("🎬", "Video-Tools");
   else if (name === "bilder") content.innerHTML = lockedView("🎨", "Bilder-Tools");
   else content.innerHTML = VIEWS[name] || VIEWS.home;
@@ -1319,8 +1344,11 @@ function setView(name) {
     b.classList.toggle("active", b.dataset.view === name);
   });
 
-  if (name === "home") wireHome();
-  else if (name === "vault") {
+  if (name === "home") {
+    wireHome();
+    const ts = $("#tool-search");
+    if (ts && ts.value.trim()) filterTiles(ts.value);
+  } else if (name === "vault") {
     loadFiles().then(() => {
       $$("#filelist .f-item").forEach((el) => {
         el.addEventListener("click", () => openFile(el.dataset.path));
@@ -1339,6 +1367,30 @@ function wireHome() {
   });
   $$(".tile.locked[data-lock]").forEach((t) => {
     t.addEventListener("click", () => openToolDlg(t.dataset.lock));
+  });
+}
+
+function filterTiles(q) {
+  const query = (q || "").trim().toLowerCase();
+  $$(".tgroup").forEach((g) => {
+    let anyVisible = false;
+    $$(".tile", g).forEach((t) => {
+      const label = (t.textContent || "") + " " + (t.dataset.open || "") + " " + (t.dataset.lock || "");
+      const hit = !query || label.toLowerCase().indexOf(query) !== -1;
+      t.classList.toggle("hidden", !hit);
+      if (hit) anyVisible = true;
+    });
+    g.classList.toggle("hidden", !anyVisible);
+  });
+}
+
+function initToolSearch() {
+  const inp = $("#tool-search");
+  if (!inp) return;
+  inp.addEventListener("input", () => {
+    const q = inp.value;
+    if (q.trim() && currentView !== "home") setView("home");
+    filterTiles(q);
   });
 }
 
@@ -1501,6 +1553,33 @@ function getKey() {
   return k;
 }
 
+function chatEmptyState() {
+  return '<div class="chat-empty">' +
+    '<div class="ce-head">&#x1F511; Bring your own Key</div>' +
+    '<p>Der Chat l&auml;uft mit <b>deinem eigenen</b> API-Key &mdash; keine Serverkosten, dein Key bleibt lokal im Browser.</p>' +
+    '<p class="ce-hint">Noch keinen? <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Kostenlosen Gemini-Key holen &rarr;</a></p>' +
+    '<button type="button" class="btn-s" id="ce-setkey">Key eintragen</button>' +
+    '</div>';
+}
+
+function renderHistory() {
+  const log = $("#chat-log");
+  if (!log) return;
+  log.innerHTML = "";
+  history.forEach((m) => {
+    const el = document.createElement("div");
+    if (m.role === "user") {
+      el.className = "msg me";
+      el.textContent = m.content || "";
+    } else {
+      el.className = "msg ai";
+      el.innerHTML = renderMD(m.content || "");
+    }
+    log.appendChild(el);
+  });
+  log.scrollTop = log.scrollHeight;
+}
+
 function wireChat() {
   const send = $("#send-btn");
   const msg = $("#msg");
@@ -1520,6 +1599,20 @@ function wireChat() {
   $$("#chat-ex [data-q]").forEach((b) => {
     b.addEventListener("click", () => ask(b.dataset.q));
   });
+
+  const log = $("#chat-log");
+  const ex = $("#chat-ex");
+  if (history.length) {
+    if (ex) ex.style.display = "none";
+    renderHistory();
+  } else if (log && !log.children.length) {
+    log.innerHTML = chatEmptyState();
+    const sk = $("#ce-setkey");
+    if (sk) sk.addEventListener("click", () => {
+      const dlg = $("#settings-dlg");
+      if (dlg && dlg.showModal) dlg.showModal();
+    });
+  }
   updateCtxPill();
 }
 
@@ -1537,6 +1630,7 @@ async function ask(raw) {
   const msg = $("#msg");
   if (ex) ex.style.display = "none";
   if (msg) msg.value = "";
+  if (log && log.querySelector(".chat-empty")) log.innerHTML = "";
 
   const me = document.createElement("div");
   me.className = "msg me";
@@ -1736,6 +1830,7 @@ async function init() {
   initSettings();
   initDialogs();
   initNav();
+  initToolSearch();
 
   try {
     await loadFiles();
