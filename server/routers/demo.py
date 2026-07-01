@@ -41,6 +41,7 @@ class DemoChatRequest(BaseModel):
     message: str
     history: list[dict] = []
     context: str | None = None
+    ingested: str | None = None
 
 
 class DemoScrapeRequest(BaseModel):
@@ -262,7 +263,10 @@ def demo_chat(req: DemoChatRequest) -> dict[str, Any]:
     if isinstance(req.context, str) and req.context.strip():
         system = _SYSTEM_PAGE.format(context=req.context[:12000])
     else:
-        system = _SYSTEM.format(context=_load_demo_context())
+        vault_ctx = _load_demo_context()
+        if isinstance(req.ingested, str) and req.ingested.strip():
+            vault_ctx += "\n\n---\n\n## Datei: " + req.ingested.strip()[:8000]
+        system = _SYSTEM.format(context=vault_ctx)
     messages = [
         {"role": m.get("role"), "content": m.get("content")}
         for m in (req.history or [])
@@ -666,6 +670,123 @@ body {
 .cp-chip { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
 .cp-chip:hover { transform: scale(1.1); }
 
+/* PITCH-SEITE (Viewport) */
+.pitch-page { max-width: 820px; margin: 0 auto; }
+.pp-hero { text-align: center; padding: 8px 0 18px; }
+.pp-eyebrow {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--accent); background: var(--bg-subtle); border: 1px solid var(--border);
+  padding: 3px 11px; border-radius: 999px; margin-bottom: 14px;
+}
+.pp-title { font-size: 34px; font-weight: 800; line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.5px; }
+.pp-sub { font-size: 15px; line-height: 1.6; color: var(--text-muted); max-width: 620px; margin: 0 auto 18px; }
+.pp-cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.pp-video { margin: 8px auto 26px; max-width: 640px; }
+.pp-video-facade {
+  position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(135deg, #1e293b, #0f172a); background-size: cover; background-position: center;
+  border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pp-play {
+  width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(0,0,0,0.55); color: #fff; font-size: 24px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; transition: transform 0.12s, background 0.12s;
+}
+.pp-video-facade:hover .pp-play { transform: scale(1.08); background: rgba(0,0,0,0.7); }
+.pp-video-cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px; font-size: 12px; color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7)); text-align: left;
+}
+.pp-video-placeholder { color: #e5e7eb; text-align: center; font-size: 14px; line-height: 1.5; padding: 20px; }
+.pp-video-placeholder span { font-size: 12px; color: #9ca3af; }
+.pp-iframe { width: 100%; height: 100%; border: 0; }
+.pp-h2 { font-size: 20px; font-weight: 700; margin: 22px 0 12px; text-align: center; }
+.pp-loop { display: flex; align-items: stretch; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pp-step {
+  flex: 1 1 150px; max-width: 210px; text-align: center; padding: 14px 12px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.pp-step-ico { font-size: 26px; line-height: 1; }
+.pp-step b { font-size: 14px; }
+.pp-step span { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+.pp-arrow { display: flex; align-items: center; color: var(--text-faint); font-size: 20px; font-weight: 700; }
+.pp-features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.pp-feat { padding: 14px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
+.pp-feat b { font-size: 13.5px; }
+.pp-feat span { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.pp-foot { text-align: center; padding: 8px 0 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.pp-foot-note { font-size: 12px; color: var(--text-muted); }
+@media (max-width: 560px) {
+  .pp-title { font-size: 26px; }
+  .pp-features { grid-template-columns: 1fr; }
+  .pp-arrow { transform: rotate(90deg); }
+}
+
+/* Intro-Overlay */
+.intro-dlg { max-width: 440px; }
+.intro-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent);
+}
+.intro-video-facade {
+  position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; margin: 4px 0 4px;
+  background: linear-gradient(135deg, #1e293b, #0f172a); background-size: cover; background-position: center;
+  border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+
+/* Video-Loop-View */
+.yt-url-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.yt-url-row #yt-url {
+  flex: 1; min-width: 0; padding: 8px 10px; font-size: 12.5px; font-family: ui-monospace, "Consolas", monospace;
+  color: var(--text); background: var(--bg-card); border: 1px solid var(--border-input); border-radius: 8px; outline: none;
+}
+.yt-url-row #yt-url:focus { border-color: var(--accent); }
+.yt-meta-card {
+  margin: 8px 0; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; display: flex; flex-direction: column; gap: 3px;
+}
+.yt-meta-card.hidden, .scrape-preview-wrap.hidden { display: none; }
+.yt-meta-row { font-size: 12px; color: var(--text-muted); }
+.yt-meta-row b { color: var(--text); font-weight: 600; }
+.yt-meta-desc span { display: block; margin-top: 2px; color: var(--text-muted); line-height: 1.45; }
+.scrape-preview-wrap { margin: 8px 0; }
+.scrape-preview-toggle {
+  border: none; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600;
+  cursor: pointer; padding: 2px 0; font-family: inherit;
+}
+.scrape-preview-wrap textarea {
+  display: none; width: 100%; margin-top: 6px; height: 180px; resize: vertical; padding: 8px 10px;
+  font-family: ui-monospace, "Consolas", monospace; font-size: 11.5px; line-height: 1.5; color: var(--text);
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px; outline: none;
+}
+.scrape-preview-wrap textarea.open { display: block; }
+.yt-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.yt-actions .btn-p, .yt-actions .btn-s { padding: 7px 12px; font-size: 12.5px; }
+
+/* Playlists-View */
+.playlist-group-header {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--text-faint); margin: 4px 0 8px;
+}
+.playlist-empty { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.playlist-item-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 11px; padding: 10px; }
+.playlist-item-head { display: flex; gap: 10px; }
+.playlist-thumb {
+  width: 96px; height: 54px; flex-shrink: 0; border-radius: 7px; border: 1px solid var(--border);
+  background: linear-gradient(135deg, #1e293b, #0f172a); background-size: cover; background-position: center;
+}
+.playlist-item-headtext { min-width: 0; flex: 1; }
+.playlist-item-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.playlist-item-meta { display: flex; flex-direction: column; gap: 1px; margin-top: 3px; }
+.playlist-item-meta span { font-size: 11px; color: var(--text-muted); }
+.playlist-item-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+.playlist-item-links a, .playlist-item-links .small {
+  font-size: 11.5px; padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg-subtle); color: var(--text); cursor: pointer; text-decoration: none; font-family: inherit;
+}
+.playlist-item-links a:hover, .playlist-item-links .small:hover { background: var(--bg-hover); }
+.pl-badge { font-size: 11px; font-weight: 600; color: #22c55e; padding: 4px 4px; }
+
 /* PITCH / TAGS / SCRAPER-HINT / CHAT-DOCK / TOUR */
 .view-vault, .view-web { display: flex; flex-direction: column; height: 100%; padding: 0; }
 .vault-top, .web-top {
@@ -981,6 +1102,21 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   </div>
 </dialog>
 
+<dialog id="intro-dlg" class="intro-dlg">
+  <div class="dlg-body">
+    <div class="intro-eyebrow">Live-Simulation</div>
+    <div class="dlg-title">Willkommen bei Ewtos Office-Brain</div>
+    <p class="dlg-hint">Das hier ist die App selbst — im Browser nachgestellt. Links die geöffnete Seite, rechts das Sidepanel mit allen Tools. Schau das Erklärvideo, schick es durch dein Brain, oder scrape gleich diese Seite.</p>
+    <div class="intro-video-facade" id="intro-video-facade" style="background-image:url()">
+      <button class="pp-play" id="intro-play" type="button" aria-label="Video abspielen">&#x25B6;</button>
+      <div class="pp-video-cap">Erklärvideo · <span id="intro-dur"></span></div>
+    </div>
+    <div class="dlg-actions">
+      <button class="btn-p" type="button" data-close>Demo starten →</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const MODELS = {
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
@@ -999,6 +1135,147 @@ let pageContext = null;
 let pageHost = null;
 let currentView = "home";
 const history = [];
+
+/* ===== Demo-Video (Mockup) — TODO: nach Upload gegen echtes Video tauschen ===== */
+/* Nur id/url/title/transcript/description/summary anpassen, Rest folgt automatisch. */
+const VIDEO = {
+  id: "PLACEHOLDER_ewtos01",
+  url: "https://www.youtube.com/watch?v=PLACEHOLDER_ewtos01",
+  title: "EwtosBrain — Dein zweites Gehirn im Browser (in 90 Sekunden erklärt)",
+  kanal: "Dario | ewtos.com",
+  dauer: "1:32",
+  aufrufe: 1240,
+  likes: 87,
+  upload_datum: "2026-07-01",
+  thema: "ki-tools",
+  slug: "ewtosbrain-zweites-gehirn-im-browser",
+  description: "EwtosBrain ist eine Chrome-Extension mit lokalem Server, die dein Wissen in einem Obsidian-Vault sammelt und KI-nutzbar macht — nach der Karpathy-Methode statt RAG. In diesem Video: der Loop von der Rohquelle über den Ingest bis zum Chat mit deinem eigenen Wissen. Dein Server, dein Modell, deine Daten.",
+  summary: "EwtosBrain ist eine Chrome-Extension mit lokalem Python-Server, die als täglicher KI-Assistent Wissen in einem Obsidian-Vault aus Markdown-Dateien sammelt. Statt RAG/Vektor-DB nutzt sie die Karpathy-Methode: Die KI liest kuratierte Wiki-Seiten direkt. Kern ist der selbst-fütternde Loop — eine Quelle (z.B. YouTube-Transkript) landet immutable in raw/, wird per Ingest zusammengefasst ins wiki/ überführt und ist danach im Chat durchsuchbar. Prinzip Server = Gehirn, Extension = Gesicht: Owner können Mitarbeiter-Chats übernehmen, Claude Code nutzt dieselben Tools via MCP. Datenhoheit ist zentral — eigener Server, DSGVO-freundlich, frei wählbares LLM.",
+  transcript: [
+    "[00:00] Was, wenn dein Browser ein Gedächtnis hätte — eins, das dir gehört?",
+    "[00:06] Der Arbeitsalltag ist ein Wissens-Chaos. Ein Video hier, ein Artikel da, eine Notiz in einem Tool, das du in zwei Wochen nie wieder öffnest.",
+    "[00:16] Alles verstreut, nichts durchsuchbar. Und wenn du es brauchst, fängst du wieder bei Google an.",
+    "[00:24] EwtosBrain ist dein zweites Gehirn — direkt im Browser.",
+    "[00:29] Eine Chrome-Extension mit einem lokalen Python-Server, der dein Wissen in einem Obsidian-Vault sammelt: einfache Markdown-Dateien, die dir gehören.",
+    "[00:39] Statt einer komplizierten Vektor-Datenbank liest die KI dein Wiki einfach direkt, Seite für Seite, wie ein Mensch, der sich durchklickt.",
+    "[00:48] Das nennen wir die Karpathy-Methode. Kein Embedding-Zauber, nur sauber kuratiertes Wissen, das die KI wirklich versteht.",
+    "[00:57] So funktioniert der Loop. Du findest ein YouTube-Video, zum Beispiel genau dieses hier. Ein Klick, und EwtosBrain zieht das Transkript.",
+    "[01:07] Es landet unangetastet in deinem raw-Ordner, der Rohquelle. Dann der Ingest: die KI fasst es zusammen und legt es sauber in dein Wiki ab.",
+    "[01:17] Ab jetzt ist es Teil deines Gehirns. Du fragst im Chat: Worum ging es in dem Video? Und bekommst die Antwort aus deinem eigenen Wissen.",
+    "[01:27] Quelle rein, Wissen raus. Ein Wiki, das sich selbst füttert.",
+    "[01:33] Und weil das Gehirn auf dem Server sitzt und nicht in der Extension, kann dein Chef Mitarbeiter-Chats übernehmen, und Claude Code nutzt dieselben Tools als seine Hände und Füße.",
+    "[01:44] Dein Wissen bleibt bei dir, auf deinem Server, DSGVO-freundlich, mit dem KI-Modell deiner Wahl.",
+    "[01:51] Probier es direkt hier unten aus: Schick dieses Video durch dein Brain und frag es selbst. Willkommen bei EwtosBrain."
+  ].join("\n")
+};
+const VID_DATUM = "2026-07-01";
+const RAW_PATH = "raw/youtube/" + VID_DATUM + "-" + VIDEO.slug + ".md";
+const WIKI_PATH = "wiki/resources/videos/" + VIDEO.slug + ".md";
+const CREATOR_PATH = "wiki/resources/creators/dario-ewtos.md";
+const RAW_REF = "raw/youtube/" + VID_DATUM + "-" + VIDEO.slug;
+
+function thumbUrl(id) { return "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"; }
+
+const vaultOverride = {};
+const extraFiles = [];
+let videoFetched = false;
+let videoInBrain = false;
+let videoIngested = false;
+
+function rawMarkdown() {
+  const t = thumbUrl(VIDEO.id);
+  return [
+    "---",
+    "datum: " + VID_DATUM,
+    "quelle: " + VIDEO.url,
+    "titel: " + VIDEO.title,
+    "target_playlist: EwtosBrain Demo",
+    "tags: [video, " + VIDEO.thema + "]",
+    "typ: video",
+    "kanal: " + VIDEO.kanal,
+    "dauer: " + VIDEO.dauer,
+    "aufrufe: " + VIDEO.aufrufe,
+    "likes: " + VIDEO.likes,
+    "upload_datum: " + VIDEO.upload_datum,
+    "thumbnail_url: " + t,
+    "---",
+    "",
+    "# " + VIDEO.title,
+    "",
+    "![Thumbnail](" + t + ")",
+    "",
+    "## Beschreibung",
+    "",
+    VIDEO.description,
+    "",
+    "## Transkript",
+    "",
+    VIDEO.transcript
+  ].join("\n");
+}
+
+function wikiMarkdown() {
+  const t = thumbUrl(VIDEO.id);
+  return [
+    "---",
+    "typ: video",
+    "titel: " + VIDEO.title,
+    "status: aktiv",
+    "quelle_url: " + VIDEO.url,
+    "video_id: " + VIDEO.id,
+    "thumbnail_url: " + t,
+    "kanal: " + VIDEO.kanal,
+    "upload_datum: " + VIDEO.upload_datum,
+    "dauer: " + VIDEO.dauer,
+    "aufrufe: " + VIDEO.aufrufe,
+    "likes: " + VIDEO.likes,
+    "thema: " + VIDEO.thema,
+    "tags: [video]",
+    "transcript: " + RAW_REF,
+    "playlists: [ewtosbrain-demo]",
+    "zuletzt: " + VID_DATUM,
+    "---",
+    "",
+    "# " + VIDEO.title,
+    "",
+    "![Thumbnail](" + t + ")",
+    "",
+    "- **Kanal:** " + VIDEO.kanal + " · **Upload:** " + VIDEO.upload_datum + " · **Dauer:** " + VIDEO.dauer,
+    "- **Aufrufe:** " + VIDEO.aufrufe + " · **Likes:** " + VIDEO.likes,
+    "- **Quelle:** " + VIDEO.url,
+    "",
+    "## Beschreibung",
+    VIDEO.description,
+    "",
+    "## Zusammenfassung",
+    VIDEO.summary,
+    "",
+    "## Transkript",
+    "[[" + RAW_REF + "]]"
+  ].join("\n");
+}
+
+function creatorMarkdown() {
+  return [
+    "---",
+    "typ: creator",
+    "titel: " + VIDEO.kanal,
+    "name: " + VIDEO.kanal,
+    "kanal_url: https://www.youtube.com/@ewtos",
+    "plattform: youtube",
+    "tags: [creator]",
+    "zuletzt: " + VID_DATUM,
+    "---",
+    "",
+    "# " + VIDEO.kanal,
+    "",
+    "## Profil",
+    "Dario von ewtos.com — Webentwickler in einer Werbeagentur, baut KI-Lösungen, WordPress-Plugins und Automationen. Kanal rund um EwtosBrain und das Konzept Zweites Gehirn.",
+    "",
+    "## Videos",
+    "- [[wiki/resources/videos/" + VIDEO.slug + "]]"
+  ].join("\n");
+}
 
 const $ = (sel, root) => (root || document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
@@ -1155,10 +1432,104 @@ function openInViewport(label, url, md) {
   const tl = $("#tab-label");
   const ub = $("#urlbar-text");
   const doc = $("#doc");
+  const ic = $("#tab-ico");
+  if (ic) ic.textContent = "📄";
   if (tl) tl.textContent = label;
   if (ub) ub.textContent = url;
   if (doc) doc.innerHTML = renderMD(md);
+  pitchActive = false;
   wireWikiLinks();
+}
+
+const PITCH_URL = "https://ewtos.com";
+let pitchActive = false;
+
+function pitchHtml() {
+  return '<div class="pitch-page">' +
+    '<div class="pp-hero">' +
+      '<div class="pp-eyebrow">Chrome-Extension + lokaler Server</div>' +
+      '<h1 class="pp-title">Dein zweites Gehirn &mdash; direkt im Browser.</h1>' +
+      '<p class="pp-sub">EwtosBrain sammelt dein Wissen in einem Obsidian-Vault und macht es KI-nutzbar &mdash; nach der Karpathy-Methode statt RAG. Dein Server, dein Modell, deine Daten.</p>' +
+      '<div class="pp-cta">' +
+        '<button class="btn-p" data-cta="video" type="button">&#x25B6; Video durchs Brain schicken</button>' +
+        '<button class="btn-s" data-cta="vault" type="button">Vault erkunden</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pp-video">' +
+      '<div class="pp-video-facade" id="pp-video-facade" style="background-image:url(' + thumbUrl(VIDEO.id) + ')">' +
+        '<button class="pp-play" id="pp-play" type="button" aria-label="Video abspielen">&#x25B6;</button>' +
+        '<div class="pp-video-cap">' + escapeHtml(VIDEO.title) + ' &middot; ' + VIDEO.dauer + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<h2 class="pp-h2">So funktioniert der Loop</h2>' +
+    '<div class="pp-loop">' +
+      '<div class="pp-step"><div class="pp-step-ico">🎬</div><b>Quelle rein</b><span>YouTube, Webseite &hellip; landet immutable in <code>raw/</code></span></div>' +
+      '<div class="pp-arrow">&rarr;</div>' +
+      '<div class="pp-step"><div class="pp-step-ico">🧠</div><b>Ingest</b><span>KI fasst zusammen, kuratiert ins <code>wiki/</code></span></div>' +
+      '<div class="pp-arrow">&rarr;</div>' +
+      '<div class="pp-step"><div class="pp-step-ico">💬</div><b>Chat</b><span>Frag dein eigenes Wissen</span></div>' +
+    '</div>' +
+    '<h2 class="pp-h2">Warum EwtosBrain</h2>' +
+    '<div class="pp-features">' +
+      '<div class="pp-feat"><b>🔒 Datenhoheit</b><span>Läuft auf deinem Server. DSGVO-freundlich, kein Cloud-Lock-in.</span></div>' +
+      '<div class="pp-feat"><b>🧩 Karpathy statt RAG</b><span>Die KI liest dein Wiki direkt &mdash; keine Vektor-DB, kein Embedding-Aufwand.</span></div>' +
+      '<div class="pp-feat"><b>🖐 Server = Gehirn</b><span>Owner übernehmen Mitarbeiter-Chats, Claude Code nutzt dieselben Tools via MCP.</span></div>' +
+      '<div class="pp-feat"><b>🔁 Multi-LLM &middot; BYOK</b><span>Anthropic, OpenAI, Gemini oder Ollama lokal &mdash; dein Modell.</span></div>' +
+    '</div>' +
+    '<div class="pp-foot">' +
+      '<button class="btn-p" data-cta="video" type="button">Jetzt den Loop ausprobieren &rarr;</button>' +
+      '<div class="pp-foot-note">Tipp: Rechts im Sidepanel sind alle Tools. Du kannst sogar <b>diese Seite scrapen</b>.</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderPitch() {
+  const tl = $("#tab-label");
+  const ub = $("#urlbar-text");
+  const ic = $("#tab-ico");
+  const doc = $("#doc");
+  if (ic) ic.textContent = "🧠";
+  if (tl) tl.textContent = "Ewtos Office-Brain";
+  if (ub) ub.textContent = PITCH_URL;
+  if (doc) doc.innerHTML = pitchHtml();
+  pitchActive = true;
+  activePath = null;
+
+  const play = $("#pp-play");
+  const facade = $("#pp-video-facade");
+  if (play && facade) {
+    play.addEventListener("click", () => {
+      if (VIDEO.id.indexOf("PLACEHOLDER") === 0) {
+        facade.innerHTML = '<div class="pp-video-placeholder">Dein Erklärvideo kommt hier rein.<br><span>Platzhalter &mdash; Video-ID nach Upload eintragen.</span></div>';
+        return;
+      }
+      facade.innerHTML = '<iframe class="pp-iframe" src="https://www.youtube.com/embed/' + VIDEO.id + '?autoplay=1" title="EwtosBrain" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+    });
+  }
+  $$("[data-cta]", doc).forEach((b) => {
+    b.addEventListener("click", () => setView(b.dataset.cta));
+  });
+}
+
+function pitchMarkdown() {
+  return [
+    "# Dein zweites Gehirn — direkt im Browser",
+    "",
+    VIDEO.description,
+    "",
+    "## So funktioniert der Loop",
+    "- **Quelle rein:** YouTube, Webseite … landet immutable in raw/",
+    "- **Ingest:** Die KI fasst zusammen und kuratiert ins wiki/",
+    "- **Chat:** Frag dein eigenes Wissen",
+    "",
+    "## Warum EwtosBrain",
+    "- **Datenhoheit:** Läuft auf deinem Server. DSGVO-freundlich, kein Cloud-Lock-in.",
+    "- **Karpathy statt RAG:** Die KI liest dein Wiki direkt — keine Vektor-DB.",
+    "- **Server = Gehirn:** Owner übernehmen Mitarbeiter-Chats, Claude Code nutzt dieselben Tools via MCP.",
+    "- **Multi-LLM · BYOK:** Anthropic, OpenAI, Gemini oder Ollama lokal.",
+    "",
+    "Erklärvideo: " + VIDEO.title + " (" + VIDEO.dauer + ")"
+  ].join("\n");
 }
 
 const VIEWS = {
@@ -1188,8 +1559,8 @@ const VIEWS = {
     <button class="tile locked" data-lock="Bookmarks">🔖<span>Bookmarks</span></button>
   </div></div>
   <div class="tgroup"><div class="tgroup-label">Video</div><div class="tiles">
-    <button class="tile locked" data-lock="YouTube Transcript">🎬<span>YouTube</span></button>
-    <button class="tile locked" data-lock="Playlists">🎵<span>Playlists</span></button>
+    <button class="tile" data-open="video">🎬<span>YouTube</span></button>
+    <button class="tile" data-open="playlists">🎵<span>Playlists</span></button>
   </div></div>
   <div class="tgroup"><div class="tgroup-label">Bilder</div><div class="tiles">
     <button class="tile locked" data-lock="Image Analyse">🖼️<span>Analyse</span></button>
@@ -1309,6 +1680,34 @@ const VIEWS = {
     <div class="cp-recent" id="cp-recent"></div>
   </div>
   <div class="view-note">Nutzt die native EyeDropper-API deines Browsers. Echte App: pickt auch gezielt aus DOM-Elementen und exportiert ganze Paletten.</div>
+</div>`,
+  video: `<div class="view">
+  <div class="view-head">
+    <button class="back-btn" data-home type="button">&larr; Übersicht</button>
+    🎬 YouTube <span class="view-sub">&mdash; Transkript &rarr; Brain (Demo)</span>
+  </div>
+  <div class="view-sub" style="margin:-4px 0 10px">Schick das Erklärvideo durch den kompletten Loop: holen &rarr; ins Brain &rarr; Playlist &rarr; Ingest &rarr; Chat.</div>
+  <div class="yt-url-row">
+    <input id="yt-url" type="url" autocomplete="off" spellcheck="false">
+    <button id="yt-fetch" class="btn-p" type="button">Transkript holen</button>
+  </div>
+  <div class="scrape-status" id="yt-status"></div>
+  <div class="yt-meta-card hidden" id="yt-meta"></div>
+  <div class="scrape-preview-wrap hidden" id="yt-preview">
+    <button class="scrape-preview-toggle" id="yt-preview-toggle" type="button">&#x25B8; Transkript anzeigen</button>
+    <textarea id="yt-transcript" readonly></textarea>
+  </div>
+  <div class="yt-actions" id="yt-actions"></div>
+  <div class="view-note">Demo: kein echter Scrape &mdash; die Daten sind vorbereitet. Echte App: DOM-Scraper + Server-Fallback holen Transkript &amp; Metadaten live und speichern in <code>raw/youtube/</code>.</div>
+</div>`,
+  playlists: `<div class="view">
+  <div class="view-head">
+    <button class="back-btn" data-home type="button">&larr; Übersicht</button>
+    🎵 Playlists <span class="view-sub">&mdash; Demo</span>
+  </div>
+  <div class="playlist-group-header" id="pl-header">EwtosBrain Demo</div>
+  <div id="playlist-detail"></div>
+  <div class="view-note">Echte App: Playlists gruppieren Videos nach <code>thema</code> unter <code>wiki/resources/playlists/</code>.</div>
 </div>`
 };
 
@@ -1446,8 +1845,7 @@ function setView(name) {
   if (!content) return;
   endTour();
   currentView = name;
-  if (name === "video") content.innerHTML = lockedView("🎬", "Video-Tools");
-  else if (name === "bilder") content.innerHTML = lockedView("🎨", "Bilder-Tools");
+  if (name === "bilder") content.innerHTML = lockedView("🎨", "Bilder-Tools");
   else content.innerHTML = VIEWS[name] || VIEWS.home;
 
   $$(".nav-item[data-view]").forEach((b) => {
@@ -1462,6 +1860,8 @@ function setView(name) {
   } else if (name === "crm") wireCrm();
   else if (name === "todos") wireTodos();
   else if (name === "colorpicker") wireColorPicker();
+  else if (name === "video") wireVideo();
+  else if (name === "playlists") wirePlaylists();
   else if (name === "vault") {
     loadFiles().then(() => {
       $$("#filelist .f-item").forEach((el) => {
@@ -1668,6 +2068,151 @@ async function wireColorPicker() {
   renderCpRecent();
 }
 
+/* ===== Simulierter Video-Loop ===== */
+
+function ytStatus(text, cls) {
+  const s = $("#yt-status");
+  if (!s) return;
+  s.textContent = text;
+  s.className = "scrape-status" + (cls ? " " + cls : "");
+}
+
+function renderVideoMeta() {
+  const card = $("#yt-meta");
+  if (!card) return;
+  card.classList.remove("hidden");
+  card.innerHTML =
+    '<div class="yt-meta-row">Titel: <b>' + escapeHtml(VIDEO.title) + "</b></div>" +
+    '<div class="yt-meta-row">Kanal: ' + escapeHtml(VIDEO.kanal) + "</div>" +
+    '<div class="yt-meta-row">Info: ' + VIDEO.dauer + " &middot; " + VIDEO.aufrufe + " Aufrufe &middot; " + VIDEO.likes + " Likes</div>" +
+    '<div class="yt-meta-row">Upload: ' + VIDEO.upload_datum + "</div>" +
+    '<div class="yt-meta-row yt-meta-desc">Beschreibung: <span>' + escapeHtml(VIDEO.description) + "</span></div>";
+}
+
+function renderVideoActions() {
+  const wrap = $("#yt-actions");
+  if (!wrap) return;
+  if (!videoFetched) { wrap.innerHTML = ""; return; }
+  let html = "";
+  if (!videoInBrain) {
+    html += '<button class="btn-p" id="yt-brain" type="button">🧠 Ins Brain holen</button>';
+  } else {
+    html += '<button class="btn-s" id="yt-open-raw" type="button">🗂 raw/ öffnen</button>';
+    html += '<button class="btn-s" id="yt-open-playlist" type="button">🎵 In Playlist ansehen</button>';
+    if (!videoIngested) {
+      html += '<button class="btn-p" id="yt-ingest" type="button">📥 Ingest &rarr; wiki/</button>';
+    } else {
+      html += '<button class="btn-s" id="yt-open-wiki" type="button">📖 wiki/ öffnen</button>';
+      html += '<button class="btn-p" id="yt-ask" type="button">💬 Jetzt fragen</button>';
+    }
+  }
+  wrap.innerHTML = html;
+  const b1 = $("#yt-brain");
+  if (b1) b1.addEventListener("click", promoteToRaw);
+  const b2 = $("#yt-ingest");
+  if (b2) b2.addEventListener("click", ingestVideo);
+  const b3 = $("#yt-open-raw");
+  if (b3) b3.addEventListener("click", () => { setView("vault"); setTimeout(() => openFile(RAW_PATH), 60); });
+  const b4 = $("#yt-open-wiki");
+  if (b4) b4.addEventListener("click", () => { setView("vault"); setTimeout(() => openFile(WIKI_PATH), 60); });
+  const b5 = $("#yt-open-playlist");
+  if (b5) b5.addEventListener("click", () => setView("playlists"));
+  const b6 = $("#yt-ask");
+  if (b6) b6.addEventListener("click", () => setView("chat"));
+}
+
+function doVideoFetch() {
+  const btn = $("#yt-fetch");
+  if (btn) btn.disabled = true;
+  ytStatus("Lade Transkript & Metadaten…", "");
+  setTimeout(() => {
+    videoFetched = true;
+    renderVideoMeta();
+    const prev = $("#yt-preview");
+    const ta = $("#yt-transcript");
+    if (ta) ta.value = VIDEO.transcript;
+    if (prev) prev.classList.remove("hidden");
+    ytStatus("Geholt: " + VIDEO.transcript.split("\n").length + " Segmente · " + VIDEO.dauer, "ok");
+    renderVideoActions();
+    if (btn) btn.disabled = false;
+  }, 650);
+}
+
+function promoteToRaw() {
+  videoInBrain = true;
+  vaultOverride[RAW_PATH] = rawMarkdown();
+  if (extraFiles.indexOf(RAW_PATH) === -1) extraFiles.push(RAW_PATH);
+  ytStatus("Ins Brain geholt: " + RAW_PATH, "ok");
+  renderVideoActions();
+}
+
+function ingestVideo() {
+  videoIngested = true;
+  vaultOverride[WIKI_PATH] = wikiMarkdown();
+  vaultOverride[CREATOR_PATH] = creatorMarkdown();
+  if (extraFiles.indexOf(WIKI_PATH) === -1) extraFiles.push(WIKI_PATH);
+  if (extraFiles.indexOf(CREATOR_PATH) === -1) extraFiles.push(CREATOR_PATH);
+  ytStatus("Ingest fertig: " + WIKI_PATH + " (mit Zusammenfassung)", "ok");
+  renderVideoActions();
+}
+
+function wireVideo() {
+  const inp = $("#yt-url");
+  const btn = $("#yt-fetch");
+  if (inp && !inp.value) inp.value = VIDEO.url;
+  if (btn) btn.addEventListener("click", doVideoFetch);
+  const tog = $("#yt-preview-toggle");
+  if (tog) tog.addEventListener("click", () => {
+    const ta = $("#yt-transcript");
+    if (!ta) return;
+    const shown = ta.classList.toggle("open");
+    tog.innerHTML = shown ? "&#x25BE; Transkript verbergen" : "&#x25B8; Transkript anzeigen";
+  });
+  if (videoFetched) {
+    renderVideoMeta();
+    const prev = $("#yt-preview");
+    const ta = $("#yt-transcript");
+    if (ta) ta.value = VIDEO.transcript;
+    if (prev) prev.classList.remove("hidden");
+    ytStatus("Bereits geholt · " + VIDEO.dauer, "ok");
+  }
+  renderVideoActions();
+}
+
+function wirePlaylists() {
+  const box = $("#playlist-detail");
+  if (!box) return;
+  if (!videoInBrain) {
+    box.innerHTML = '<div class="playlist-empty">Noch nichts im Brain. Hol dir zuerst das Video im YouTube-Tool &mdash; danach taucht es hier auf.</div>' +
+      '<button class="btn-p" id="pl-goto-video" type="button" style="margin-top:10px">Zum YouTube-Tool</button>';
+    const g = $("#pl-goto-video");
+    if (g) g.addEventListener("click", () => setView("video"));
+    return;
+  }
+  box.innerHTML =
+    '<div class="playlist-item-card">' +
+      '<div class="playlist-item-head">' +
+        '<div class="playlist-thumb" style="background-image:url(' + thumbUrl(VIDEO.id) + ')"></div>' +
+        '<div class="playlist-item-headtext">' +
+          '<div class="playlist-item-title">' + escapeHtml(VIDEO.title) + "</div>" +
+          '<div class="playlist-item-meta"><span>' + escapeHtml(VIDEO.kanal) + "</span><span>hinzugefügt " + VID_DATUM + "</span></div>" +
+        "</div>" +
+      "</div>" +
+      '<div class="playlist-item-links">' +
+        '<a href="' + VIDEO.url + '" target="_blank" rel="noopener">YouTube</a>' +
+        '<button class="small" id="pl-explorer" type="button">🗂 Explorer</button>' +
+        '<button class="small" id="pl-chat" type="button">💬 Chat</button>' +
+        (videoIngested ? '<span class="pl-badge">im Wiki ✓</span>' : '<button class="small" id="pl-ingest" type="button">📥 Ingest</button>') +
+      "</div>" +
+    "</div>";
+  const e = $("#pl-explorer");
+  if (e) e.addEventListener("click", () => { setView("vault"); setTimeout(() => openFile(videoIngested ? WIKI_PATH : RAW_PATH), 60); });
+  const c = $("#pl-chat");
+  if (c) c.addEventListener("click", () => setView("chat"));
+  const ing = $("#pl-ingest");
+  if (ing) ing.addEventListener("click", () => { ingestVideo(); wirePlaylists(); });
+}
+
 function openToolDlg(name) {
   const dn = $("#dlg-name");
   if (dn) dn.textContent = name;
@@ -1710,10 +2255,20 @@ async function loadFiles() {
   } catch (e) {
     files = [];
   }
+  extraFiles.forEach((p) => { if (files.indexOf(p) === -1) files.push(p); });
+  files.sort();
   buildFilelist();
 }
 
 async function openFile(path) {
+  if (vaultOverride[path] != null) {
+    activePath = path;
+    openInViewport(path, "ewtos://vault/" + path, vaultOverride[path]);
+    $$("#filelist .f-item").forEach((el) => {
+      el.classList.toggle("active", el.dataset.path === path);
+    });
+    return;
+  }
   try {
     const res = await fetch("/demo/vault/read?path=" + encodeURIComponent(path));
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1731,6 +2286,7 @@ async function openFile(path) {
 function wireWeb() {
   const go = $("#scrape-go");
   const inp = $("#scrape-url");
+  if (inp && pitchActive && !inp.value) inp.value = PITCH_URL;
   if (go) go.addEventListener("click", doScrape);
   if (inp) {
     inp.addEventListener("keydown", (e) => {
@@ -1743,6 +2299,21 @@ function wireWeb() {
   const tt = $("#web-tour");
   if (tt) tt.addEventListener("click", () => startTour("web"));
   wireChat();
+}
+
+function scrapePitchPage() {
+  const status = $("#scrape-status");
+  const md = pitchMarkdown();
+  openInViewport("ewtos.com", PITCH_URL, md);
+  pageContext = md;
+  pageHost = "ewtos.com";
+  if (status) {
+    status.textContent = "Gescrapt: " + md.split(/\s+/).length + " Wörter (diese Pitch-Seite)";
+    status.className = "scrape-status ok";
+  }
+  const dockTitle = $("#dock-title");
+  if (dockTitle) dockTitle.innerHTML = "&#x1F4AC; Frag über <b>ewtos.com</b>";
+  updateCtxPill();
 }
 
 async function doScrape() {
@@ -1758,6 +2329,9 @@ async function doScrape() {
     }
     return;
   }
+  let uhost = "";
+  try { uhost = new URL(url).hostname.replace(/^www\./, ""); } catch (e) {}
+  if (uhost === "ewtos.com") { scrapePitchPage(); return; }
   if (go) go.disabled = true;
   if (status) {
     status.textContent = "Lade…";
@@ -1932,7 +2506,8 @@ async function ask(raw) {
         model,
         message: q,
         history: history.slice(),
-        context: pageContext || null
+        context: pageContext || null,
+        ingested: (videoIngested && !pageContext) ? vaultOverride[WIKI_PATH] : null
       })
     });
     const data = await res.json().catch(() => ({}));
@@ -2097,6 +2672,29 @@ function initNav() {
   });
 }
 
+function initIntro() {
+  const dlg = $("#intro-dlg");
+  if (!dlg) return;
+  if (sessionStorage.getItem("eb-intro-seen")) return;
+  const dur = $("#intro-dur");
+  if (dur) dur.textContent = VIDEO.dauer;
+  const facade = $("#intro-video-facade");
+  if (facade) facade.style.backgroundImage = "url(" + thumbUrl(VIDEO.id) + ")";
+  const play = $("#intro-play");
+  if (play && facade) {
+    play.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (VIDEO.id.indexOf("PLACEHOLDER") === 0) {
+        facade.innerHTML = '<div class="pp-video-placeholder">Dein Erklärvideo kommt hier rein.<br><span>Platzhalter &mdash; Video-ID nach Upload eintragen.</span></div>';
+        return;
+      }
+      facade.innerHTML = '<iframe class="pp-iframe" src="https://www.youtube.com/embed/' + VIDEO.id + '?autoplay=1" title="EwtosBrain" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+    });
+  }
+  dlg.addEventListener("close", () => sessionStorage.setItem("eb-intro-seen", "1"));
+  if (dlg.showModal) dlg.showModal();
+}
+
 async function init() {
   initTheme();
   initResize();
@@ -2108,15 +2706,11 @@ async function init() {
 
   try {
     await loadFiles();
-    if (files.indexOf("wiki/index.md") !== -1) await openFile("wiki/index.md");
-    else if (files.length) await openFile(files[0]);
-    else openInViewport("ewtos", "ewtos://vault/", "Kein Vault-Inhalt gefunden.");
-  } catch (e) {
-    const doc = $("#doc");
-    if (doc) doc.innerHTML = renderMD("# Willkommen\n\nDer Vault konnte gerade nicht geladen werden. Versuch es mit dem Neu-Laden-Button.");
-  }
+  } catch (e) {}
+  renderPitch();
 
   setView("home");
+  initIntro();
 }
 
 if (document.readyState === "loading") {
