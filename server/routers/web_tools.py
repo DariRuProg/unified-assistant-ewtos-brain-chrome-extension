@@ -6,9 +6,10 @@ import asyncio
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import licensing
 from bridge import bridge
 from tools import youtube_metadata as youtube_metadata_tool
 from tools import youtube_transcript_fallback
@@ -42,7 +43,7 @@ async def _merge_youtube_meta(data: dict[str, Any], url: str) -> dict[str, Any]:
     return data
 
 
-@router.post("/tools/youtube_transcript")
+@router.post("/tools/youtube_transcript", dependencies=[Depends(licensing.require_pro)])
 async def youtube_transcript(req: YouTubeTranscriptRequest) -> dict[str, Any]:
     """Hybrid-Pull: erst Server-API (youtube-transcript-api), Browser als Fallback.
 
@@ -91,7 +92,7 @@ class PageScrapeRequest(BaseModel):
     mode: str = "content"
 
 
-@router.post("/tools/page_scrape")
+@router.post("/tools/page_scrape", dependencies=[Depends(licensing.require_pro)])
 async def page_scrape_endpoint(req: PageScrapeRequest = None) -> dict[str, Any]:
     mode = req.mode if req else "content"
     result = await bridge.call("page_scrape", {"mode": mode})
@@ -105,7 +106,7 @@ class ScrapeUrlRequest(BaseModel):
     mode: str = "content"
 
 
-@router.post("/tools/scrape_url")
+@router.post("/tools/scrape_url", dependencies=[Depends(licensing.require_pro)])
 async def scrape_url_endpoint(req: ScrapeUrlRequest) -> dict[str, Any]:
     result = await web_scraper.scrape_url(req.url, req.mode)
     if not result.get("ok"):
@@ -113,7 +114,7 @@ async def scrape_url_endpoint(req: ScrapeUrlRequest) -> dict[str, Any]:
     return result.get("data", {})
 
 
-@router.post("/tools/seo_check")
+@router.post("/tools/seo_check", dependencies=[Depends(licensing.require_pro)])
 async def seo_check_endpoint() -> dict[str, Any]:
     result = await bridge.call("seo_check", {})
     if not result.get("ok"):
@@ -121,7 +122,7 @@ async def seo_check_endpoint() -> dict[str, Any]:
     return result.get("data", {})
 
 
-@router.post("/tools/image_analyse")
+@router.post("/tools/image_analyse", dependencies=[Depends(licensing.require_pro)])
 async def image_analyse_endpoint() -> dict[str, Any]:
     result = await bridge.call("image_analyse", {})
     if not result.get("ok"):

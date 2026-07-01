@@ -4,7 +4,10 @@
 ; Kompilieren: ISCC.exe installer\ewtosbrain.iss  (Inno Setup 6)
 
 #define AppName "EwtosBrain"
-#define AppVersion "0.1.0"
+; Version-Single-Source ist die Datei VERSION im Repo-Root. Bei Release:
+; VERSION, extension/manifest.json, server/bridge.py und diese Datei
+; synchron aktualisieren.
+#define AppVersion "1.0.0"
 #define AppExe "EwtosBrain.exe"
 
 [Setup]

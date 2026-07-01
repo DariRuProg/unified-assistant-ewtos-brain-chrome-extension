@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import licensing
 from tools import summary_writer
 from tools import transcript_writer
 
@@ -35,7 +36,8 @@ def videos_save_transcript(
         raise HTTPException(400, str(e))
 
 
-@router.post("/tools/videos/{vault_id}/{slug}/summary")
+@router.post("/tools/videos/{vault_id}/{slug}/summary",
+             dependencies=[Depends(licensing.require_pro)])
 def videos_generate_summary(vault_id: str, slug: str) -> dict[str, Any]:
     try:
         return summary_writer.generate_summary(vault_id, slug)

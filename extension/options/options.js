@@ -1,5 +1,6 @@
 // ewtos.com
 import { initI18n, t, localizeDom, getLang, setLang } from '../i18n/i18n.js';
+import { CHECKOUT_URL } from '../lib/constants.js';
 
 const CLIENT_FIELDS = ["serverUrl"];
 
@@ -200,6 +201,29 @@ async function saveServerSettings(values) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(values),
   });
+}
+
+// ----- Office-Brain Pro (Lizenz + Trial) -----
+
+async function loadLicenseStatus() {
+  const line = document.getElementById("licenseStatusLine");
+  if (!line) return;
+  try {
+    const s = await jfetch("/license/status");
+    if (s.tier === "pro") {
+      line.textContent = "✓ Pro aktiv — Lizenz gültig.";
+      line.style.color = "var(--status-online)";
+    } else if (s.tier === "trial") {
+      line.textContent = `Trial aktiv — noch ${s.trial_days_left} Tage voller Zugang zu allen Tools.`;
+      line.style.color = "var(--text)";
+    } else {
+      line.textContent = "Free — Trial abgelaufen. Pro-Tools (Web-Clipping, YouTube, SEO, Bild-Analyse, Playlist-Pull) sind gesperrt.";
+      line.style.color = "var(--text-muted)";
+    }
+  } catch {
+    line.textContent = "Lizenz-Status nicht abrufbar — ist der Server verbunden?";
+    line.style.color = "var(--text-muted)";
+  }
 }
 
 // ----- Vault management -----
@@ -970,6 +994,7 @@ function setupSettingsTabs() {
   await refreshVaults();
   await loadBriefingProfiles();
   await refreshBlueprints();
+  await loadLicenseStatus();
 
   setupDirtyTracking();
 })();
@@ -1189,4 +1214,37 @@ document.getElementById("generateVideoBrainQrBtn")?.addEventListener("click", as
   } catch (e) {
     hint.textContent = t("common.error_msg", { message: e.message });
   }
+});
+
+// ── Office-Brain Pro: Lizenz aktivieren / kaufen ────────────────────────────
+
+document.getElementById("licenseActivateBtn")?.addEventListener("click", async () => {
+  const input = document.getElementById("licenseKey");
+  const status = document.getElementById("licenseActivateStatus");
+  const key = (input?.value || "").trim();
+  if (!key) {
+    status.textContent = "Bitte zuerst einen Lizenz-Key eingeben.";
+    status.className = "vault-status error";
+    return;
+  }
+  status.textContent = "Aktiviere…";
+  status.className = "vault-status";
+  try {
+    await jfetch("/license/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ license_key: key }),
+    });
+    status.textContent = "Pro aktiviert. Danke!";
+    status.className = "vault-status success";
+    if (input) input.value = "";
+    await loadLicenseStatus();
+  } catch (err) {
+    status.textContent = err.message || String(err);
+    status.className = "vault-status error";
+  }
+});
+
+document.getElementById("licenseBuyBtn")?.addEventListener("click", () => {
+  window.open(CHECKOUT_URL, "_blank", "noopener");
 });

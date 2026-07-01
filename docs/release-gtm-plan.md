@@ -29,7 +29,7 @@ Anthropic-Lock-in), Karpathy-Vault statt RAG, Browser-Tools + Claude-Code-Integr
 | Komponente | Reife | Kurzstatus |
 |---|---|---|
 | Chrome Extension (Code) | 🟢 ~90% | MV3-konform, kein Remote-Code, WS-Reconnect + Version-Handshake fertig |
-| Extension → Store-Upload | 🟡 ~70% | Blocker: Screenshots, Privacy-URL online, Version 1.0.0, icon-512, Onboarding |
+| Extension → Store-Upload | 🟡 ~85% | Erledigt: Version 1.0.0, icon-512, Onboarding, Screenshots, Privacy-Policy finalisiert. Offen: Privacy-Policy + Landing online stellen |
 | Server Desktop (Installer) | 🟢 ~85% | PyInstaller-Tray + Inno-Installer laufen; fehlt Code-Signing + Auto-Update |
 | Auth / Multi-User / Seats (F0) | 🟢 fertig | JWT, bcrypt, Bootstrap, Seat-Fundament — bereits gebaut (`server/auth.py`, `users.py`) |
 | Multi-LLM-Backend | 🟢 fertig | Anthropic, OpenAI, Ollama, Mistral, OpenRouter |
@@ -52,15 +52,16 @@ Anthropic-Lock-in), Karpathy-Vault statt RAG, Browser-Tools + Claude-Code-Integr
   `docs/store-listing.md`. Privacy-Policy-Entwurf (DE+EN): `docs/legal/privacy-policy.md`.
 
 ### 1b. Code-/Config-Blocker (klein, im Repo zu fixen)
-- [ ] `extension/manifest.json`: **`version` → `1.0.0`** (aktuell `0.1.0`).
-- [ ] `extension/manifest.json`: **icon-512 registrieren** (`"512": "images/icon-512.png"` —
-  Datei existiert bereits in `extension/images/`).
-- [ ] `extension/manifest.json` + `extension/background.js`: **toter Command
-  `add-highlighted-youtube-to-playlist`** ist registriert, aber nicht implementiert →
-  entweder implementieren oder aus `commands` entfernen (sonst Reviewer-Verwirrung).
-- [ ] Prüfen, ob `web_accessible_resources` für Setup-Wizard-Assets nötig ist.
-- [ ] **Version-Single-Source herstellen** (siehe Teil 2b) — Manifest muss mit
-  `server/bridge.py:SERVER_VERSION` matchen (major.minor), sonst Handshake-Banner.
+- [x] `extension/manifest.json`: **`version` → `1.0.0`** (erledigt 2026-07-01).
+- [x] `extension/manifest.json`: **icon-512 registriert** (`"512": "images/icon-512.png"` in `icons`).
+- [x] **Toter Command** `add-highlighted-youtube-to-playlist`: gegengeprüft — nicht mehr im
+  Manifest (nur `capture-highlighted-tabs`), kein stale Verweis in `background.js`.
+- [x] `web_accessible_resources` geprüft: **nicht nötig** — alle `chrome.runtime.getURL(...)`
+  laufen aus privilegierten Kontexten (background/options/sidepanel/setup), keine
+  Content-Scripts referenzieren Extension-Assets.
+- [x] **Version-Single-Source** hergestellt: `VERSION`-Datei im Repo-Root = Quelle;
+  `manifest.json`, `server/bridge.py:SERVER_VERSION`, `installer/ewtosbrain.iss` synchron auf
+  `1.0.0` (Kommentare verweisen aufeinander).
 
 ### 1c. Launch-kritisches UX (WICHTIG, sonst schlechtes Store-Erlebnis)
 Ein Store-Nutzer installiert die Extension **ohne** laufenden Server → sie muss ihn sauber
@@ -71,11 +72,14 @@ zum Desktop-Server-Download führen, statt „tot" zu wirken.
   voll integriert). **Das ist der wichtigste UX-Blocker für einen guten Store-Eindruck.**
 
 ### 1d. Assets & Legal (Blocker für Einreichung)
-- [ ] **3–5 Screenshots (1280×800)**: (1) Vault-Chat, (2) Page-Scrape/Web-Tool,
-  (3) Vault-Explorer, (4) Setup/Verbindung, (5) Options. Noch keine im Repo.
-- [ ] **Privacy-Policy öffentlich online** unter fester URL (z.B. `ewtos.com/ewtosbrain/privacy`).
-  Entwurf finalisieren: Platzhalter (`<Datum>`, Impressum-Link) füllen, Disclaimer „Vorlage,
-  keine Rechtsberatung" entfernen. Impressum-Seite muss existieren.
+- [x] **5 Screenshots (1280×800)** in `docs/store-assets/out/` (`01-main`, `02-explorer`,
+  `03-chat`, `04-scrape`, `05-video` + `00-intro`) — aus der Live-Demo via agent-browser.
+- [x] **Privacy-Policy finalisiert** (`docs/legal/privacy-policy.md`): Datum gesetzt, Draft-
+  Disclaimer entfernt, Impressum-Links → `ewtos.com/impressum`, Marke → „Ewtos Office-Brain".
+- [ ] **Privacy-Policy öffentlich online stellen** unter `ewtos.com/office-brain/datenschutz`
+  (Markdown-Inhalt 1:1 übernehmen). Impressum wird NICHT dupliziert — es reicht der Verweis
+  auf das bestehende `ewtos.com/impressum` (gleiche juristische Person). **Manueller Schritt
+  (Hosting/DNS).**
 - [ ] Optional: kleines Promo-Tile (440×280) für bessere Store-Darstellung.
 
 ### 1e. Schritt-für-Schritt: Upload in den Chrome Web Store
@@ -158,9 +162,12 @@ Plan liegt in `docs/F0-auth-plan.md` + `docs/anleitung-und-lizenzierung.md`.
   Perfekt für „Zero-Risk testen" auf der Landing-Page.
 
 ### Fehlt (zu erstellen)
-- [ ] **Landing-Page** `ewtos.com/ewtosbrain`: Pitch, Feature-Liste, USPs (self-hosted/BYOK/
-  DSGVO), Screenshots, Pricing-Tabelle, CTAs (Demo öffnen / Extension installieren / Server-
-  Download). Nutzt dieselben Screenshots wie der Store.
+- [x] **Website gebaut** in `site/` (ewtos-Markenhomepage `site/index.html` + Produkt-Landing
+  `site/office-brain/index.html`, geteiltes Space-/Nova-Designsystem, Hell/Dunkel-Toggle): Hero,
+  Features, „Ersetzt 10+ Extensions", So-funktioniert's, USP-Band, Screenshot-Galerie, CTA, Footer +
+  Datenschutz-Seiten. Deploy: `site/` → `ewtos.com/` (Homepage Root, `office-brain/` als Unterordner).
+  **Offen (Owner):** Demo-URL/`.exe`-Pfad/Store-URL eintragen (TODO-Kommentare im HTML), online
+  stellen. *(Pricing-Tabelle bewusst weggelassen — Free-Launch; kommt mit Meilenstein B.)*
 - [ ] **Kurzer Demo-Clip / GIF** (Vault-Chat + Page-Scrape) für Landing + Store.
 - [ ] **Pitch-Copy** (1 Absatz + Bullet-USPs) — Baustein aus `docs/store-listing.md` ausbauen.
 
@@ -179,11 +186,11 @@ Plan liegt in `docs/F0-auth-plan.md` + `docs/anleitung-und-lizenzierung.md`.
 1. **Onboarding-/Offline-Panel** fertig (G1.2) — Extension führt server-los sauber zum Download.
 2. Manifest-Fixes: `version 1.0.0`, icon-512, toten Command entfernen, `web_accessible_resources`.
 3. Version-Single-Source (Manifest ↔ Server ↔ Installer).
-4. **Screenshots** (3–5, 1280×800) erstellen.
+4. ~~**Screenshots** (3–5, 1280×800) erstellen.~~ ✅ `docs/store-assets/out/` (aus Live-Demo).
 5. **Privacy-Policy** finalisieren + öffentlich online stellen (+ Impressum).
 6. Desktop-`.exe` bauen, signieren (falls Zertifikat da; sonst Warnung dokumentieren) + auf
    ewtos.com zum Download.
-7. **Landing-Page** minimal (Pitch + Demo-Link + Downloads) — parallel.
+7. ~~**Landing-Page** minimal (Pitch + Demo-Link + Downloads).~~ ✅ `site/` (ewtos-Homepage + `site/office-brain/`).
 8. Extension-ZIP in den Chrome Web Store einreichen (Teil 1e).
 
 ### 💶 Meilenstein B — Monetarisierung (direkt danach)
@@ -227,7 +234,9 @@ Plan liegt in `docs/F0-auth-plan.md` + `docs/anleitung-und-lizenzierung.md`.
 - Finale Preise + Limits je Tier (Vaults? Seats? Briefing-Profile?).
 - Free-Tier-Umfang (was ist gratis vs. Pro-Gate?).
 - Code-Signing jetzt (Meilenstein A) oder erst B? (beeinflusst SmartScreen-Eindruck bei Early-Usern).
-- Domain-Struktur (`ewtos.com/ewtosbrain`, `demo.ewtos.com`, Download-Pfad der `.exe`).
+- ~~Domain-Struktur~~ **entschieden (2026-07-01):** Produkt-Heimat `ewtos.com/office-brain`
+  (Subpath, Landing + `/datenschutz` + `.exe`-Download), Demo bleibt `demo.ewtos.com`.
+  Öffentliche Marke „Ewtos Office-Brain" (Code intern weiter `EwtosBrain`).
 
 ## Verifikation (wenn Umsetzung startet)
 - Extension: lokal als „unpacked" laden, ohne Server öffnen → Onboarding-Panel muss sauber

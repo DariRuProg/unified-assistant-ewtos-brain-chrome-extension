@@ -40,7 +40,7 @@
   "sidepanel.open_settings": "Settings",
   "sidepanel.reconnect": "Reconnect",
   "sidepanel.offline_title": "Server not reachable.",
-  "sidepanel.offline_body": "Start the EwtosBrain Server App (tray icon in the system tray). Not installed yet? <a href=\"https://ewtos.com/ewtosbrain\" target=\"_blank\" rel=\"noopener\">Download the server app</a>.",
+  "sidepanel.offline_body": "Start the EwtosBrain Server App (tray icon in the system tray). Not installed yet? <a href=\"https://ewtos.com/office-brain\" target=\"_blank\" rel=\"noopener\">Download the server app</a>.",
   "sidepanel.retry_connect": "Retry connection",
   "sidepanel.server_required_title": "Server required",
   "sidepanel.server_required_body": "This tool needs the running EwtosBrain server app (vault access, chat, saving). Start the server app and reconnect.",

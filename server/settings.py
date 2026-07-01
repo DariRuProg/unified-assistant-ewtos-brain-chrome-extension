@@ -383,7 +383,15 @@ def remove_vault(vault_id: str) -> bool:
 
 # --- Auth: Users / Sessions / Seats (F0) ----------------------------------
 
-DEFAULT_LICENSING = {"seat_limit": None, "tier": "free", "license_key": None}
+DEFAULT_LICENSING = {
+    "seat_limit": None,
+    "tier": "free",
+    "license_key": None,
+    "trial_started_at": None,
+    "instance_id": None,
+    "license_valid": False,
+    "validated_at": None,
+}
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 Tage — danach gilt ein Seat als frei
 
 
@@ -502,6 +510,19 @@ def licensing() -> dict[str, Any]:
     out = dict(DEFAULT_LICENSING)
     out.update(all().get("licensing") or {})
     return out
+
+
+def set_licensing(values: dict[str, Any]) -> dict[str, Any]:
+    """Merge einzelner licensing-Felder in settings.json (atomar via _flush)."""
+    global _cache
+    current = all()
+    lic = dict(DEFAULT_LICENSING)
+    lic.update(current.get("licensing") or {})
+    lic.update(values)
+    current["licensing"] = lic
+    _cache = current
+    _flush()
+    return dict(lic)
 
 
 def seat_limit() -> int | None:

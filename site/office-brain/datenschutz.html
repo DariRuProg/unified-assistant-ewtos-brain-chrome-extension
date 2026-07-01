@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="studio-nova" data-mode="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenschutzerklärung — Ewtos Office-Brain</title>
+<meta name="description" content="Datenschutzerklärung der App Ewtos Office-Brain: self-hosted, BYOK, keine Inhaltsdaten an ewtos.com.">
+<meta name="robots" content="noindex, follow">
+<link rel="icon" type="image/svg+xml" href="../images/favicon.svg">
+<script src="../js/theme-init.js"></script>
+<link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand"><a href="index.html" style="color:inherit;text-decoration:none;">ew<span>tos</span></a></div>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">← Ewtos Office-Brain</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <button class="mode-icon-btn" id="modeBtn" aria-label="Modus wechseln">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+    </button>
+  </div>
+</nav>
+
+<main class="legal">
+  <h1>Datenschutzerklärung — Ewtos Office-Brain</h1>
+  <p class="stand">Stand: 2026-07-01</p>
+
+  <h2>1. Verantwortlicher</h2>
+  <p>Dario / ewtos.com — <a href="mailto:info@ewtos.com">info@ewtos.com</a>.
+    (Vollständige Anschrift siehe <a href="https://ewtos.com/impressum" target="_blank" rel="noopener">Impressum</a>.)</p>
+
+  <h2>2. Architektur-Grundsatz (für Datenschutz entscheidend)</h2>
+  <p>Ewtos Office-Brain besteht aus (a) einer Chrome-Extension und (b) einem <strong>Backend, das du selbst
+    betreibst</strong> (lokal auf deinem Rechner oder auf einem Server deiner Wahl). <strong>Inhaltsdaten (Vault,
+    Chats, erfasste Web-Inhalte) verlassen deine Infrastruktur nicht in Richtung ewtos.com.</strong> Der Anbieter
+    (ewtos.com) erhält diese Inhalte nicht.</p>
+
+  <h2>3. Welche Daten verarbeitet die Extension?</h2>
+  <ul>
+    <li><strong>Lokale Einstellungen</strong> (im Browser-Storage): Server-URL, UI-Präferenzen, ein
+      <strong>Login-Token</strong> (bei Multi-User-Servern) und eine zufällige Geräte-Kennung
+      (<code>instance_token</code>). Bleiben auf deinem Gerät.</li>
+    <li><strong>Web-Inhalte (nur nutzer-ausgelöst):</strong> Wenn du ein Page-Tool startest (z.B. Seite clippen,
+      SEO-Check), liest die Extension Inhalte der aktiven Seite und sendet sie an <strong>dein</strong> Backend.
+      Keine Übertragung an ewtos.com.</li>
+    <li><strong>Kein Tracking, keine Werbung, kein Verkauf von Daten.</strong></li>
+  </ul>
+
+  <h2>4. Welche Daten verarbeitet dein Backend?</h2>
+  <p>Dein selbst betriebenes Backend verarbeitet deinen Vault-Inhalt, Chats, Notizen und leitet Chat-Anfragen an
+    den von dir konfigurierten <strong>LLM-Anbieter (BYOK)</strong> weiter (z.B. Anthropic, OpenAI, Mistral; oder
+    Ollama vollständig lokal). Für diese Übermittlung gelten die Datenschutzbestimmungen des jeweiligen Anbieters.
+    Bei Ollama (lokal) verlassen keine Daten dein System.</p>
+
+  <h2>5. Login & Logs (nur bei Multi-User-/Server-Betrieb)</h2>
+  <ul>
+    <li><strong>Login:</strong> Passwörter werden ausschließlich als bcrypt-Hash gespeichert; Sitzungen laufen
+      über signierte Tokens (JWT).</li>
+    <li><strong>Server-Logs:</strong> Das Backend kann technische Logs (Zeitstempel, Fehler) schreiben. Inhalte von
+      Chats werden nicht für Trainingszwecke verwendet. Umfang/Aufbewahrung bestimmt der jeweilige Betreiber des
+      Backends.</li>
+  </ul>
+
+  <h2>6. Chrome-Web-Store-Datenkategorien</h2>
+  <p>Im Sinne der Store-Offenlegung werden verarbeitet: <strong>Authentifizierungsinformationen</strong>
+    (Login-Token, lokal) und <strong>Website-Inhalte</strong> (nur nutzer-ausgelöst, an das eigene Backend). Es
+    findet <strong>keine</strong> Weitergabe an Dritte zu Werbe-/Tracking-Zwecken statt; <strong>kein</strong>
+    Verkauf von Daten.</p>
+
+  <h2>7. Demo-Instanz</h2>
+  <p>Falls du die öffentliche Demo nutzt: Sie läuft read-only mit einem Beispiel-Vault. Eingaben können zur
+    Missbrauchsvermeidung temporär protokolliert werden; gib dort keine sensiblen Daten ein.</p>
+
+  <h2>8. Deine Rechte (DSGVO)</h2>
+  <p>Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit, Widerspruch. Da Inhaltsdaten auf deiner
+    eigenen Infrastruktur liegen, kontrollierst du diese unmittelbar. Anfragen an:
+    <a href="mailto:info@ewtos.com">info@ewtos.com</a>.</p>
+
+  <h2>9. Änderungen</h2>
+  <p>Diese Erklärung kann angepasst werden; die jeweils aktuelle Fassung ist unter der genannten URL abrufbar.</p>
+</main>
+
+<footer class="band-dark">
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="index.html">Ewtos Office-Brain</a>
+      <a href="https://ewtos.com/impressum" target="_blank" rel="noopener">Impressum</a>
+      <a href="../index.html">ewtos.com</a>
+    </div>
+    <p class="foot-copy">© 2026 ewtos.com — Ewtos Office-Brain.</p>
+  </div>
+</footer>
+
+<script src="../js/mode-toggle.js" defer></script>
+</body>
+</html>

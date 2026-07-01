@@ -1,0 +1,20 @@
+# ewtos
+
+> ewtos ist die Produktmarke von Dario, Web-Entwickler aus der Agenturpraxis. Unter ewtos entstehen Tools, Automationen und KI-Lösungen, die alltägliche Arbeit leichter machen — von WordPress-Plugins über n8n-Workflows bis zu eigenen Browser-Tools. Erstes Produkt: Ewtos Office-Brain, ein self-hosted Browser-Assistent, der direkt im Browser mit deinem eigenen Wissen (Obsidian-Vault) chattet und rund zehn einzelne Extensions ersetzt (BYOK, DSGVO-freundlich).
+
+## Was ewtos macht
+
+- WordPress & Custom Plugins
+- Automationen mit n8n
+- KI-Lösungen mit deinen eigenen Daten (BYOK, lokal möglich)
+- Eigene Tools & Browser-Extensions
+
+## Produkt
+
+- Ewtos Office-Brain — Chrome-Extension + selbst betriebener Server. Chat mit deinem Wissen, Web-Clipping, Alltags-Tools an einem Ort. Self-hosted, BYOK, DSGVO-freundlich. Details: https://ewtos.com/office-brain
+
+## Kontakt
+
+- Website: https://ewtos.com
+- E-Mail: info@ewtos.com
+- Impressum: https://ewtos.com/impressum

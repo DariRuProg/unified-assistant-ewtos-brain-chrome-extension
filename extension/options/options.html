@@ -283,6 +283,23 @@
   </div>
 
   </section>
+  <section class="settings-section" data-tab="general">
+  <h2>Office-Brain Pro</h2>
+  <div class="field">
+    <div class="hint" id="licenseStatusLine" style="font-weight:600;">Lizenz-Status wird geladen…</div>
+  </div>
+  <div class="field">
+    <label for="licenseKey">Lizenz-Key</label>
+    <div class="hint">Nach dem Kauf erhältst du von LemonSqueezy einen Lizenz-Key. Hier eintragen und aktivieren — schaltet die Pro-Tools dauerhaft frei.</div>
+    <input id="licenseKey" type="text" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" autocomplete="off" />
+    <div class="vault-actions">
+      <button id="licenseActivateBtn" type="button">Pro aktivieren</button>
+      <button id="licenseBuyBtn" type="button" class="secondary">Pro kaufen</button>
+    </div>
+    <div id="licenseActivateStatus" class="vault-status"></div>
+  </div>
+
+  </section>
   <section class="settings-section" data-tab="connection">
   <h2 data-i18n="options.section_connection">Connection</h2>
 

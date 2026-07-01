@@ -1,6 +1,7 @@
 """EwtosBrain server — FastAPI + WebSocket bridge to Chrome extension."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,7 @@ import config
 import settings
 import auth
 import users
+import licensing
 from bridge import bridge, SERVER_VERSION, _version_compatible
 from routers import auth as auth_router
 from routers import notes
@@ -35,6 +37,7 @@ from routers import vault_files
 from routers import videos
 from routers import settings as settings_router
 from routers import system
+from routers import licensing as licensing_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ewtosbrain")
@@ -59,6 +62,8 @@ async def lifespan(app: FastAPI):
     legacy = settings.migrate_legacy_vault_path(chat.CHAT_DIR / "chat.json")
     if legacy:
         log.info("Migration: legacy vault_path -> vault id=%s name=%r", legacy["id"], legacy["name"])
+    licensing.ensure_trial_started()
+    await asyncio.to_thread(licensing.validate)
     if config.DEMO_MODE:
         log.info("Demo-Modus AKTIV — read-only, Beispiel-Vault")
         _ensure_demo_vault()
@@ -84,6 +89,7 @@ app.include_router(vault_files.router)
 app.include_router(videos.router)
 app.include_router(settings_router.router)
 app.include_router(system.router)
+app.include_router(licensing_router.router)
 
 
 @app.websocket("/ws")

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import licensing
 from bridge import bridge
 from tools import playlists as playlists_tool
 from tools import playlist_orchestrator
@@ -98,7 +99,8 @@ class PlaylistPullPendingRequest(BaseModel):
     summarize: bool = False
 
 
-@router.post("/tools/playlists/{vault_id}/{name}/pull_pending")
+@router.post("/tools/playlists/{vault_id}/{name}/pull_pending",
+             dependencies=[Depends(licensing.require_pro)])
 async def playlists_pull_pending(
     vault_id: str,
     name: str,

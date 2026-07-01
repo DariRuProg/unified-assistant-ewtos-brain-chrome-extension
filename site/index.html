@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="studio-nova" data-mode="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ewtos — Tools, Automationen und KI-Lösungen, die deine Arbeit leichter machen</title>
+<meta name="description" content="ewtos: Ich baue Tools, Automationen und KI-Lösungen, die alltägliche Arbeit leichter machen — WordPress, n8n, KI mit deinen Daten. Erstes Produkt: Ewtos Office-Brain.">
+<link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+<script src="js/theme-init.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Dario",
+  "url": "https://ewtos.com",
+  "jobTitle": "Web-Entwickler & AI Automation Specialist",
+  "brand": { "@type": "Brand", "name": "ewtos" },
+  "knowsAbout": ["WordPress", "Custom Plugins", "n8n", "Workflow-Automatisierung", "KI-Lösungen", "Chrome Extensions", "LLM-Integration"]
+}
+</script>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">ew<span>tos</span></div>
+  <div class="nav-links">
+    <a class="nav-link" href="#was-ich-baue">Was ich baue</a>
+    <a class="nav-link" href="#office-brain">Office-Brain</a>
+    <a class="nav-link" href="#ueber">Über mich</a>
+    <a class="nav-link" href="#kontakt">Kontakt</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="nav-date">Web · Automation · KI</div>
+    <button class="mode-icon-btn" id="modeBtn" aria-label="Modus wechseln">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+    </button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="cover" class="band-space">
+  <div class="stars" aria-hidden="true"></div>
+  <div class="nova" id="nova" aria-hidden="true">
+    <div class="nova-grid"></div>
+    <div class="nova-far"></div>
+    <div class="nova-mid"></div>
+    <div class="nova-glow" id="novaGlow"></div>
+    <div class="nova-sunwash"></div>
+    <div class="nova-sun nova-sun-a"></div>
+    <div class="nova-sun nova-sun-b"></div>
+    <div class="nova-warp" id="novaWarp"></div>
+    <div class="nova-flash"></div>
+  </div>
+  <div class="wrap">
+    <div class="cover-grid">
+      <div>
+        <div class="cover-pill">Web · Automation · KI</div>
+        <h1>Ich baue Tools und Automationen,<br><em>die deine Arbeit leichter machen.</em></h1>
+        <p class="cover-desc">Web-Entwickler aus der Agenturpraxis, spezialisiert auf WordPress, n8n-Automationen und KI-Lösungen. Ich löse konkrete Probleme — und baue dafür, was noch nicht existiert.</p>
+        <div class="cover-tags">
+          <span class="cover-tag">WordPress & Plugins</span>
+          <span class="cover-tag">Automation mit n8n</span>
+          <span class="cover-tag">KI mit deinen Daten</span>
+          <span class="cover-tag">Eigene Tools & Extensions</span>
+          <span class="cover-tag">Self-hosted & DSGVO</span>
+        </div>
+        <div class="cover-actions">
+          <button class="nova-cta" id="novaBtn" data-href="office-brain/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 L4 14 H11 L11 22 L20 10 H13 Z"/></svg>
+            Office-Brain ansehen
+          </button>
+          <a class="btn-ghost" href="#kontakt">Kontakt aufnehmen</a>
+        </div>
+        <div style="margin-top:40px;">
+          <div class="stat-strip">
+            <div class="stat-card">
+              <div class="stat-num">&lt; 1 Min.</div>
+              <div class="stat-label">Antwort aus deinem eigenen Wissen — direkt im Browser</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">10+</div>
+              <div class="stat-label">einzelne Extensions, ersetzt durch ein Add-on</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">100%</div>
+              <div class="stat-label">self-hosted — deine Daten bleiben bei dir</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">0</div>
+              <div class="stat-label">Tracking, keine fremde Cloud</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <!-- Animierte Chat-Vorschau: zeigt Office-Brain statt es zu beschreiben -->
+        <div class="hero-chat">
+          <div class="hero-chat-bar">
+            <div class="chat-avatar">OB</div>
+            <div class="chat-bar-info">
+              <div class="chat-bar-name">Office-Brain</div>
+              <div class="chat-bar-status">dein Wissen · lokal</div>
+            </div>
+          </div>
+          <div class="hero-chat-msgs" id="heroChatMsgs">
+            <div class="msg user">
+              <div class="msg-av user-av">Du</div>
+              <div class="msg-bubble user">Wann ist das Relaunch-Go-Live für Kunde Meierhoff nochmal?</div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-person">
+          <div class="hero-person-av"><img src="images/dario-nova.webp" alt="Dario"></div>
+          <div>
+            <div class="hero-person-name">Dario</div>
+            <div class="hero-person-sub">ewtos · Web-Programmierer & KI-Architekt · Paderborn</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WAS ICH BAUE -->
+<section id="was-ich-baue" class="band-light">
+  <div class="wrap">
+    <span class="s-chip">Was ich baue</span>
+    <h2 class="s-title">Werkzeuge statt <em>Baukasten</em></h2>
+    <p class="s-sub" style="margin-bottom:44px;">Kein Paket-Katalog — ich baue, was dein Problem löst. Web, Automation und KI greifen dabei ineinander.</p>
+
+    <div class="leistungen-list">
+
+      <div class="leistung-row">
+        <div class="leistung-art" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <rect x="12" y="24" width="92" height="70" rx="7"/>
+            <path d="M12 40 h92"/>
+            <circle cx="22" cy="32" r="2"/><circle cx="30" cy="32" r="2"/><circle cx="38" cy="32" r="2"/>
+            <path d="M24 54 h48 M24 64 h34"/>
+            <rect x="24" y="74" width="34" height="12" rx="4"/>
+            <path d="M82 78 l16 11 -8 1 -3 8 z"/>
+            <path d="M108 10 v8 M104 14 h8" opacity="0.7"/>
+          </svg>
+        </div>
+        <div>
+          <h3>WordPress, das mitdenkt</h3>
+          <p>Websites und Plugins, gebaut für echte Redaktionsarbeit statt Klick-Wüste. Schnell, wartbar, auf deinen Betrieb zugeschnitten.</p>
+          <div class="leistung-facts">Custom Plugins · schnell · wartbar</div>
+        </div>
+      </div>
+
+      <div class="leistung-row">
+        <div class="leistung-art" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="48" width="28" height="24" rx="7"/>
+            <rect x="82" y="18" width="28" height="24" rx="7"/>
+            <rect x="82" y="78" width="28" height="24" rx="7"/>
+            <path d="M38 56 C 60 56 62 30 82 30" stroke-dasharray="4 6"/>
+            <path d="M38 64 C 60 64 62 90 82 90" stroke-dasharray="4 6"/>
+            <path d="M76 26 l6 4 -6 4" opacity="0.8"/>
+            <path d="M76 86 l6 4 -6 4" opacity="0.8"/>
+            <path d="M20 56 l-4 7 h6 l-4 7" opacity="0.8"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Automationen mit n8n</h3>
+          <p>Wiederkehrende Handgriffe verschwinden in Workflows, die im Hintergrund laufen. Weniger Handarbeit, nichts fällt mehr durchs Raster.</p>
+          <div class="leistung-facts">weniger Handarbeit · 24/7 · zuverlässig</div>
+        </div>
+      </div>
+
+      <div class="leistung-row">
+        <div class="leistung-art" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="46" r="22"/>
+            <path d="M53 68 q-1 6 7 6 q8 0 7 -6"/>
+            <path d="M54 80 h12 M56 87 h8"/>
+            <path d="M60 38 v10 M55 43 h10"/>
+            <path d="M60 24 v-10 M60 14 h12" opacity="0.7"/><circle cx="76" cy="14" r="3" opacity="0.7"/>
+            <path d="M38 46 h-14" opacity="0.7"/><circle cx="20" cy="46" r="3" opacity="0.7"/>
+            <path d="M82 46 h14" opacity="0.7"/><circle cx="100" cy="46" r="3" opacity="0.7"/>
+          </svg>
+        </div>
+        <div>
+          <h3>KI-Lösungen mit deinen Daten</h3>
+          <p>Assistenten und Chats, die auf deinem Wissen arbeiten — nicht auf fremdem. Dein Key, deine Daten, wenn nötig komplett lokal.</p>
+          <div class="leistung-facts">BYOK · DSGVO · lokal möglich</div>
+        </div>
+      </div>
+
+      <div class="leistung-row">
+        <div class="leistung-art" aria-hidden="true">
+          <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+            <rect x="12" y="22" width="66" height="42" rx="11"/>
+            <path d="M28 64 v12 l14 -12"/>
+            <circle cx="32" cy="43" r="2.5"/><circle cx="45" cy="43" r="2.5"/><circle cx="58" cy="43" r="2.5"/>
+            <rect x="56" y="76" width="52" height="30" rx="9"/>
+            <path d="M68 87 h28 M68 95 h18"/>
+            <path d="M102 14 v10 M97 19 h10" opacity="0.7"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Eigene Tools & Extensions</h3>
+          <p>Wenn es das passende Werkzeug nicht gibt, baue ich es. Bestes Beispiel: Ewtos Office-Brain — mein erstes Produkt.</p>
+          <div class="leistung-facts">Browser-Extensions · Desktop-Tools · Automationen</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- OFFICE-BRAIN SHOWCASE -->
+<section id="office-brain" class="band-dark">
+  <div class="wrap">
+    <span class="s-chip">Mein erstes Produkt</span>
+    <h2 class="s-title">Ewtos Office-Brain — <em>dein Browser-Assistent, der dein Wissen kennt</em></h2>
+    <p class="s-sub">Eine Chrome-Extension mit selbst betriebenem Server: chatte direkt im Browser mit deinem eigenen Wissen, erfasse Web-Inhalte und erledige Alltags-Tools an einem Ort.</p>
+
+    <div class="ob-showcase">
+      <div>
+        <ul class="ob-bullets">
+          <li><strong>Chat mit deinem Wissen</strong> — dein Obsidian-Vault als Gedächtnis, direkt im Browser.</li>
+          <li><strong>Ein Add-on statt zehn</strong> — Farb-Pipette, Screenshot, SEO-Check, Web-Clipping, YouTube-Transkript &amp; mehr.</li>
+          <li><strong>Self-hosted &amp; DSGVO-freundlich</strong> — läuft auf deiner Maschine, keine fremde Cloud.</li>
+          <li><strong>BYOK</strong> — dein eigener API-Key: keine Serverkosten, kein Anbieter-Lock-in.</li>
+        </ul>
+        <a class="btn-cta" href="office-brain/">
+          Zum Produkt
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+      <div class="ob-shot">
+        <img src="images/screenshot-chat.png" alt="Ewtos Office-Brain: Vault-Chat im Browser" width="1280" height="800">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ÜBER MICH -->
+<section id="ueber" class="band-dark">
+  <div class="wrap">
+    <span class="s-chip">Hinter ewtos steckt Dario</span>
+    <h2 class="s-title">Dario — <em>Autodidakt, Builder, Problemlöser</em></h2>
+    <p class="s-sub" style="margin-bottom:44px;">Eine Person mit einem System — und das ist Absicht.</p>
+
+    <div class="split-art">
+      <div>
+        <p style="font-size:15px;color:var(--text);line-height:1.8;margin-bottom:20px;">
+          Ich bin Dario, Web-Entwickler in einer Werbeagentur — und Autodidakt aus Überzeugung. Ich habe mir das Bauen selbst beigebracht, weil ich Probleme lieber löse als beschreibe.
+        </p>
+        <p style="font-size:15px;color:var(--text);line-height:1.8;margin-bottom:20px;">
+          Web, Marketing und KI greifen bei mir ineinander: Die meisten Webdesigner können kein Marketing, die meisten Marketer bauen nicht selbst. Ich mache beides — und baue daraus Systeme, die zusammenarbeiten.
+        </p>
+        <p style="font-size:15px;color:var(--text);line-height:1.8;">
+          Unter meiner Marke <strong style="color:var(--white);">ewtos</strong> entwickle ich, was in der täglichen Arbeit fehlt: von WordPress-Plugins über n8n-Automationen bis zu KI-Werkzeugen wie Office-Brain.
+        </p>
+      </div>
+      <div class="portrait-helmet" style="margin:0;">
+        <img src="images/dario-nova.webp" alt="Dario — Web-Entwickler & AI Automation Specialist">
+        <svg viewBox="0 0 240 268" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="120" cy="119" r="87"/>
+          <circle cx="120" cy="119" r="101" opacity="0.5"/>
+          <path d="M52 92 a87 87 0 0 1 30 -48" opacity="0.6"/>
+          <path d="M199 47 l14 -15"/><circle cx="216" cy="29" r="4"/>
+          <path d="M68 200 q-12 22 -8 38" opacity="0.8"/>
+          <path d="M172 200 q12 22 8 38" opacity="0.8"/>
+          <ellipse cx="120" cy="241" rx="60" ry="14"/>
+          <path d="M84 234 h72" opacity="0.5"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- KONTAKT -->
+<section id="kontakt" class="band-light">
+  <div class="wrap" style="text-align:center;">
+    <span class="s-chip">Kontakt</span>
+    <h2 class="s-title">Lass uns <em>reden</em>.</h2>
+    <p class="s-sub" style="margin:0 auto;">Konkretes Problem, Idee oder einfach eine Frage — schreib mir direkt.</p>
+    <div class="center-cta">
+      <a class="btn-cta" href="mailto:info@ewtos.com">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+        info@ewtos.com
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer class="band-dark">
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="office-brain/">Office-Brain</a>
+      <a href="https://ewtos.com/impressum" target="_blank" rel="noopener">Impressum</a>
+      <a href="datenschutz.html">Datenschutz</a>
+    </div>
+    <p class="foot-copy">© 2026 ewtos · Dario — Tools, Automationen und KI-Lösungen.</p>
+  </div>
+</footer>
+
+<script src="js/mode-toggle.js" defer></script>
+<script src="js/nova.js" defer></script>
+<script src="js/sky.js" defer></script>
+<script src="js/chat.js" defer></script>
+</body>
+</html>

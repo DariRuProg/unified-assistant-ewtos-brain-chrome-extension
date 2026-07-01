@@ -1,13 +1,12 @@
-# Datenschutzerklärung — EwtosBrain (Entwurf)
+# Datenschutzerklärung — Ewtos Office-Brain
 
-> **Hinweis:** Vorlage, keine Rechtsberatung. Vor Veröffentlichung von einer fachkundigen Person prüfen lassen und unter einer öffentlichen URL (z.B. `ewtos.com/ewtosbrain/privacy`) bereitstellen. Englische Fassung unten.
-> Stand: <Datum einsetzen>
+> Stand: 2026-07-01. Englische Fassung unten.
 
 ## 1. Verantwortlicher
-Dario / ewtos.com — info@ewtos.com. (Vollständige Anschrift siehe [Impressum](impressum.md).)
+Dario / ewtos.com — info@ewtos.com. (Vollständige Anschrift siehe [Impressum](https://ewtos.com/impressum).)
 
 ## 2. Architektur-Grundsatz (für Datenschutz entscheidend)
-EwtosBrain besteht aus (a) einer Chrome-Extension und (b) einem **Backend, das du selbst betreibst** (lokal auf deinem Rechner oder auf einem Server deiner Wahl). **Inhaltsdaten (Vault, Chats, erfasste Web-Inhalte) verlassen deine Infrastruktur nicht in Richtung ewtos.com.** Der Anbieter (ewtos.com) erhält diese Inhalte nicht.
+Ewtos Office-Brain besteht aus (a) einer Chrome-Extension und (b) einem **Backend, das du selbst betreibst** (lokal auf deinem Rechner oder auf einem Server deiner Wahl). **Inhaltsdaten (Vault, Chats, erfasste Web-Inhalte) verlassen deine Infrastruktur nicht in Richtung ewtos.com.** Der Anbieter (ewtos.com) erhält diese Inhalte nicht.
 
 ## 3. Welche Daten verarbeitet die Extension?
 - **Lokale Einstellungen** (im Browser-Storage): Server-URL, UI-Präferenzen, ein **Login-Token** (bei Multi-User-Servern) und eine zufällige Geräte-Kennung (`instance_token`). Bleiben auf deinem Gerät.
@@ -35,13 +34,13 @@ Diese Erklärung kann angepasst werden; die jeweils aktuelle Fassung ist unter d
 
 ---
 
-# Privacy Policy — EwtosBrain (Draft, EN)
+# Privacy Policy — Ewtos Office-Brain (EN)
 
-> Template, not legal advice. Have it reviewed before publishing at a public URL.
+> Last updated: 2026-07-01.
 
-**Controller:** Dario / ewtos.com — info@ewtos.com (see [Impressum](impressum.md)).
+**Controller:** Dario / ewtos.com — info@ewtos.com (see [Impressum](https://ewtos.com/impressum)).
 
-**Architecture principle:** EwtosBrain is a Chrome extension plus a **backend you run yourself** (local or your own server). Content data (vault, chats, clipped web content) does **not** leave your infrastructure toward ewtos.com; the provider does not receive it.
+**Architecture principle:** Ewtos Office-Brain is a Chrome extension plus a **backend you run yourself** (local or your own server). Content data (vault, chats, clipped web content) does **not** leave your infrastructure toward ewtos.com; the provider does not receive it.
 
 **Extension data:** local settings (server URL, UI prefs, a login token for multi-user servers, a random device id) stored in browser storage; web page content only on user-triggered actions, sent to **your** backend. No tracking, ads, or data sales.
 

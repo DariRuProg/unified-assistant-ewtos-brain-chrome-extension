@@ -12,9 +12,11 @@ import config
 
 log = logging.getLogger("ewtosbrain")
 
-# Single Source der Server-Version. Muss mit extension/manifest.json "version"
-# uebereinstimmen — der WS-Handshake gleicht major.minor ab.
-SERVER_VERSION = "0.1.0"
+# Version-Single-Source ist die Datei VERSION im Repo-Root. Muss mit
+# extension/manifest.json "version" uebereinstimmen — der WS-Handshake
+# gleicht major.minor ab. Bei Release: VERSION, manifest.json, bridge.py
+# und installer/ewtosbrain.iss synchron aktualisieren.
+SERVER_VERSION = "1.0.0"
 
 
 def _version_compatible(client_version: str | None) -> bool:
