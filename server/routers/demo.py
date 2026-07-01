@@ -908,12 +908,12 @@ body {
 .chat-ex button:hover { background: var(--bg-hover); border-color: var(--border-input); }
 
 .composer { display: flex; gap: 8px; align-items: flex-end; padding-top: 9px; border-top: 1px solid var(--border); }
-.composer #msg {
+.composer textarea {
   flex: 1; min-width: 0; resize: none; padding: 8px 10px; font-family: inherit; font-size: 13px;
   line-height: 1.4; color: var(--text); background: var(--bg-card); border: 1px solid var(--border-input);
   border-radius: 8px; outline: none;
 }
-.composer #msg:focus { border-color: var(--accent); }
+.composer textarea:focus { border-color: var(--accent); }
 .chat-pane .composer { flex-shrink: 0; }
 
 /* Datei-Viewer-Aktionen (links) */
@@ -923,7 +923,35 @@ body {
   color: var(--accent-tx); background: var(--accent); border: 1px solid var(--accent); border-radius: 9px;
 }
 .vault-file-chat-btn:hover { background: var(--accent-h); }
-.scrape-chat-wrap:empty { display: none; }
+
+/* Embed-Pane (linker Tab: eingebettete Seite) */
+.embed-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.embed-note {
+  flex-shrink: 0; font-size: 11.5px; color: var(--text-muted); line-height: 1.5;
+  padding: 8px 12px; background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.embed-note .btn-s { padding: 4px 10px; font-size: 12px; }
+#embed-frame { flex: 1; width: 100%; border: 0; background: #fff; }
+
+/* Gescrapter Text (Sidepanel, aufklappbar) */
+.scraped-text { margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+.scraped-text > summary { cursor: pointer; padding: 7px 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
+.scraped-text pre {
+  margin: 0; padding: 8px 10px; max-height: 180px; overflow: auto;
+  font-family: ui-monospace, "Consolas", monospace; font-size: 11px; line-height: 1.5;
+  color: var(--text-muted); white-space: pre-wrap; word-break: break-word;
+  border-top: 1px solid var(--border); scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+
+/* Seiten-Chat (Sidepanel) */
+.view-web { display: flex; flex-direction: column; height: 100%; }
+.page-chat { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; margin-top: 6px; border-top: 2px solid var(--border); padding-top: 8px; }
+.page-chat-banner { flex-shrink: 0; font-size: 11.5px; color: var(--text-muted); margin-bottom: 6px; }
+.page-chat-banner b { color: var(--text); font-weight: 600; }
+.page-chat #pchat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; padding: 2px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.page-chat .chat-ex { flex-shrink: 0; margin: 5px 0; }
+.page-chat .composer { flex-shrink: 0; }
 
 /* Frontmatter-Block */
 .fm-block { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; }
@@ -1036,10 +1064,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
       <div class="urlbar"><span class="lock">🔒</span><span id="urlbar-text">ewtos://vault/wiki/index.md</span></div>
     </div>
     <div class="doc-wrap" id="doc-wrap"><article class="doc markdown" id="doc"></article></div>
+    <div class="embed-wrap" id="embed-wrap" style="display:none">
+      <div class="embed-note">Manche Seiten blockieren das Einbetten (X-Frame-Options). Bleibt es leer:
+        <button class="btn-s" id="embed-md-btn" type="button">Extrahiertes Markdown anzeigen</button>
+      </div>
+      <iframe id="embed-frame" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups" title="Eingebettete Seite"></iframe>
+    </div>
     <div class="chat-pane" id="chat-pane" style="display:none">
       <div class="chat-modes" id="chat-modes">
         <button class="chat-mode-btn" data-mode="vault" type="button">Vault</button>
-        <button class="chat-mode-btn" data-mode="page" type="button">Seite</button>
         <button class="chat-mode-btn" data-mode="file" type="button">Datei</button>
       </div>
       <div class="chat-source-banner" id="chat-banner"></div>
@@ -1675,17 +1708,29 @@ const VIEWS = {
     <span class="tag">kein Cloud-Lock-in</span>
   </div>
 </div>`,
-  web: `<div class="view">
+  web: `<div class="view view-web">
   <div class="pitch">
     <div class="pitch-head">&#x26A1; URL &#x2192; sauberes Markdown. Sofort.</div>
-    Jede Webseite in KI-lesbares Markdown &mdash; direkt zum Chatten bereit.
+    Seite links im Tab, Scrape &amp; Chat hier im Sidepanel &mdash; wie in der echten Extension.
   </div>
   <div class="scrape-row">
     <input id="scrape-url" type="url" placeholder="https://example.com" autocomplete="off">
     <button id="scrape-go" class="btn-p">Scrapen</button>
   </div>
   <div class="scrape-status" id="scrape-status"></div>
-  <div class="scrape-chat-wrap" id="scrape-chat-wrap" style="margin-top:8px"></div>
+  <details class="scraped-text" id="scraped-text" style="display:none">
+    <summary>Gescrapter Text</summary>
+    <pre id="scraped-md"></pre>
+  </details>
+  <div class="page-chat" id="page-chat" style="display:none">
+    <div class="page-chat-banner" id="page-chat-banner"></div>
+    <div class="chat-log" id="pchat-log"></div>
+    <div class="chat-ex" id="pchat-ex"></div>
+    <form class="composer" id="pchat-form">
+      <textarea id="pchat-msg" rows="2" placeholder="Frag über den Seiteninhalt…"></textarea>
+      <button class="btn-p" type="submit">Senden</button>
+    </form>
+  </div>
   <div class="scraper-hint">
     <strong>Echte App:</strong> 2 Scraper (DOM + Playwright) &middot; Demo: leichter Fetch
     <button class="tour-trigger" id="web-tour" type="button">&#x2139; Details</button>
@@ -2347,27 +2392,39 @@ function wireWeb() {
   }
   const tt = $("#web-tour");
   if (tt) tt.addEventListener("click", () => startTour("web"));
+  const form = $("#pchat-form");
+  const pmsg = $("#pchat-msg");
+  if (form) form.addEventListener("submit", (e) => { e.preventDefault(); if (pmsg) askPage(pmsg.value); });
+  if (pmsg) pmsg.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askPage(pmsg.value); }
+  });
+  const pex = $("#pchat-ex");
+  if (pex) pex.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-q]");
+    if (b) askPage(b.dataset.q);
+  });
+  if (pageContext) showScrapeResult(pageContext);
 }
 
-function showPageChatBtn() {
-  const w = $("#scrape-chat-wrap");
-  if (!w) return;
-  w.innerHTML = '<button class="btn-p" id="scrape-chat" type="button">💬 Mit dieser Seite chatten</button>';
-  const b = $("#scrape-chat");
-  if (b) b.addEventListener("click", () => openChatTab("page"));
+function showScrapeResult(md) {
+  const box = $("#scraped-text");
+  const pre = $("#scraped-md");
+  if (pre) pre.textContent = md;
+  if (box) box.style.display = "";
+  renderPageChat();
 }
 
 function scrapePitchPage() {
   const status = $("#scrape-status");
   const md = pitchMarkdown();
-  openInViewport("ewtos.com", PITCH_URL, md);
+  renderPitch();
   pageContext = md;
   pageHost = "ewtos.com";
   if (status) {
-    status.textContent = "Gescrapt: " + md.split(/\s+/).length + " Wörter (diese Pitch-Seite)";
+    status.textContent = "Gescrapt: " + md.split(/\s+/).length + " Wörter (Pitch-Seite links)";
     status.className = "scrape-status ok";
   }
-  showPageChatBtn();
+  showScrapeResult(md);
 }
 
 async function doScrape() {
@@ -2410,14 +2467,14 @@ async function doScrape() {
     try {
       host = new URL(data.url).hostname;
     } catch (e) {}
-    openInViewport(host, data.url, data.markdown || "");
     pageContext = data.markdown || "";
     pageHost = host;
+    openPageEmbed(data.url, host, pageContext);
     if (status) {
       status.textContent = "Gescrapt: " + (data.wordCount || 0) + " Wörter";
       status.className = "scrape-status ok";
     }
-    showPageChatBtn();
+    showScrapeResult(pageContext);
   } catch (e) {
     if (status) {
       status.textContent = "Netzwerkfehler beim Scrapen.";
@@ -2429,19 +2486,41 @@ async function doScrape() {
 }
 
 function showDoc() {
-  const dw = $("#doc-wrap"), cp = $("#chat-pane");
+  const dw = $("#doc-wrap"), cp = $("#chat-pane"), em = $("#embed-wrap");
   if (dw) dw.style.display = "";
   if (cp) cp.style.display = "none";
+  if (em) em.style.display = "none";
 }
 
 function showChat() {
-  const dw = $("#doc-wrap"), cp = $("#chat-pane");
+  const dw = $("#doc-wrap"), cp = $("#chat-pane"), em = $("#embed-wrap");
   if (dw) dw.style.display = "none";
   if (cp) cp.style.display = "flex";
+  if (em) em.style.display = "none";
+}
+
+function showEmbed() {
+  const dw = $("#doc-wrap"), cp = $("#chat-pane"), em = $("#embed-wrap");
+  if (dw) dw.style.display = "none";
+  if (cp) cp.style.display = "none";
+  if (em) em.style.display = "flex";
+}
+
+function openPageEmbed(url, host, md) {
+  const ic = $("#tab-ico"), tl = $("#tab-label"), ub = $("#urlbar-text");
+  if (ic) ic.textContent = "🌐";
+  if (tl) tl.textContent = host || url;
+  if (ub) ub.textContent = url;
+  const frame = $("#embed-frame");
+  if (frame) frame.src = url;
+  const btn = $("#embed-md-btn");
+  if (btn) btn.onclick = () => openInViewport(host || url, url, md);
+  pitchActive = false;
+  activePath = null;
+  showEmbed();
 }
 
 function ctxKey() {
-  if (chatMode === "page") return "page:" + (pageHost || "");
   if (chatMode === "file") return "file:" + (chatFile || "");
   return "vault";
 }
@@ -2451,11 +2530,6 @@ const CHAT_EX = {
     ["Was ist die Karpathy-Methode und warum kein RAG?", "Karpathy-Methode?"],
     ["Welche Tools bietet Ewtos Office-Brain?", "Welche Tools?"],
     ["Wie funktioniert das mit eigenem Server und Daten?", "Server & Daten?"]
-  ],
-  page: [
-    ["Was ist der Kerninhalt dieser Seite?", "Kerninhalt?"],
-    ["Fasse diese Seite in 3 Sätzen zusammen.", "Zusammenfassung"],
-    ["Welche Produkte oder Dienstleistungen werden angeboten?", "Angebote?"]
   ],
   file: [
     ["Worum geht es in dieser Datei?", "Worum geht's?"],
@@ -2481,14 +2555,12 @@ function chatEmptyState() {
 }
 
 function chatBannerHtml() {
-  if (chatMode === "page") return '🌐 Chat: <b>' + escapeHtml(pageHost || "Seite") + "</b>";
   if (chatMode === "file") return '🗒 Chat: <b>' + escapeHtml(chatFile || "") + "</b>";
   return "🧠 Chat mit <b>Vault</b> &mdash; dein ganzes Wissen";
 }
 
 function chatTabLabel() {
   if (chatMode === "file") return "Chat — " + (chatFile || "");
-  if (chatMode === "page") return "Chat — " + (pageHost || "Seite");
   return "Chat — Vault";
 }
 
@@ -2532,7 +2604,6 @@ function openChatTab(mode, file, content) {
     if (file) chatFile = file;
     if (content != null) chatFileContent = content;
   }
-  if (chatMode === "page" && !pageContext) chatMode = "vault";
   const ic = $("#tab-ico"), tl = $("#tab-label"), ub = $("#urlbar-text");
   if (ic) ic.textContent = "💬";
   if (tl) tl.textContent = chatTabLabel();
@@ -2546,10 +2617,6 @@ function openChatTab(mode, file, content) {
 
 function switchChatMode(mode) {
   const bn = $("#chat-banner");
-  if (mode === "page" && !pageContext) {
-    if (bn) bn.innerHTML = "Erst eine Seite scrapen (Web-Tool rechts).";
-    return;
-  }
   if (mode === "file" && !chatFile) {
     if (bn) bn.innerHTML = "Erst eine Datei öffnen und &bdquo;Mit dieser Datei chatten&ldquo;.";
     return;
@@ -2577,64 +2644,152 @@ function wireChatOnce() {
   });
 }
 
+async function postChat(opts) {
+  const provider = ($("#provider") && $("#provider").value) || "gemini";
+  const model = ($("#model") && $("#model").value.trim()) || (MODELS[provider] && MODELS[provider][0]) || "";
+  try {
+    const res = await fetch("/demo/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider, api_key: opts.key, model, message: opts.message,
+        history: opts.history, context: opts.context || null, ingested: opts.ingested || null
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.detail || ("Fehler " + res.status) };
+    return { ok: true, answer: data.answer || "" };
+  } catch (e) {
+    return { ok: false, error: "Netzwerkfehler beim Senden." };
+  }
+}
+
+function addUserMsg(log, q) {
+  const e = document.createElement("div");
+  e.className = "msg me";
+  e.textContent = q;
+  if (log) log.appendChild(e);
+  return e;
+}
+
+function addAiMsg(log) {
+  const e = document.createElement("div");
+  e.className = "msg ai";
+  e.textContent = "…";
+  if (log) { log.appendChild(e); log.scrollTop = log.scrollHeight; }
+  return e;
+}
+
+function fillAiMsg(ai, res) {
+  if (!res.ok) {
+    ai.className = "msg err";
+    ai.textContent = res.error;
+  } else {
+    ai.innerHTML = renderMD(res.answer);
+    wireDocLinks(ai);
+  }
+}
+
+function needKey() {
+  if (getKey()) return false;
+  const dlg = $("#settings-dlg");
+  if (dlg && dlg.showModal) dlg.showModal();
+  return true;
+}
+
 async function ask(raw) {
   const q = (raw || "").trim();
-  if (!q) return;
-  const key = getKey();
-  if (!key) {
-    const dlg = $("#settings-dlg");
-    if (dlg && dlg.showModal) dlg.showModal();
-    return;
-  }
+  if (!q || needKey()) return;
   const log = $("#chat-log");
   const ex = $("#chat-ex");
   const msg = $("#msg");
   if (msg) msg.value = "";
-  if (ex) { ex.style.display = "none"; }
+  if (ex) ex.style.display = "none";
   if (log && log.querySelector(".chat-empty")) log.innerHTML = "";
 
   const k = ctxKey();
   if (!histories[k]) histories[k] = [];
   const hist = histories[k];
 
-  const me = document.createElement("div");
-  me.className = "msg me";
-  me.textContent = q;
-  if (log) log.appendChild(me);
-
-  const ai = document.createElement("div");
-  ai.className = "msg ai";
-  ai.textContent = "…";
-  if (log) { log.appendChild(ai); log.scrollTop = log.scrollHeight; }
-
-  const provider = ($("#provider") && $("#provider").value) || "gemini";
-  const model = ($("#model") && $("#model").value.trim()) || (MODELS[provider] && MODELS[provider][0]) || "";
+  addUserMsg(log, q);
+  const ai = addAiMsg(log);
 
   let ctx = null, ingested = null;
-  if (chatMode === "page") ctx = pageContext;
-  else if (chatMode === "file") ctx = chatFileContent;
+  if (chatMode === "file") ctx = chatFileContent;
   else if (videoIngested) ingested = vaultOverride[WIKI_PATH];
 
-  try {
-    const res = await fetch("/demo/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, api_key: key, model, message: q, history: hist.slice(), context: ctx, ingested })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      ai.className = "msg err";
-      ai.textContent = data.detail || ("Fehler " + res.status);
-    } else {
-      ai.innerHTML = renderMD(data.answer || "");
-      wireDocLinks(ai);
-      hist.push({ role: "user", content: q });
-      hist.push({ role: "assistant", content: data.answer || "" });
-      while (hist.length > 16) hist.shift();
+  const res = await postChat({ key: getKey(), message: q, history: hist.slice(), context: ctx, ingested });
+  fillAiMsg(ai, res);
+  if (res.ok) {
+    hist.push({ role: "user", content: q });
+    hist.push({ role: "assistant", content: res.answer });
+    while (hist.length > 16) hist.shift();
+  }
+  if (log) log.scrollTop = log.scrollHeight;
+}
+
+const PAGE_EX = [
+  ["Was ist der Kerninhalt dieser Seite?", "Kerninhalt?"],
+  ["Fasse diese Seite in 3 Sätzen zusammen.", "Zusammenfassung"],
+  ["Welche Produkte oder Dienstleistungen werden angeboten?", "Angebote?"]
+];
+
+function renderPageChat() {
+  const box = $("#page-chat");
+  if (!box) return;
+  box.style.display = "flex";
+  const bn = $("#page-chat-banner");
+  if (bn) bn.innerHTML = "🌐 Chat: <b>" + escapeHtml(pageHost || "Seite") + "</b>";
+  const hist = histories["page:" + (pageHost || "")] || [];
+  const ex = $("#pchat-ex");
+  if (ex) {
+    if (hist.length) { ex.style.display = "none"; ex.innerHTML = ""; }
+    else {
+      ex.style.display = "";
+      ex.innerHTML = PAGE_EX.map((q) => '<button type="button" data-q="' + escapeHtml(q[0]) + '">' + escapeHtml(q[1]) + "</button>").join("");
     }
-  } catch (e) {
-    ai.className = "msg err";
-    ai.textContent = "Netzwerkfehler beim Senden.";
+  }
+  const log = $("#pchat-log");
+  if (!log) return;
+  if (!hist.length) {
+    log.innerHTML = chatEmptyState();
+    const sk = $("#ce-setkey");
+    if (sk) sk.addEventListener("click", () => { const dlg = $("#settings-dlg"); if (dlg && dlg.showModal) dlg.showModal(); });
+    return;
+  }
+  log.innerHTML = "";
+  hist.forEach((m) => {
+    const el = document.createElement("div");
+    if (m.role === "user") { el.className = "msg me"; el.textContent = m.content || ""; }
+    else { el.className = "msg ai"; el.innerHTML = renderMD(m.content || ""); wireDocLinks(el); }
+    log.appendChild(el);
+  });
+  log.scrollTop = log.scrollHeight;
+}
+
+async function askPage(raw) {
+  const q = (raw || "").trim();
+  if (!q || !pageContext || needKey()) return;
+  const log = $("#pchat-log");
+  const ex = $("#pchat-ex");
+  const msg = $("#pchat-msg");
+  if (msg) msg.value = "";
+  if (ex) ex.style.display = "none";
+  if (log && log.querySelector(".chat-empty")) log.innerHTML = "";
+
+  const k = "page:" + (pageHost || "");
+  if (!histories[k]) histories[k] = [];
+  const hist = histories[k];
+
+  addUserMsg(log, q);
+  const ai = addAiMsg(log);
+
+  const res = await postChat({ key: getKey(), message: q, history: hist.slice(), context: pageContext });
+  fillAiMsg(ai, res);
+  if (res.ok) {
+    hist.push({ role: "user", content: q });
+    hist.push({ role: "assistant", content: res.answer });
+    while (hist.length > 16) hist.shift();
   }
   if (log) log.scrollTop = log.scrollHeight;
 }
